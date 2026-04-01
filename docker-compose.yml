@@ -1,0 +1,165 @@
+services:
+  # --- CACHE LAYER ---
+  redis:
+    image: redis:7-alpine
+    container_name: trading_cache
+    restart: always
+    command: redis-server --requirepass "${REDIS_PASSWORD}"
+    networks:
+      - trading_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- TRADING ENGINE ---
+  algo-trader:
+    build: ./algo-trader
+    container_name: algo_engine
+    restart: always
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - openalgo_db:/data/db:ro
+    networks:
+      - trading_net
+    ports:
+      - "100.87.27.92:5001:5001"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- MODERN TRADING FRONTEND ---
+  trading-ui:
+    build:
+      context: ./trading-ui
+      dockerfile: Dockerfile
+    container_name: openalgo_frontend
+    restart: unless-stopped
+    depends_on:
+      openalgo:
+        condition: service_started
+      algo-trader:
+        condition: service_healthy
+    networks:
+      - trading_net
+    ports:
+      - "100.87.27.92:3000:3000"
+    environment:
+      - INTERNAL_API_URL=http://openalgo-web:5000
+      - PUBLIC_API_URL=http://100.87.27.92:5000
+      - PUBLIC_WS_URL=ws://100.87.27.92:8765
+      - ALGO_TRADER_API_URL=http://algo_engine:5001
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # --- TRADING PLATFORM ---
+  openalgo:
+    image: marketcalls/openalgo:latest
+    container_name: openalgo-web
+    ports:
+      - "100.87.27.92:5000:5000"
+      - "100.87.27.92:8765:8765"
+    env_file: .env
+    environment:
+      - TZ=Asia/Kolkata
+      - OPENALGO_HOST=0.0.0.0
+      # //- ALGO_TRADER_API_URL=http://algo_engine:5001
+    shm_size: '512m'
+    volumes:
+      - openalgo_db:/app/db
+      - openalgo_log:/app/log
+      - openalgo_strategies:/app/strategies
+      - openalgo_keys:/app/keys
+      - .env:/app/.env:ro
+    restart: unless-stopped
+    networks:
+      - trading_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+
+  
+  # --- ANALYTICS & REPORTING ---
+  openclaw:
+    image: ghcr.io/openclaw/openclaw:latest
+    container_name: openclaw_reports
+    ports:
+      - "100.87.27.92:18789:18789"
+    environment:
+      - OPENCLAW_LLM_TIMEOUT=300000
+      - TZ=Asia/Kolkata
+      - OPENCLAW_GATEWAY_BIND=0.0.0.0
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENCLAW_GATEWAY_CONTROL_UI_DANGEROUSLY_DISABLE_SECURE_CONTEXT_CHECK=true
+      # Forces the bot to use internal Docker routing, bypassing the SSRF IP block
+      - OPENALGO_API_URL=http://openalgo-web:5000
+      - DB_PATH=/app/db/openalgo.db
+      # --- CRITICAL FIXES START HERE ---
+      - NODE_OPTIONS=--dns-result-order=ipv4first
+      - TELEGRAM_DELETE_WEBHOOK_ON_START=false
+      # ----------------------------------
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    volumes:
+      - openalgo_db:/app/db:ro
+      - openalgo_log:/app/log:ro
+      - openalgo_strategies:/app/strategies:ro
+      - ~/.openclaw:/home/node/.openclaw:rw
+      - ~/trading-workspace:/home/node/workspace:ro
+    networks:
+      - trading_net
+    restart: always # Changed from unless-stopped to force recovery
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18789"]
+      interval: 30s    # Check every 30 seconds
+      timeout: 10s     # Give it 10 seconds to respond
+      retries: 5       # FAIL ONLY after 5 consecutive fails (2.5 minutes total)
+      start_period: 1m # Give it 1 minute to boot before checking
+
+networks:
+  trading_net:
+    driver: bridge
+
+volumes:
+  openalgo_db:
+  openalgo_log:
+  openalgo_strategies:
+  openalgo_keys:

@@ -1,0 +1,39 @@
+{
+	"/": [],
+	"/api/algo-trader/pnl": [
+		"src/routes/api/algo-trader/pnl/+server.ts"
+	],
+	"/api/algo-trader/positions": [
+		"src/routes/api/algo-trader/positions/+server.ts"
+	],
+	"/api/algo-trader/risk": [
+		"src/routes/api/algo-trader/risk/+server.ts"
+	],
+	"/api/algo-trader/strategies": [
+		"src/routes/api/algo-trader/strategies/+server.ts"
+	],
+	"/api/algo-trader/strategies/[id]": [
+		"src/routes/api/algo-trader/strategies/[id]/+server.ts"
+	],
+	"/api/algo-trader/strategies/[id]/start": [
+		"src/routes/api/algo-trader/strategies/[id]/start/+server.ts"
+	],
+	"/api/algo-trader/strategies/[id]/stop": [
+		"src/routes/api/algo-trader/strategies/[id]/stop/+server.ts"
+	],
+	"/api/algo-trader/trades": [
+		"src/routes/api/algo-trader/trades/+server.ts"
+	],
+	"/api/algo-trader/trades/by-strategy/[strategy]": [
+		"src/routes/api/algo-trader/trades/by-strategy/[strategy]/+server.ts"
+	],
+	"/api/algo-trader/trades/by-symbol/[symbol]": [
+		"src/routes/api/algo-trader/trades/by-symbol/[symbol]/+server.ts"
+	],
+	"/api/algo-trader/trades/open-positions": [
+		"src/routes/api/algo-trader/trades/open-positions/+server.ts"
+	],
+	"/api/openalgo/websocket-session": [
+		"src/routes/api/openalgo/websocket-session/+server.ts"
+	]
+}
