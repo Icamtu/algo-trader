@@ -108,11 +108,29 @@ services:
       timeout: 10s
       retries: 3
 
-  
+  # --- LOCAL AI ENGINE ---
+  ollama_engine:
+    image: ollama/ollama:latest
+    container_name: local_ollama
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY}
+    ports:
+      - "100.87.27.92:11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - trading_net
+    entrypoint: [ "/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull minimax-m2:cloud && wait" ]
+
   # --- ANALYTICS & REPORTING ---
   openclaw:
     image: ghcr.io/openclaw/openclaw:latest
     container_name: openclaw_reports
+    depends_on:
+      - ollama_engine
     ports:
       - "100.87.27.92:18789:18789"
     environment:
@@ -124,6 +142,8 @@ services:
       # Forces the bot to use internal Docker routing, bypassing the SSRF IP block
       - OPENALGO_API_URL=http://openalgo-web:5000
       - DB_PATH=/app/db/openalgo.db
+      - OLLAMA_BASE_URL=http://ollama_engine:11434
+      - LOCAL_LLM_MODEL=minimax-m2:cloud
       # --- CRITICAL FIXES START HERE ---
       - NODE_OPTIONS=--dns-result-order=ipv4first
       - TELEGRAM_DELETE_WEBHOOK_ON_START=false
@@ -163,3 +183,4 @@ volumes:
   openalgo_log:
   openalgo_strategies:
   openalgo_keys:
+  ollama_data:
