@@ -1,0 +1,47 @@
+_format_version: "1.1"
+_transform: true
+
+services:
+  - name: auth
+    url: http://supabase-auth:8081
+    routes:
+      - name: auth-route
+        paths:
+          - /auth/v1
+        strip_path: true
+  - name: rest
+    url: http://supabase-rest:3000
+    routes:
+      - name: rest-route
+        paths:
+          - /rest/v1
+        strip_path: true
+
+plugins:
+  - name: cors
+    config:
+      origins:
+        - "http://100.66.171.30:3001"
+        - "http://100.66.171.30:3000"
+      methods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+        - OPTIONS
+      headers:
+        - Content-Type
+        - Authorization
+        - apikey
+        - Prefer
+        - Range
+        - x-client-info
+        - x-supabase-api-version
+        - x-supabase-client-info
+        - x-customer-id
+      exposed_headers:
+        - Content-Range
+        - X-Total-Count
+      max_age: 3600
+      credentials: true

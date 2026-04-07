@@ -1,30 +1,52 @@
+# Git Ignore Configuration for AetherDesk Prime
+
+# Core/Environment
 .agent/
+.agents/
+.claude/
 .env
+.sample.env
+**/node_modules/
+**/dist/
+**/build/
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-*.log
+*.egg-info/
+*.egg
+*.whl
+
+# Database & Data (Memory/State)
 *.sqlite3
 *.db
+*.sqlite
+algo-trader/data/
+supabase/volumes/
+openclaw/
+magic.mgc
+
+# Logs & Temp
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
 *.bak
 *.tmp
 *.swp
+*.sw?
 .DS_Store
+
+# IDEs
 .idea/
 .vscode/
 *.iml
 *.sublime-project
 *.sublime-workspace
-*.egg-info/
-dist/
-build/
-*.egg
-*.whl
-*.tar.gz
-*.zip
-*.log
-*.bak
-*.tmp
-*.swp
-*.DS_Store
+
+# Backups & Redundant
+trading-ui_backup/
+aetherdesk-prime-source/
+aetherdesk-prime-repo/

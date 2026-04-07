@@ -1,165 +1,44 @@
 services:
-  # --- CACHE LAYER ---
+  # --- INFRASTRUCTURE ---
   redis:
-    image: redis:7-alpine
-    container_name: trading_cache
+    image: redis:6.2-alpine
+    container_name: openalgo_redis
     restart: always
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     command: redis-server --requirepass "${REDIS_PASSWORD}"
     networks:
       - trading_net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
-
-  # --- TRADING ENGINE ---
-  algo-trader:
-    build: ./algo-trader
-    container_name: algo_engine
-    restart: always
-    env_file: .env
-    depends_on:
-      redis:
-        condition: service_healthy
-    volumes:
-      - openalgo_db:/data/db:ro
-    networks:
-      - trading_net
-    ports:
-      - "100.87.27.92:5001:5001"
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # --- MODERN TRADING FRONTEND ---
-  trading-ui:
-    build:
-      context: ./trading-ui
-      dockerfile: Dockerfile
-    container_name: openalgo_frontend
-    restart: unless-stopped
-    depends_on:
-      openalgo:
-        condition: service_started
-      algo-trader:
-        condition: service_healthy
-    networks:
-      - trading_net
-    ports:
-      - "100.87.27.92:3000:3000"
-    environment:
-      - INTERNAL_API_URL=http://openalgo-web:5000
-      - PUBLIC_API_URL=http://100.87.27.92:5000
-      - PUBLIC_WS_URL=ws://100.87.27.92:8765
-      - ALGO_TRADER_API_URL=http://algo_engine:5001
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    mem_limit: 512MB
+    security_opt:
+      - no-new-privileges:true
 
   # --- TRADING PLATFORM ---
   openalgo:
-    image: marketcalls/openalgo:latest
+    image: icamtu/openalgo-arm64:latest
     container_name: openalgo-web
     ports:
-      - "100.87.27.92:5000:5000"
-      - "100.87.27.92:8765:8765"
+      - "5000:5000"
+      - "8765:8765"
     env_file: .env
-    environment:
-      - TZ=Asia/Kolkata
-      - OPENALGO_HOST=0.0.0.0
-      # //- ALGO_TRADER_API_URL=http://algo_engine:5001
     shm_size: '512m'
     volumes:
-      - openalgo_db:/app/db
+      - ./openalgo/db:/app/db
       - openalgo_log:/app/log
+      - ./auth_api_fixed.py:/app/broker/shoonya/api/auth_api.py:ro
       - openalgo_strategies:/app/strategies
       - openalgo_keys:/app/keys
       - .env:/app/.env:ro
-    restart: unless-stopped
+    restart: always
     networks:
       - trading_net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
-      interval: 1m
-      timeout: 10s
-      retries: 3
-
-  # --- LOCAL AI ENGINE ---
-  ollama_engine:
-    image: ollama/ollama:latest
-    container_name: local_ollama
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-      - OLLAMA_API_KEY=${OLLAMA_API_KEY}
-    ports:
-      - "100.87.27.92:11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    networks:
-      - trading_net
-    entrypoint: [ "/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull minimax-m2:cloud && wait" ]
-
-  # --- ANALYTICS & REPORTING ---
-  openclaw:
-    image: ghcr.io/openclaw/openclaw:latest
-    container_name: openclaw_reports
-    depends_on:
-      - ollama_engine
-    ports:
-      - "100.87.27.92:18789:18789"
-    environment:
-      - OPENCLAW_LLM_TIMEOUT=300000
-      - TZ=Asia/Kolkata
-      - OPENCLAW_GATEWAY_BIND=0.0.0.0
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - OPENCLAW_GATEWAY_CONTROL_UI_DANGEROUSLY_DISABLE_SECURE_CONTEXT_CHECK=true
-      # Forces the bot to use internal Docker routing, bypassing the SSRF IP block
-      - OPENALGO_API_URL=http://openalgo-web:5000
-      - DB_PATH=/app/db/openalgo.db
-      - OLLAMA_BASE_URL=http://ollama_engine:11434
-      - LOCAL_LLM_MODEL=minimax-m2:cloud
-      # --- CRITICAL FIXES START HERE ---
-      - NODE_OPTIONS=--dns-result-order=ipv4first
-      - TELEGRAM_DELETE_WEBHOOK_ON_START=false
-      # ----------------------------------
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    volumes:
-      - openalgo_db:/app/db:ro
-      - openalgo_log:/app/log:ro
-      - openalgo_strategies:/app/strategies:ro
-      - ~/.openclaw:/home/node/.openclaw:rw
-      - ~/trading-workspace:/home/node/workspace:ro
-    networks:
-      - trading_net
-    restart: always # Changed from unless-stopped to force recovery
+    mem_limit: 2GB
+    cpu_shares: 1024
     logging:
       driver: "json-file"
       options:
@@ -168,18 +47,329 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:18789"]
-      interval: 30s    # Check every 30 seconds
-      timeout: 10s     # Give it 10 seconds to respond
-      retries: 5       # FAIL ONLY after 5 consecutive fails (2.5 minutes total)
-      start_period: 1m # Give it 1 minute to boot before checking
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # --- TRADING ENGINE ---
+  algo-trader:
+    build:
+      context: ./algo-trader
+      dockerfile: Dockerfile
+    container_name: algo_engine
+    restart: always
+    ports:
+      - "5001:5001"
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+      openalgo:
+        condition: service_healthy
+    volumes:
+      - ./openalgo/db:/data/db:rw
+    environment:
+      - OPENALGO_BASE_URL=http://openalgo-web:5000
+      - RISK_MAX_DAILY_LOSS=50000
+      - RISK_MAX_DAILY_TRADES=200
+    networks:
+      - trading_net
+    mem_limit: 2GB
+    cpu_shares: 1024
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # --- SUPABASE STACK (LOCAL) ---
+  supabase-db:
+    container_name: supabase-db
+    image: supabase/postgres:15.1.1.78
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    healthcheck:
+      test: pg_isready -U postgres -h localhost
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    env_file: ./supabase/.env
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "54322:5432"
+    volumes:
+      - ./supabase/volumes/db/data:/var/lib/postgresql/data
+      - ./supabase/volumes/db/init:/docker-entrypoint-initdb.d
+      - ./supabase/fix-auth-admin.sql:/docker-entrypoint-initdb.d/99-fix-auth-admin.sql:ro
+    networks:
+      trading_net:
+        aliases:
+          - db
+    restart: always
+    mem_limit: 3GB
+
+  supabase-auth:
+    container_name: supabase-auth
+    image: supabase/gotrue:v2.143.0
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    env_file: ./supabase/.env
+    environment:
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${SUPABASE_AUTH_ADMIN_PASSWORD}@supabase-db:5432/postgres
+      GOTRUE_EXTERNAL_URL: http://100.66.171.30:8000
+      GOTRUE_SITE_URL: http://100.66.171.30:3001
+      GOTRUE_URI_ALLOW_LIST: http://100.66.171.30:3001/*,http://100.66.171.30:3000/*
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_HEALTH_CHECK_TIMEOUT: 300s
+    networks:
+      - trading_net
+    restart: always
+    mem_limit: 1GB
+
+  supabase-rest:
+    container_name: supabase-rest
+    image: postgrest/postgrest:v12.0.2
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    env_file: ./supabase/.env
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
+      PGRST_DB_SCHEMAS: public,storage,graphql_public
+    healthcheck:
+      test: ["CMD-SHELL", "sh -c 'ps -A | grep [p]ostgrest'"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - trading_net
+    restart: always
+    mem_limit: 512MB
+
+  supabase-kong:
+    container_name: supabase-kong
+    image: kong:2.8.1-alpine
+    depends_on:
+      supabase-auth:
+        condition: service_started
+      supabase-rest:
+        condition: service_started
+    volumes:
+      - ./supabase/kong.yml:/var/lib/kong/kong.yml:ro
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+    ports:
+      - "8000:8000"
+      - "8443:8443"
+    networks:
+      - trading_net
+    restart: always
+    mem_limit: 1GB
+
+  supabase-studio:
+    container_name: supabase-studio
+    image: supabase/studio:latest
+    healthcheck:
+      test: ["CMD", "node", "-e", "process.exit(0)"]
+    depends_on:
+      supabase-kong:
+        condition: service_started
+      supabase-meta:
+        condition: service_started
+    ports:
+      - "54321:3000"
+    environment:
+      SUPABASE_URL: http://supabase-kong:8000
+      STUDIO_PG_META_URL: http://supabase-meta:8080
+      SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
+      EDGE_FUNCTIONS_MANAGEMENT_FOLDER: /tmp
+    networks:
+      - trading_net
+    restart: always
+    mem_limit: 1GB
+
+  supabase-meta:
+    container_name: supabase-meta
+    image: supabase/postgres-meta:v0.84.2
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    environment:
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: supabase-db
+      PG_META_DB_URL: postgres://supabase_admin:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
+    networks:
+      - trading_net
+    restart: always
+    mem_limit: 512MB
+
+  # --- CUSTOM TRADING UI ---
+  trading-ui:
+    build:
+      context: ./trading-ui
+      dockerfile: Dockerfile
+      args:
+        - VITE_SUPABASE_URL=http://100.66.171.30:8000
+        - VITE_SUPABASE_ANON_KEY=${ANON_KEY}
+    container_name: trading-ui
+    restart: always
+    ports:
+      - "3001:3001"
+    environment:
+      - VITE_SUPABASE_URL=http://100.66.171.30:8000
+      - VITE_SUPABASE_ANON_KEY=${ANON_KEY}
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3001/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      supabase-kong:
+        condition: service_started
+    networks:
+      - trading_net
+    mem_limit: 512MB
+    security_opt:
+      - no-new-privileges:true
+
+  # --- LOCAL AI ENGINE ---
+  ollama_engine:
+    image: ollama/ollama:latest
+    container_name: local_ollama
+    restart: always
+    env_file: .env
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    command: ["serve"]
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY}
+      - OLLAMA_NUM_PARALLEL=1
+    networks:
+      - trading_net
+    mem_limit: 6GB
+    security_opt:
+      - no-new-privileges:true
+
+  # --- ANALYTICS & REPORTING ---
+  openclaw:
+    image: ghcr.io/openclaw/openclaw:latest
+    container_name: openclaw
+    depends_on:
+      ollama_engine:
+        condition: service_started
+    ports:
+      - "18789:18789"
+    environment:
+      - OPENCLAW_LLM_TIMEOUT=600000
+      - TZ=Asia/Kolkata
+      - OPENCLAW_GATEWAY_BIND=0.0.0.0
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - OPENCLAW_GATEWAY_CONTROL_UI_DANGEROUSLY_DISABLE_SECURE_CONTEXT_CHECK=true
+      - OPENALGO_API_URL=http://openalgo-web:5000
+      - DB_PATH=/app/db/openalgo.db
+      - OLLAMA_BASE_URL=http://ollama_engine:11434
+      - LOCAL_LLM_MODEL=minimax/minimax-01
+      - OPENCLAW_AI_MODEL=openrouter/minimax/minimax-01
+      - NODE_OPTIONS=--dns-result-order=ipv4first
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY}
+      - TELEGRAM_DELETE_WEBHOOK_ON_START=false
+      - OPENCLAW_GATEWAY_TRUST_REQUESTS=true
+    mem_limit: 2GB
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    volumes:
+      - ./openalgo/db:/app/db:ro
+      - openalgo_log:/app/log:ro
+      - openalgo_strategies:/app/strategies:ro
+      - ./openclaw:/home/node/.openclaw:rw
+    networks:
+      - trading_net
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+
+  # --- CLAUDE CODE CLI ---
+  claude-code:
+    build:
+      context: ./claude-code
+      dockerfile: Dockerfile
+    container_name: claude-code
+    depends_on:
+      ollama_engine:
+        condition: service_started
+    ports:
+      - "8080:8080"
+    env_file: .env
+    environment:
+      - OLLAMA_BASE_URL=http://ollama_engine:11434
+      - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+      - LLM_PROVIDER=${LLM_PROVIDER:-auto}
+      - PREFER_LOCAL=${PREFER_LOCAL:-true}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    volumes:
+      - .:/workspace:rw
+    networks:
+      - trading_net
+    restart: always
+    tty: true
+    stdin_open: true
+    healthcheck:
+      test: ["CMD", "node", "-v"] # Simple healthcheck for the node runtime
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    mem_limit: 1GB
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 networks:
   trading_net:
     driver: bridge
 
 volumes:
-  openalgo_db:
   openalgo_log:
   openalgo_strategies:
   openalgo_keys:

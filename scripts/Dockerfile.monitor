@@ -1,0 +1,12 @@
+FROM python:3.9-slim
+
+# Prevent Python from buffering stdout and stderr
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir docker requests psutil
+
+COPY monitor.py .
+
+CMD ["python", "monitor.py"]
