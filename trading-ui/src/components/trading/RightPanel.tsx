@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { TrendingUp, TrendingDown, Activity, AlertTriangle, Zap, RefreshCw } from "lucide-react";
+import { IndustrialValue } from "./IndustrialValue";
 
 // Mock data generators
 const generateEquityBars = () => Array.from({ length: 20 }, (_, i) => ({
@@ -53,111 +54,117 @@ export function RightPanel() {
 
   const maxEquity = Math.max(...equityBars.map(e => e.value));
   const currentEquity = equityBars[equityBars.length - 1].value;
-  const maxDD = Math.min(...drawdown.map(d => d.value));
 
   const metrics = [
-    { label: "Net Equity", value: `₹${(currentEquity / 100000).toFixed(2)}L`, icon: TrendingUp, color: "text-neon-emerald" },
-    { label: "Day P&L", value: "+₹3,840", icon: TrendingUp, color: "text-neon-green" },
-    { label: "Max DD", value: `${maxDD.toFixed(1)}%`, icon: TrendingDown, color: "text-neon-red" },
-    { label: "Win Rate", value: "64.2%", icon: Activity, color: "text-primary" },
-    { label: "Risk Score", value: "42", icon: AlertTriangle, color: "text-neon-orange" },
-    { label: "Exposure", value: "68%", icon: Zap, color: "text-neon-cyan" },
+    { label: "NET_ACTIVE_VAL", value: `₹${(currentEquity / 100000).toFixed(2)}L`, color: "text-secondary" },
+    { label: "SESSION_DELTA", value: 3840, isIndustrial: true, color: "text-secondary" },
+    { label: "ALPHA_INDEX", value: "6.42", color: "text-primary" },
+    { label: "EXPOSURE_RATIO", value: "68.1%", color: "text-primary/40" },
   ];
 
   return (
-    <div className="w-72 glass-panel border-l border-border flex flex-col shrink-0 overflow-y-auto">
-      {/* Header */}
-      <div className="p-3 border-b border-border flex items-center justify-between">
-        <h3 className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium">Performance</h3>
-        <div className="flex items-center gap-1">
-          <RefreshCw className="w-3 h-3 text-muted-foreground animate-spin-slow" />
-          <span className="text-[8px] text-muted-foreground">
-            {lastUpdate.toLocaleTimeString()}
+    <div className="w-72 bg-background border-l border-border flex flex-col shrink-0 overflow-y-auto no-scrollbar industrial-grid relative">
+      <div className="noise-overlay" />
+      <div className="scanline opacity-10" />
+      
+      {/* Telemetry Header */}
+      <div className="p-2.5 border-b border-border flex items-center justify-between bg-card/20 backdrop-blur-md relative z-10">
+        <h3 className="text-[10px] font-mono font-black uppercase tracking-[0.3em] text-primary">Buffer_Log</h3>
+        <div className="flex items-center gap-2 font-mono">
+          <RefreshCw className="w-2.5 h-2.5 text-secondary animate-spin-slow" />
+          <span className="text-[8px] text-muted-foreground/30 font-black uppercase tracking-widest tabular-nums">
+            {lastUpdate.toLocaleTimeString([], { hour12: false })}
           </span>
         </div>
       </div>
 
-      {/* Quick Metrics */}
-      <div className="p-3 border-b border-border">
-        <div className="grid grid-cols-2 gap-2">
+      {/* Metrics Registry */}
+      <div className="p-3 border-b border-border bg-card/5 relative z-10">
+        <div className="grid grid-cols-2 gap-3">
           {metrics.map((m) => (
-            <div key={m.label} className="glass-panel rounded-md p-2">
-              <m.icon className={`w-3 h-3 mb-1 ${m.color}`} />
-              <div className={`metric-value ${m.color}`}>{m.value}</div>
-              <div className="metric-label">{m.label}</div>
+            <div key={m.label} className="flex flex-col border-l border-border/20 pl-3">
+              <span className="text-[7px] font-mono font-black uppercase text-muted-foreground/20 tracking-widest leading-tight">{m.label}</span>
+              {m.isIndustrial ? (
+                <IndustrialValue value={m.value as number} prefix="+₹" className="text-[11px] font-black tabular-nums tracking-tighter text-secondary" />
+              ) : (
+                <span className={`text-[11px] font-mono font-black tabular-nums tracking-tighter ${m.color}`}>{m.value}</span>
+              )}
             </div>
           ))}
         </div>
       </div>
 
-      {/* Equity Bars */}
-      <div className="p-3 border-b border-border">
-        <h4 className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Equity Trail</h4>
-        <div className="h-20 flex items-end gap-px">
+      {/* Equity Trail Readout */}
+      <div className="p-3 border-b border-border bg-card/10 backdrop-blur-md relative z-10">
+        <h4 className="text-[9px] font-mono font-black uppercase tracking-[0.3em] text-muted-foreground/40 mb-3">Equity_Trail</h4>
+        <div className="h-16 flex items-end gap-[1px] px-0.5">
           {equityBars.map((e, i) => (
             <div
               key={i}
-              className="flex-1 rounded-t-sm bg-gradient-to-t from-primary/80 to-primary/20 transition-all duration-300"
+              className="flex-1 min-w-[2px] bg-secondary/10 hover:bg-secondary/60 transition-all cursor-pointer relative group"
               style={{ height: `${(e.value / maxEquity) * 100}%` }}
-            />
+            >
+               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-background border border-border px-1 py-0.5 text-[6px] font-mono font-black whitespace-nowrap z-50">
+                  {e.value.toFixed(0)}
+               </div>
+            </div>
           ))}
         </div>
       </div>
 
-      {/* Drawdown Mini Chart */}
-      <div className="p-3 border-b border-border">
-        <h4 className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Drawdown</h4>
-        <div className="h-12 flex items-end gap-px">
-          {drawdown.map((d, i) => (
-            <div
-              key={i}
-              className="flex-1 rounded-b-sm bg-gradient-to-t from-neon-red/60 to-neon-red/10"
-              style={{ height: `${Math.abs(d.value) * 8}%` }}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Trade Heatmap */}
-      <div className="p-3 border-b border-border">
-        <h4 className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Weekly Heatmap</h4>
-        <div className="space-y-1.5">
+      {/* Weekly Intensity Heatmap */}
+      <div className="p-3 border-b border-border bg-card/5 relative z-10">
+        <h4 className="text-[9px] font-mono font-black uppercase tracking-[0.3em] text-muted-foreground/40 mb-3">Load_Intensity</h4>
+        <div className="space-y-3">
           {tradeHeatmapData.map((d) => (
-            <div key={d.day} className="flex items-center gap-2">
-              <span className="text-[9px] text-muted-foreground w-8">{d.day}</span>
-              <div className="flex-1 h-4 rounded-sm overflow-hidden flex">
+            <div key={d.day} className="flex flex-col gap-1.5">
+              <div className="flex justify-between items-center px-0.5 leading-none">
+                <span className="text-[8px] font-mono font-black text-muted-foreground/30 uppercase tracking-widest">{d.day}_PKT</span>
+                <span className="text-[9px] font-mono font-black text-secondary tabular-nums">+{((d.profit / (d.profit + Math.abs(d.loss))) * 100).toFixed(0)}%</span>
+              </div>
+              <div className="h-1 w-full bg-border/20 overflow-hidden flex relative group">
                 <div
-                  className="bg-neon-green/60"
+                  className="h-full bg-secondary relative z-10"
                   style={{ width: `${(d.profit / (d.profit + Math.abs(d.loss))) * 100}%` }}
                 />
                 <div
-                  className="bg-neon-red/60"
+                  className="h-full bg-destructive/30"
                   style={{ width: `${(Math.abs(d.loss) / (d.profit + Math.abs(d.loss))) * 100}%` }}
                 />
+                <div className="absolute inset-0 bg-white/5 animate-scan-fast opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Risk Alerts */}
-      <div className="p-3 flex-1">
-        <h4 className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
-          <AlertTriangle className="w-3 h-3" />
-          Risk Alerts
+      {/* Neural Feedback Log */}
+      <div className="p-3 flex-1 bg-card/10 backdrop-blur-md relative z-10">
+        <h4 className="text-[9px] font-mono font-black uppercase tracking-[0.3em] text-muted-foreground/40 mb-3 flex items-center gap-2">
+          <Zap className="w-3 h-3 text-primary" />
+          Neural_Event_Buffer
         </h4>
-        <div className="space-y-2">
+        <div className="space-y-1">
           {riskAlerts.map((alert) => (
             <div
               key={alert.id}
-              className={`p-2 rounded-md text-[10px] ${
-                alert.type === "warning" ? "bg-neon-orange/10 border border-neon-orange/20" :
-                alert.type === "success" ? "bg-neon-green/10 border border-neon-green/20" :
-                "bg-primary/10 border border-primary/20"
+              className={`p-2.5 border-l border-b border-border/10 bg-background/50 hover:bg-background transition-all ${
+                alert.type === "warning" ? "border-l-primary" :
+                alert.type === "success" ? "border-l-secondary" :
+                "border-l-muted-foreground/20"
               }`}
             >
-              <p className="text-foreground/80">{alert.message}</p>
-              <span className="text-[8px] text-muted-foreground">{alert.time}</span>
+              <p className={`text-[9px] font-mono font-black leading-tight mb-1.5 tracking-tight ${
+                alert.type === "warning" ? "text-primary/70" :
+                alert.type === "success" ? "text-secondary/70" :
+                "text-foreground/30"
+              }`}>
+                {alert.message.toUpperCase()}
+              </p>
+              <div className="flex items-center justify-between leading-none">
+                 <span className="text-[7px] font-mono font-black text-muted-foreground/10 uppercase tracking-widest">{alert.type}</span>
+                 <span className="text-[7px] font-mono font-black text-muted-foreground/20 tabular-nums">{alert.time}</span>
+              </div>
             </div>
           ))}
         </div>

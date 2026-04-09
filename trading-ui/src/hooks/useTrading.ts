@@ -43,6 +43,14 @@ export function useRiskStatus() {
   });
 }
 
+export function useSystemHealth() {
+  return useQuery({
+    queryKey: ["systemHealth"],
+    queryFn: algoApi.getSystemStatus,
+    refetchInterval: 5000,
+  });
+}
+
 export function useStartStrategy() {
   const queryClient = useQueryClient();
   return useMutation({

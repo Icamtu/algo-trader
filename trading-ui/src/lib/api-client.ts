@@ -1,5 +1,4 @@
-
-import { createClient } from "@supabase/supabase-js";
+import { CONFIG } from "@/lib/config";
 import {
   ApiError,
   type PlaceOrderRequest,
@@ -8,141 +7,161 @@ import {
   type SystemSettings,
 } from "@/types/api";
 
-const ALGO_TRADER_URL = "http://localhost:5001";
+const ALGO_TRADER_URL = CONFIG.API_BASE_URL;
 
-/**
- * Core fetch wrapper with structured error handling.
- * Throws ApiError with status code so consumers can branch on error type.
- */
-export async function fetchAlgo(endpoint: string, options: RequestInit = {}) {
-  const url = `${ALGO_TRADER_URL}${endpoint}`;
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
-  });
+// ─── Core API Clients ──────────────────────────────────────────
 
+const baseFetch = async (url: string, options: RequestInit = {}) => {
+  const response = await fetch(url, options);
   if (!response.ok) {
     const body = await response.json().catch(() => ({ error: response.statusText }));
-    throw new ApiError(
-      response.status,
-      body.error || `HTTP error! status: ${response.status}`,
-      body
-    );
+    throw new ApiError(response.status, body.error || `HTTP error! status: ${response.status}`, body);
   }
-
   return response.json();
-}
-
-export const algoApi = {
-  // ─── Strategies ────────────────────────────────────────────────
-  getStrategies: () => fetchAlgo("/api/strategies"),
-  getStrategy: (id: string) => fetchAlgo(`/api/strategies/${id}`),
-  startStrategy: (id: string) => fetchAlgo(`/api/strategies/${id}/start`, { method: "POST" }),
-  stopStrategy: (id: string) => fetchAlgo(`/api/strategies/${id}/stop`, { method: "POST" }),
-  updateStrategyParams: (id: string, params: Record<string, unknown>) =>
-    fetchAlgo(`/api/strategies/${id}/params`, { method: "PUT", body: JSON.stringify(params) }),
-
-  // ─── Positions & P&L ──────────────────────────────────────────
-  getPositions: () => fetchAlgo("/api/positions"),
-  getHoldings: () => fetchAlgo("/api/holdings"),
-  getPnl: () => fetchAlgo("/api/pnl"),
-  getRiskMetrics: () => fetchAlgo("/api/risk-metrics"),
-
-  // ─── Orders ────────────────────────────────────────────────────
-  getOrders: (params?: { limit?: number; symbol?: string; strategy?: string }) => {
-    const query = params ? `?${new URLSearchParams(params as Record<string, string>).toString()}` : "";
-    return fetchAlgo(`/api/orders${query}`);
-  },
-  getTradesBySymbol: (symbol: string, limit = 50) =>
-    fetchAlgo(`/api/trades/by-symbol/${symbol}?limit=${limit}`),
-  getTradesByStrategy: (strategy: string, limit = 100) =>
-    fetchAlgo(`/api/trades/by-strategy/${strategy}?limit=${limit}`),
-  getOpenPositions: () => fetchAlgo("/api/trades/open-positions"),
-  getOrderStatus: (orderId: string) => fetchAlgo(`/api/orders/${orderId}/status`),
-  cancelOrder: (id: string) => fetchAlgo(`/api/orders/${id}/cancel`, { method: "POST" }),
-  cancelAllOrders: () => fetchAlgo("/api/orders/cancel-all", { method: "POST" }),
-
-  // ─── Order Placement (GAP-13/14 fix) ──────────────────────────
-  placeOrder: (order: PlaceOrderRequest) =>
-    fetchAlgo("/api/terminal/command", {
-      method: "POST",
-      body: JSON.stringify({
-        command: `/${order.action} ${order.symbol} ${order.quantity}${order.price ? ` ${order.price}` : ""}`,
-      }),
-    }),
-
-  // ─── Funds ─────────────────────────────────────────────────────
-  getFunds: () => fetchAlgo("/api/funds"),
-
-  // ─── Risk Management ──────────────────────────────────────────
-  getRiskStatus: () => fetchAlgo("/api/risk/status"),
-  updateRiskLimits: (updates: RiskLimitUpdates) =>
-    fetchAlgo("/api/risk/limits", { method: "PUT", body: JSON.stringify(updates) }),
-
-  // ─── Trading Mode ─────────────────────────────────────────────
-  getMode: () => fetchAlgo("/api/system/mode"),
-  setMode: (mode: string) =>
-    fetchAlgo("/api/system/mode", { method: "POST", body: JSON.stringify({ mode }) }),
-
-  // ─── System ───────────────────────────────────────────────────
-  getSystemSettings: () => fetchAlgo("/api/system/settings"),
-  updateSystemSettings: (updates: Partial<SystemSettings>) =>
-    fetchAlgo("/api/system/settings", { method: "PUT", body: JSON.stringify(updates) }),
-  getSystemStatus: () => fetchAlgo("/api/system/status"),
-  getSystemLogs: () => fetchAlgo("/api/system/logs"),
-
-  // ─── Market Scanner ───────────────────────────────────────────
-  getScannerIndices: () => fetchAlgo("/api/scanner/indices"),
-  runScanner: (index: string) =>
-    fetchAlgo("/api/scanner/run", { method: "POST", body: JSON.stringify({ index }) }),
-  analyzeScanner: (results: Record<string, unknown>[]) =>
-    fetchAlgo("/api/scanner/analyze", { method: "POST", body: JSON.stringify({ results }) }),
-
-  // ─── Symbols ──────────────────────────────────────────────────
-  searchSymbols: (query: string) => fetchAlgo(`/api/symbols/search?q=${encodeURIComponent(query)}`),
-
-  // ─── Historical Data & Indicators ─────────────────────────────
-  getHistory: (params: { symbol: string; exchange?: string; interval?: string; start_date?: string }) => {
-    const query = new URLSearchParams(params as Record<string, string>).toString();
-    return fetchAlgo(`/api/history?${query}`);
-  },
-  calculateIndicators: (data: IndicatorPayload) =>
-    fetchAlgo("/api/indicators", { method: "POST", body: JSON.stringify(data) }),
-
-  // ─── Quotes ───────────────────────────────────────────────────
-  getQuotes: (symbols: string[]) =>
-    fetchAlgo(`/api/quotes?symbols=${symbols.join(",")}`),
-
-  // ─── Expert Terminal & Options ────────────────────────────────
-  getOptionChain: (symbol: string, expiry: string) =>
-    fetchAlgo(`/api/options/chain?symbol=${encodeURIComponent(symbol)}&expiry=${encodeURIComponent(expiry)}`),
-  sendTerminalCommand: (command: string) =>
-    fetchAlgo("/api/terminal/command", { method: "POST", body: JSON.stringify({ command }) }),
-  triggerPanic: () => fetchAlgo("/api/system/panic", { method: "POST" }),
-
-  // ─── Backtesting ──────────────────────────────────────────────
-  listBacktests: (limit = 100) => fetchAlgo(`/api/backtests?limit=${limit}`),
-  runBacktest: (data: { strategy_key: string; symbol: string; candles: Record<string, unknown>[]; initial_cash?: number }) =>
-    fetchAlgo("/api/backtest/run", { method: "POST", body: JSON.stringify(data) }),
-  optimizeStrategy: (data: {
-    strategy_key: string;
-    symbol: string;
-    candles: Record<string, unknown>[];
-    param_ranges: Record<string, unknown>;
-    metric?: string;
-    max_iterations?: number;
-  }) => fetchAlgo("/api/backtest/optimize", { method: "POST", body: JSON.stringify(data) }),
-
-  // ─── Alerts (Persistent CRUD) ─────────────────────────────────
-  getAlerts: () => fetchAlgo("/api/alerts"),
-  createAlert: (alert: { type: string; symbol: string; condition: string; value: number; channel?: string; message?: string }) =>
-    fetchAlgo("/api/alerts", { method: "POST", body: JSON.stringify(alert) }),
-  deleteAlert: (id: number) => fetchAlgo(`/api/alerts/${id}`, { method: "DELETE" }),
-
-  // ─── Trade Export ─────────────────────────────────────────────
-  exportTradesUrl: () => `${ALGO_TRADER_URL}/api/trades/export`,
 };
 
+export const apiClient = async (endpoint: string, options: RequestInit = {}) => {
+  const headers = {
+    "Content-Type": "application/json",
+    "apikey": CONFIG.API_KEY,
+    ...options.headers,
+  };
+  return baseFetch(`${ALGO_TRADER_URL}${endpoint}`, { ...options, headers });
+};
+
+export const webClient = async (endpoint: string, options: RequestInit = {}) => {
+  const headers = {
+    "Content-Type": "application/json",
+    "X-CSRFToken": localStorage.getItem("csrfToken") || "",
+    ...options.headers,
+  };
+  return baseFetch(`${ALGO_TRADER_URL}${endpoint}`, {
+    ...options,
+    headers,
+    credentials: "omit",
+  });
+};
+
+export const authClient = async (endpoint: string, options: RequestInit = {}) => {
+  const headers = {
+    "Content-Type": "application/json",
+    ...options.headers,
+  };
+  return baseFetch(`${ALGO_TRADER_URL}${endpoint}`, { ...options, headers });
+};
+
+// ─── API Schemas ───────────────────────────────────────────────
+
+export const algoApi = {
+  // Strategies
+  getStrategies: () => apiClient("/api/v1/strategies"),
+  getStrategy: (id: string) => apiClient(`/api/v1/strategies/${id}`),
+  startStrategy: (id: string) => apiClient(`/api/v1/strategies/${id}/start`, { method: "POST" }),
+  stopStrategy: (id: string) => apiClient(`/api/v1/strategies/${id}/stop`, { method: "POST" }),
+  updateStrategyParams: (id: string, params: Record<string, unknown>) =>
+    apiClient(`/api/v1/strategies/${id}/params`, { method: "PUT", body: JSON.stringify(params) }),
+
+  // Positions & P&L
+  getPositions: () => apiClient("/api/v1/positionbook"),
+  getHoldings: () => apiClient("/api/v1/holdings"),
+  getPnl: () => apiClient("/api/v1/pnl"),
+  getRiskMetrics: () => apiClient("/api/v1/risk-metrics"),
+
+  // Orders
+  getOrders: (params?: Record<string, string>) => {
+    const query = params ? `?${new URLSearchParams(params).toString()}` : "";
+    return apiClient(`/api/v1/orderbook${query}`);
+  },
+  getTradesBySymbol: (symbol: string, limit = 50) =>
+    apiClient(`/api/v1/tradebook?symbol=${symbol}&limit=${limit}`),
+  getTradesByStrategy: (strategy: string, limit = 100) =>
+    apiClient(`/api/v1/tradebook?strategy=${strategy}&limit=${limit}`),
+  getOpenPositions: () => apiClient("/api/v1/tradebook/open"),
+  getOrderStatus: (orderId: string) => apiClient(`/api/v1/orderstatus/${orderId}`),
+  cancelOrder: (id: string) => apiClient(`/api/v1/cancelorder/${id}`, { method: "DELETE" }),
+  cancelAllOrders: () => apiClient("/api/v1/cancelallorder", { method: "DELETE" }),
+
+  // Order Placement
+  placeOrder: (order: PlaceOrderRequest) =>
+    apiClient("/api/v1/placeorder", { method: "POST", body: JSON.stringify(order) }),
+  smartOrder: (order: Record<string, unknown>) =>
+    apiClient("/api/v1/smartorder", { method: "POST", body: JSON.stringify(order) }),
+  basketOrder: (orders: Record<string, unknown>[]) =>
+    apiClient("/api/v1/basketorder", { method: "POST", body: JSON.stringify({ orders }) }),
+
+  // Square-off
+  exitPosition: (symbol: string) => apiClient("/api/v1/exitposition", { method: "POST", body: JSON.stringify({ symbol }) }),
+  closePosition: () => apiClient("/api/v1/closeposition", { method: "POST" }),
+
+  // Funds
+  getFunds: () => apiClient("/api/v1/funds"),
+
+  // Risk Management
+  getRiskStatus: () => apiClient("/api/v1/risk/status"),
+  updateRiskLimits: (updates: RiskLimitUpdates) =>
+    apiClient("/api/v1/risk/limits", { method: "PUT", body: JSON.stringify(updates) }),
+
+  // Mode
+  getMode: () => apiClient("/api/v1/mode"),
+  setMode: (mode: string) =>
+    apiClient("/api/v1/mode", { method: "POST", body: JSON.stringify({ mode }) }),
+
+  // System
+  getSystemSettings: () => apiClient("/api/v1/settings"),
+  updateSystemSettings: (updates: Partial<SystemSettings>) =>
+    apiClient("/api/v1/settings", { method: "PUT", body: JSON.stringify(updates) }),
+  getSystemStatus: () => apiClient("/api/v1/health"),
+  getSystemLogs: () => apiClient("/api/v1/logs"),
+
+  // Scanner
+  getScannerIndices: () => apiClient("/api/v1/scanner/indices"),
+  runScanner: (index: string) =>
+    apiClient("/api/v1/scanner/run", { method: "POST", body: JSON.stringify({ index }) }),
+  analyzeScanner: (results: Record<string, unknown>[]) =>
+    apiClient("/api/v1/scanner/analyze", { method: "POST", body: JSON.stringify({ results }) }),
+
+  // Symbols & Quotes
+  searchSymbols: (query: string) => apiClient(`/api/v1/symbol/search?q=${encodeURIComponent(query)}`),
+  getQuotes: (symbols: string[]) => apiClient(`/api/v1/quotes?symbols=${symbols.join(",")}`),
+  getDepth: (symbol: string) => apiClient(`/api/v1/depth?symbol=${encodeURIComponent(symbol)}`),
+
+  // Historical Data & Indicators
+  getHistory: (params: Record<string, string>) => {
+    const query = new URLSearchParams(params).toString();
+    return apiClient(`/api/v1/history?${query}`);
+  },
+  calculateIndicators: (data: IndicatorPayload) =>
+    apiClient("/api/v1/indicators", { method: "POST", body: JSON.stringify(data) }),
+
+  // Expert Terminal & Options
+  getOptionChain: (symbol: string, expiry: string) =>
+    apiClient(`/api/v1/optionchain?symbol=${encodeURIComponent(symbol)}&expiry=${encodeURIComponent(expiry)}`),
+  getOptionGreeks: (symbol: string) =>
+    apiClient(`/api/v1/optiongreeks?symbol=${encodeURIComponent(symbol)}`),
+  getMargins: (order: Record<string, unknown>) =>
+    apiClient("/api/v1/margins", { method: "POST", body: JSON.stringify(order) }),
+  sendTerminalCommand: (command: string) =>
+    apiClient("/api/v1/terminal/command", { method: "POST", body: JSON.stringify({ command }) }),
+  triggerPanic: () => apiClient("/api/v1/system/panic", { method: "POST" }),
+
+  // Backtesting
+  listBacktests: (limit = 100) => apiClient(`/api/v1/backtests?limit=${limit}`),
+  runBacktest: (data: import("@/types/api").BacktestRequest): Promise<import("@/types/api").BacktestResponse> =>
+    apiClient("/api/v1/backtest/run", { method: "POST", body: JSON.stringify(data) }),
+  optimizeStrategy: (data: Record<string, unknown>) => apiClient("/api/v1/backtest/optimize", { method: "POST", body: JSON.stringify(data) }),
+
+  // Alerts
+  getAlerts: () => apiClient("/api/v1/alerts"),
+  createAlert: (alert: Record<string, unknown>) =>
+    apiClient("/api/v1/alerts", { method: "POST", body: JSON.stringify(alert) }),
+  deleteAlert: (id: number) => apiClient(`/api/v1/alerts/${id}`, { method: "DELETE" }),
+  sendTelegramAlert: (params: Record<string, unknown>) =>
+    apiClient("/api/v1/telegram", { method: "POST", body: JSON.stringify(params) }),
+
+  // Trade Export
+  exportTradesUrl: () => `${ALGO_TRADER_URL}/api/v1/tradebook/export`,
+  
+  // Analyzer toggle
+  toggleAnalyzer: (state: boolean) => apiClient("/api/v1/analyzertoggle", { method: "POST", body: JSON.stringify({ state }) }),
+  getAnalyzerStatus: () => apiClient("/api/v1/analyzerstatus"),
+};

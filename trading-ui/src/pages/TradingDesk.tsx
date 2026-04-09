@@ -32,36 +32,48 @@ export default function TradingDesk() {
   };
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background">
+    <div className="h-screen flex flex-col overflow-hidden bg-background industrial-grid relative">
+      <div className="noise-overlay" />
+      <div className="scanline opacity-10" />
       <GlobalHeader />
 
-      {/* Main Navigation Tabs */}
-      <div className="flex items-center gap-1 px-4 pt-2 pb-0 border-b border-border overflow-x-auto">
-        <NavTab to="/" icon={BarChart3} label="Trading Desk" active={true} />
-        <NavTab to="/strategy-lab" icon={GitBranch} label="Strategy Lab" />
-        <NavTab to="/risk" icon={Shield} label="Risk Dashboard" />
-        <NavTab to="/scanner" icon={Search} label="Market Scanner" />
-        <NavTab to="/portfolio" icon={Briefcase} label="Portfolio" />
-        <NavTab to="/journal" icon={BookOpen} label="Trade Journal" />
-        <NavTab to="/infrastructure" icon={Server} label="Infrastructure" />
-        <NavTab to="/alerts" icon={Bell} label="Alerts" />
+      {/* Main Terminal Navigation */}
+      <div className="flex items-center gap-0 border-b border-border bg-card/5 overflow-x-auto no-scrollbar relative z-20">
+        <NavTab to="/" icon={BarChart3} label="Console" active={true} />
+        <NavTab to="/strategy-lab" icon={GitBranch} label="Lab" />
+        <NavTab to="/risk" icon={Shield} label="Risk" />
+        <NavTab to="/scanner" icon={Search} label="Scanner" />
+        <NavTab to="/portfolio" icon={Briefcase} label="Vault" />
+        <NavTab to="/infrastructure" icon={Server} label="Kernel" />
       </div>
 
-      {/* Page Sub-Tabs */}
-      <div className="flex items-center gap-1 px-4 pt-2 pb-0 bg-background/50">
-        {pageTabs.map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-t-md transition-all border-b-2 ${
-              activeTab === tab
-                ? "text-primary border-primary bg-primary/5"
-                : "text-muted-foreground border-transparent hover:text-foreground hover:border-muted"
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
+      {/* Task Sub-Tabs */}
+      <div className="flex items-center px-4 bg-background/80 border-b border-border/50 relative z-10">
+        <div className="flex gap-4">
+          {pageTabs.map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`py-1 text-[9px] font-mono font-black uppercase tracking-[0.2em] transition-all relative ${
+                activeTab === tab
+                  ? "text-secondary"
+                  : "text-muted-foreground/40 hover:text-foreground"
+              }`}
+            >
+              {tab}
+              {activeTab === tab && (
+                <motion.div 
+                  layoutId="activeSubTab"
+                  className="absolute bottom-0 left-0 right-0 h-[1.5px] bg-secondary shadow-[0_0_8px_rgba(0,212,212,0.4)]" 
+                />
+              )}
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+            <span className="text-[7px] font-mono text-muted-foreground/30 uppercase tracking-widest">LTNCY::12ms</span>
+            <div className="w-1 h-1 rounded-full bg-secondary animate-pulse" />
+        </div>
       </div>
 
       <AnimatePresence mode="wait">
@@ -71,11 +83,10 @@ export default function TradingDesk() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
             className="flex-1 flex min-h-0"
           >
             <StrategySidebar />
-            <div className="flex-1 flex flex-col min-w-0">
+            <div className="flex-1 flex flex-col min-w-0 border-r border-border/50">
               <div className="flex-1 flex min-h-0">
                 <BacktestCanvas />
                 <AnalyticsPanel />
@@ -90,7 +101,6 @@ export default function TradingDesk() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
             className="flex-1 flex min-h-0"
           >
             <StrategySidebar />
@@ -115,14 +125,19 @@ function NavTab({ to, icon: Icon, label, active }: { to: string; icon: any; labe
   return (
     <a
       href={to}
-      className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md transition-all whitespace-nowrap ${
+      className={`group relative flex items-center gap-2 px-4 py-2.5 transition-all border-r border-border/30 ${
         active
-          ? "text-primary bg-primary/10 border border-primary/20"
-          : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+          ? "bg-primary/5 text-primary"
+          : "text-muted-foreground/60 hover:text-foreground hover:bg-card/5"
       }`}
     >
-      <Icon className="w-3.5 h-3.5" />
-      {label}
+      <Icon className={`w-3.5 h-3.5 ${active ? 'text-primary' : 'text-muted-foreground/40 group-hover:text-primary'}`} />
+      <span className="text-[10px] font-mono font-black uppercase tracking-[0.2em]">
+        {label}
+      </span>
+      {active && (
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-primary shadow-[0_0_10px_rgba(255,176,0,0.5)]" />
+      )}
     </a>
   );
 }

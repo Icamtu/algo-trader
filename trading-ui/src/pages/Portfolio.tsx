@@ -6,10 +6,10 @@ import { RightPanel } from "@/components/trading/RightPanel";
 import { NewOrderModal } from "@/components/trading/NewOrderModal";
 import { algoApi } from "@/lib/api-client";
 import type { PnlResponse, Position } from "@/types/api";
-import type { LucideIcon } from "lucide-react";
-import { BarChart3, Shield, Settings, LineChart, Radar, Search, Briefcase, BookOpen, Server, Bell, GitBranch, TrendingUp, TrendingDown, PieChart, Calendar, AlertTriangle, Loader2 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell, Legend } from "recharts";
+import { Briefcase, TrendingUp, TrendingDown, PieChart, AlertTriangle, Loader2 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell } from "recharts";
 import { MarketNavbar } from "@/components/trading/MarketNavbar";
+import { IndustrialValue } from "@/components/trading/IndustrialValue";
 
 const pageTabs = ["Overview", "Allocation", "Performance"] as const;
 
@@ -29,9 +29,8 @@ export default function Portfolio() {
   const hasError = posError || fundsError;
 
   const metrics = useMemo(() => {
-    const totalValue = positionsData?.total_value || 0;
     return {
-      totalValue,
+      totalValue: positionsData?.total_value || 0,
       dayPnL: pnlData?.total_pnl || 0,
       unrealizedPnL: pnlData?.unrealized_pnl || 0,
       realizedPnL: pnlData?.realized_pnl || 0,
@@ -44,142 +43,103 @@ export default function Portfolio() {
     return positionsData.positions.map((p: Position, i: number) => ({
       name: p.symbol,
       value: p.current_value,
-      color: `hsl(${234 + i * 40}, 89%, 64%)`
+      color: [`#FFB000`, `#00D4D4`, `#FF4D4D`, `#A555EE`][i % 4]
     }));
   }, [positionsData]);
 
-  const monthlyPnL = [
-    { month: "Jan", pnl: 125000 },
-    { month: "Feb", pnl: -45000 },
-    { month: "Mar", pnl: 189000 },
-    { month: "Apr", pnl: 98000 },
-    { month: "May", pnl: -72000 },
-    { month: "Jun", pnl: 234000 },
-    { month: "Jul", pnl: 156000 },
-    { month: "Aug", pnl: -89000 },
-    { month: "Sep", pnl: 178000 },
-    { month: "Oct", pnl: 234000 },
-    { month: "Nov", pnl: 145000 },
-    { month: "Dec", pnl: 98000 },
-  ];
-
-  const handleTradeClick = (symbol: string) => {
-    setPrefilledSymbol(symbol);
-    setOrderModalOpen(true);
-  };
-
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background">
+    <div className="h-screen flex flex-col overflow-hidden bg-background industrial-grid relative">
+      <div className="noise-overlay" />
+      <div className="scanline opacity-10" />
       <GlobalHeader />
       <MarketNavbar activeTab="/portfolio" />
-      <div className="flex items-center gap-1 px-4 pt-2 pb-0 bg-background/50">
+
+      {/* Industrial Sub-Tabs */}
+      <div className="flex px-4 bg-card/5 border-b border-border/20 relative z-10">
+        <div className="flex items-center gap-3 pr-4 mr-4 border-r border-border/20">
+            <Briefcase className="w-3 h-3 text-primary animate-pulse" />
+            <div className="text-[9px] font-mono font-black text-primary uppercase tracking-[0.2em]">Vault_v4</div>
+        </div>
         {pageTabs.map((tab) => (
-          <button key={tab} onClick={() => setActiveTab(tab)} className={`px-3 py-1.5 text-xs font-medium rounded-t-md transition-all border-b-2 ${activeTab === tab ? "text-primary border-primary bg-primary/5" : "text-muted-foreground border-transparent hover:text-foreground hover:border-muted"}`}>
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2 text-[9px] font-mono font-black uppercase tracking-[0.2em] transition-all relative ${
+              activeTab === tab ? "text-primary bg-primary/5" : "text-muted-foreground/30 hover:text-foreground/60"
+            }`}
+          >
             {tab}
+            {activeTab === tab && (
+              <motion.div layoutId="activePortTab" className="absolute bottom-0 left-0 right-0 h-[1.5px] bg-primary shadow-[0_0_10px_rgba(255,176,0,0.5)]" />
+            )}
           </button>
         ))}
       </div>
-      <div className="flex-1 flex min-h-0 overflow-hidden">
-        <div className="flex-1 overflow-auto p-4">
+
+      <div className="flex-1 flex min-h-0 relative z-10">
+        <div className="flex-1 overflow-auto p-4 no-scrollbar">
           {hasError && (
-            <div className="flex items-center gap-3 p-4 mb-4 bg-destructive/10 border border-destructive/30 rounded-xl">
-              <AlertTriangle className="w-4 h-4 text-destructive shrink-0" />
-              <div>
-                <div className="text-[10px] font-black uppercase text-destructive tracking-widest">Connection Error</div>
-                <div className="text-[9px] text-muted-foreground">Unable to retrieve portfolio data. The trading engine may be offline.</div>
-              </div>
+            <div className="border border-destructive bg-destructive/5 p-4 mb-4 flex items-center gap-4">
+              <AlertTriangle className="w-4 h-4 text-destructive" />
+              <span className="text-[10px] font-mono font-black text-destructive uppercase">TELEMETRY_LINK_FAULT</span>
             </div>
           )}
+          
           {(isLoadingPositions || isLoadingFunds) && !hasError && (
-            <div className="flex items-center justify-center py-20">
-              <div className="flex flex-col items-center gap-3">
-                <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Syncing Portfolio...</span>
-              </div>
+            <div className="h-64 flex items-center justify-center">
+              <Loader2 className="w-5 h-5 text-primary animate-spin" />
             </div>
           )}
+
           {activeTab === "Overview" && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-              <div className="grid grid-cols-4 gap-4">
-                <MetricCard label="Total P&L" value={`₹${(metrics.dayPnL/1000).toFixed(0)}K`} icon={TrendingUp} color={metrics.dayPnL >= 0 ? "text-neon-green" : "text-destructive"} />
-                <MetricCard label="Unrealized" value={`₹${(metrics.unrealizedPnL/1000).toFixed(0)}K`} icon={TrendingUp} color={metrics.unrealizedPnL >= 0 ? "text-neon-green" : "text-destructive"} />
-                <MetricCard label="Realized" value={`₹${(metrics.realizedPnL/1000).toFixed(0)}K`} icon={TrendingDown} color={metrics.realizedPnL >= 0 ? "text-neon-green" : "text-destructive"} />
-                <MetricCard label="Return %" value={`${metrics.pnlPct >= 0 ? '+' : ''}${metrics.pnlPct.toFixed(1)}%`} icon={PieChart} color="text-primary" />
+              <div className="grid grid-cols-4 gap-3">
+                <MetricCard label="AGGREGATE_PNL" value={metrics.dayPnL} prefix="₹" color={metrics.dayPnL >= 0 ? "text-secondary" : "text-destructive"} />
+                <MetricCard label="UNREALIZED_CORE" value={metrics.unrealizedPnL} prefix="₹" color={metrics.unrealizedPnL >= 0 ? "text-secondary" : "text-destructive"} />
+                <MetricCard label="REALIZED_BUFFER" value={metrics.realizedPnL} prefix="₹" color="text-foreground/60" />
+                <MetricCard label="YIELD_INDEX" value={metrics.pnlPct} suffix="%" color="text-primary" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <MetricCard label="Total Value" value={`₹${(metrics.totalValue/100000).toFixed(1)}L`} icon={PieChart} color="text-foreground" />
-                <MetricCard label="Account Capital" value={`₹${((fundsData?.cash || 0)/100000).toFixed(1)}L`} icon={Briefcase} color="text-primary" />
+              
+              <div className="grid grid-cols-2 gap-3">
+                <MetricCard label="GROSS_VALUATION" value={metrics.totalValue} prefix="₹" color="text-foreground" />
+                <MetricCard label="ACCOUNT_LIQUIDITY" value={fundsData?.cash || 0} prefix="₹" color="text-primary" />
               </div>
-              <div className="glass-panel rounded-xl p-4">
-                <h3 className="text-xs font-semibold text-foreground mb-4">Monthly P&L</h3>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={monthlyPnL}>
-                      <XAxis dataKey="month" stroke="hsl(215, 20%, 55%)" fontSize={10} tickLine={false} />
-                      <YAxis stroke="hsl(215, 20%, 55%)" fontSize={10} tickLine={false} tickFormatter={(v) => `${(v/1000).toFixed(0)}K`} />
-                      <Tooltip contentStyle={{ background: 'hsl(222, 47%, 8%)', border: '1px solid hsl(217, 33%, 17%)', borderRadius: '8px' }} formatter={(v: number) => [`₹${(v/1000).toFixed(0)}K`, 'P&L']} />
-                      <Bar dataKey="pnl" radius={[4, 4, 0, 0]}>
-                        {monthlyPnL.map((entry, index) => (
-                          <Cell key={index} fill={entry.pnl >= 0 ? "hsl(160, 84%, 39%)" : "hsl(0, 72%, 51%)"} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+
+              <div className="border border-border/20 bg-card/5 p-4">
+                 <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-[10px] font-black font-syne uppercase tracking-[0.2em]">Growth_Telemetry</h3>
+                    <div className="px-2 py-0.5 border border-primary/20 bg-primary/5 text-[7px] font-mono font-black text-primary">LIVE_STREAM</div>
+                 </div>
+                 <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={[{ m: "JAN", v: 100 }, { m: "FEB", v: 120 }, { m: "MAR", v: 115 }, { m: "APR", v: 140 }]}>
+                        <Bar dataKey="v" fill="#ffb000" fillOpacity={0.1} stroke="#ffb000" strokeWidth={1} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                 </div>
               </div>
             </motion.div>
           )}
+
           {activeTab === "Allocation" && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-panel rounded-xl p-4">
-              <h3 className="text-xs font-semibold text-foreground mb-4">Asset Allocation</h3>
-              <div className="flex items-center gap-8">
-                <div className="w-64 h-64">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="border border-border/20 bg-card/5 p-4 flex gap-8">
+               <div className="w-48 h-48">
                   <ResponsiveContainer width="100%" height="100%">
                     <RePieChart>
-                      <Pie data={allocation} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value">
-                        {allocation.map((entry, index) => (<Cell key={index} fill={entry.color} />))}
+                      <Pie data={allocation} cx="50%" cy="50%" innerRadius={40} outerRadius={60} dataKey="value" stroke="none">
+                        {allocation.map((e, i) => (<Cell key={i} fill={e.color} fillOpacity={0.4} />))}
                       </Pie>
-                      <Tooltip contentStyle={{ background: 'hsl(222, 47%, 8%)', border: '1px solid hsl(217, 33%, 17%)', borderRadius: '8px' }} />
                     </RePieChart>
                   </ResponsiveContainer>
-                </div>
-                <div className="flex-1 space-y-3">
-                  {allocation.map((a) => (
-                    <div key={a.name} className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full" style={{ background: a.color }} />
-                      <span className="text-xs text-muted-foreground flex-1">{a.name}</span>
-                      <span className="text-xs font-semibold text-foreground">{a.value}%</span>
+               </div>
+               <div className="flex-1 grid grid-cols-2 gap-2">
+                  {allocation.map(a => (
+                    <div key={a.name} className="p-3 border border-border/10 bg-background/50 flex justify-between items-center">
+                       <span className="text-[9px] font-mono font-black text-muted-foreground/30">{a.name}</span>
+                       <IndustrialValue value={a.value} suffix="%" className="text-xs font-black" />
                     </div>
                   ))}
-                </div>
-              </div>
-            </motion.div>
-          )}
-          {activeTab === "Performance" && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-panel rounded-xl p-4">
-              <h3 className="text-xs font-semibold text-foreground mb-4">Performance Metrics</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="glass-panel rounded-lg p-4">
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Total Return</div>
-                  <div className="text-2xl font-bold text-neon-green">+₹78.4L</div>
-                  <div className="text-xs text-muted-foreground">Since inception</div>
-                </div>
-                <div className="glass-panel rounded-lg p-4">
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Max Drawdown</div>
-                  <div className="text-2xl font-bold text-neon-red">-12.4%</div>
-                  <div className="text-xs text-muted-foreground">Peak to trough</div>
-                </div>
-                <div className="glass-panel rounded-lg p-4">
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Win Rate</div>
-                  <div className="text-2xl font-bold text-primary">64.2%</div>
-                  <div className="text-xs text-muted-foreground">Win/Loss ratio</div>
-                </div>
-                <div className="glass-panel rounded-lg p-4">
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Profit Factor</div>
-                  <div className="text-2xl font-bold text-neon-cyan">2.34</div>
-                  <div className="text-xs text-muted-foreground">Gross profit/loss</div>
-                </div>
-              </div>
+               </div>
             </motion.div>
           )}
         </div>
@@ -190,18 +150,11 @@ export default function Portfolio() {
   );
 }
 
-function MetricCard({ label, value, icon: Icon, color }: { label: string; value: string; icon: LucideIcon; color: string }) {
+function MetricCard({ label, value, prefix = "", suffix = "", color }: { label: string; value: number; prefix?: string; suffix?: string; color: string }) {
   return (
-    <div className="glass-panel rounded-xl p-4">
-      <div className="flex items-center gap-2 mb-2">
-        <Icon className={`w-4 h-4 ${color}`} />
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
-      </div>
-      <div className={`text-xl font-bold ${color}`}>{value}</div>
+    <div className="p-4 border border-border/10 bg-card/5 group hover:border-primary/20 transition-all">
+      <div className="text-[8px] font-mono font-black text-muted-foreground/20 uppercase tracking-widest mb-2">{label}</div>
+      <IndustrialValue value={value} prefix={prefix} suffix={suffix} className={`text-xl font-black font-syne ${color}`} />
     </div>
   );
-}
-
-function NavTab({ to, icon: Icon, label, active }: { to: string; icon: LucideIcon; label: string; active?: boolean }) {
-  return <a href={to} className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md transition-all whitespace-nowrap ${active ? "text-primary bg-primary/10 border border-primary/20" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"}`}><Icon className="w-3.5 h-3.5" />{label}</a>;
 }

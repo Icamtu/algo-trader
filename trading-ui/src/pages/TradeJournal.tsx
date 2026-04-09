@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { GlobalHeader } from "@/components/trading/GlobalHeader";
 import { MarketNavbar } from "@/components/trading/MarketNavbar";
 import { RightPanel } from "@/components/trading/RightPanel";
@@ -7,44 +7,35 @@ import { NewOrderModal } from "@/components/trading/NewOrderModal";
 import { algoApi } from "@/lib/api-client";
 import { useTradingMode } from "@/hooks/useTrading";
 import type { Trade } from "@/types/api";
-import { ApiErrorBoundary } from "@/components/ui/ApiErrorBoundary";
 import { 
-  BarChart3, Shield, Search, Briefcase, BookOpen, Server, 
-  Bell, GitBranch, Download, Calendar, History, Hash,
-  ArrowUpRight, ArrowDownRight, Activity, TrendingUp, TrendingDown, Loader2
+  Download, Calendar, History, Hash,
+  Activity, TrendingUp, TrendingDown, Loader2
 } from "lucide-react";
 import { format } from "date-fns";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTooltip } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
+import { IndustrialValue } from "@/components/trading/IndustrialValue";
 
 const pageTabs = ["Log", "Statistics"] as const;
 
 export default function TradeJournal() {
   const { mode } = useTradingMode();
   const [activeTab, setActiveTab] = useState<typeof pageTabs[number]>("Log");
-  const [orderModalOpen, setOrderModalOpen] = useState(false);
-  const [prefilledSymbol, setPrefilledSymbol] = useState<string>("");
   const [trades, setTrades] = useState<Trade[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const fetchTrades = async () => {
+    setIsLoading(true);
+    try {
+      const response = await algoApi.getOrders();
+      setTrades(response.trades || []);
+    } catch (error) {} finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchTrades();
   }, [mode]);
-
-  const fetchTrades = async () => {
-    setIsLoading(true);
-    setFetchError(null);
-    try {
-      const response = await algoApi.getOrders();
-      // Backend already filters by current mode — no client-side re-filter needed
-      setTrades(response.trades || []);
-    } catch (error) {
-      console.error("Failed to fetch journal", error);
-      setFetchError("Cannot load trade journal. Ensure the backend is running.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const stats = {
     total: trades.length,
@@ -53,176 +44,136 @@ export default function TradeJournal() {
     sells: trades.filter(t => t.side === 'SELL').length,
   };
 
-  const pieData = [
-    { name: "Buys", value: stats.buys, color: "hsl(160, 84%, 39%)" },
-    { name: "Sells", value: stats.sells, color: "hsl(0, 72%, 51%)" },
-  ];
-
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground">
+    <div className="h-screen flex flex-col overflow-hidden bg-background industrial-grid relative">
+      <div className="noise-overlay" />
+      <div className="scanline opacity-10" />
       <GlobalHeader />
-      
       <MarketNavbar activeTab="/journal" />
 
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-background/50">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1 bg-muted/30 p-0.5 rounded-md">
+      {/* Industrial Sub-Tabs */}
+      <div className="flex px-4 bg-card/5 border-b border-border/20 relative z-10">
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-1 bg-background/50 border border-border/20 p-1">
             {pageTabs.map((tab) => (
-              <button key={tab} onClick={() => setActiveTab(tab)} 
-                className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-sm transition-all ${
-                  activeTab === tab ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
-                }`}>
+              <button 
+                key={tab} 
+                onClick={() => setActiveTab(tab)} 
+                className={`px-4 py-1 text-[9px] font-mono font-black uppercase tracking-widest transition-all ${
+                  activeTab === tab ? "bg-primary text-black" : "text-muted-foreground/30 hover:text-foreground/60"
+                }`}
+              >
                 {tab}
               </button>
             ))}
           </div>
-          <div className="h-6 w-px bg-border mx-2" />
-          <div className="flex items-center gap-2">
-            <span className={`text-[10px] font-black px-2 py-0.5 rounded border uppercase ${
-              mode === 'live' ? "bg-destructive/10 text-destructive border-destructive/20" : "bg-warning/10 text-warning border-warning/20"
-            }`}>
-              {mode} Ledger
-            </span>
+          <div className="flex items-center gap-3 border-l border-border/20 pl-4">
+             <div className="text-[8px] font-mono font-black text-primary/40 uppercase tracking-widest">MODE::{mode?.toUpperCase()}</div>
           </div>
         </div>
-        <button
-          onClick={() => window.open(algoApi.exportTradesUrl(), "_blank")}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/30 hover:bg-muted/50 rounded-md border border-border transition-all text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground"
-        >
-          <Download className="w-3 h-3" /> Export Ledger
-        </button>
+        <div className="flex-1 flex justify-end">
+          <button
+            onClick={() => window.open(algoApi.exportTradesUrl(), "_blank")}
+            className="flex items-center gap-2 px-3 py-1 bg-foreground text-background hover:bg-primary transition-all text-[8px] font-mono font-black uppercase"
+          >
+            <Download className="w-3 h-3" /> EXPORT_LEDGER
+          </button>
+        </div>
       </div>
 
-      <div className="flex-1 flex min-h-0 overflow-hidden">
-        <div className="flex-1 overflow-auto p-4 custom-scrollbar">
-          <AnimatePresence mode="wait">
-            {activeTab === "Log" && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-2">
-                {isLoading && (
-                  <div className="space-y-2">
-                    {[...Array(6)].map((_, i) => (
-                      <div key={i} className="glass-panel p-3 rounded-lg border border-border/40 flex items-center justify-between animate-pulse">
-                        <div className="flex items-center gap-4">
-                          <div className="w-8 h-8 bg-muted/50 rounded-lg" />
-                          <div className="space-y-1.5">
-                            <div className="w-20 h-3 bg-muted/50 rounded" />
-                            <div className="w-32 h-2 bg-muted/30 rounded" />
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-8">
-                          <div className="w-12 h-4 bg-muted/40 rounded" />
-                          <div className="w-16 h-4 bg-muted/40 rounded" />
-                          <div className="w-14 h-5 bg-muted/40 rounded-full" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {!isLoading && trades.map((trade, i) => (
-                  <motion.div
-                    key={trade.id || i}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.01 }}
-                    className="glass-panel p-3 rounded-lg border border-border/40 flex items-center justify-between group hover:border-primary/30 hover:bg-primary/[0.02] transition-all"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className={`p-2 rounded-lg ${trade.side === "BUY" ? "bg-neon-green/10" : "bg-destructive/10"}`}>
-                        {trade.side === "BUY" ? (
-                          <ArrowUpRight className={`w-4 h-4 ${trade.side === "BUY" ? "text-neon-green" : "text-destructive"}`} />
-                        ) : (
-                          <ArrowDownRight className="w-4 h-4 text-destructive" />
-                        )}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-black tracking-tight">{trade.symbol}</span>
-                          <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded border uppercase ${
-                            trade.side === "BUY" ? "border-neon-green/30 text-neon-green" : "border-destructive/30 text-destructive"
-                          }`}>
-                            {trade.side}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 text-[9px] text-muted-foreground font-medium mt-0.5">
-                          <Calendar className="w-2.5 h-2.5" />
-                          {format(new Date(trade.timestamp || trade.created_at || Date.now()), "dd MMM yyyy HH:mm:ss")}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-8">
-                      <div className="text-right">
-                        <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-0.5">Quantity</div>
-                        <div className="text-xs font-bold font-mono">{trade.quantity}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-0.5">Avg Price</div>
-                        <div className="text-xs font-bold font-mono">₹{(trade.price ?? 0).toLocaleString()}</div>
-                      </div>
-                      <div className="text-right w-24">
-                        <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-0.5">Status</div>
-                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-black border uppercase ${
-                          trade.status === "filled" ? "bg-neon-emerald/10 text-neon-emerald border-neon-emerald/20" : "bg-warning/10 text-warning border-warning/20"
-                        }`}>
-                          {trade.status}
+      <div className="flex-1 flex min-h-0 relative z-10">
+        <div className="flex-1 overflow-auto p-4 no-scrollbar">
+          {activeTab === "Log" && (
+            <div className="space-y-2">
+              {isLoading && (
+                <div className="h-48 flex items-center justify-center">
+                  <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                </div>
+              )}
+              {trades.map((trade, i) => (
+                <motion.div key={trade.id || i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="border border-border/10 bg-card/5 p-3 hover:bg-card/10 transition-all flex items-center justify-between group">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-1 h-10 ${trade.side === "BUY" ? "bg-secondary" : "bg-destructive"}`} />
+                    <div>
+                      <div className="flex items-center gap-3 mb-1">
+                        <span className="text-sm font-black font-syne uppercase text-foreground">{trade.symbol}</span>
+                        <span className={`text-[8px] font-mono font-black px-1.5 border ${trade.side === "BUY" ? "border-secondary/20 text-secondary" : "border-destructive/20 text-destructive"}`}>
+                          {trade.side}
                         </span>
                       </div>
-                    </div>
-                  </motion.div>
-                ))}
-                {trades.length === 0 && !isLoading && (
-                  <div className="py-20 text-center glass-panel rounded-xl border-dashed">
-                    <History className="w-10 h-10 mx-auto mb-3 text-muted-foreground/20" />
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">No transaction records found for {mode?.toUpperCase()} mode</p>
-                  </div>
-                )}
-              </motion.div>
-            )}
-
-            {activeTab === "Statistics" && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="grid grid-cols-3 gap-6">
-                <div className="glass-panel p-5 rounded-xl border border-border/50 col-span-1">
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-foreground mb-4">Side Distribution</h3>
-                  <div className="h-48">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={pieData} cx="50%" cy="50%" innerRadius={40} outerRadius={60} paddingAngle={5} dataKey="value" strokeWidth={0}>
-                          {pieData.map((entry, index) => (<Cell key={index} fill={entry.color} />))}
-                        </Pie>
-                        <ReTooltip />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="flex justify-center gap-4 mt-2">
-                    {pieData.map(w => (<div key={w.name} className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{ background: w.color }} /><span className="text-[9px] font-bold text-muted-foreground uppercase">{w.name}: {w.value}</span></div>))}
-                  </div>
-                </div>
-                
-                <div className="col-span-2 grid grid-cols-2 gap-4">
-                  {[
-                    { label: "Total Executions", value: stats.total, icon: Activity, color: "text-primary" },
-                    { label: "Successful Fills", value: stats.filled, icon: Shield, color: "text-neon-green" },
-                    { label: "Total Buy Orders", value: stats.buys, icon: TrendingUp, color: "text-neon-green" },
-                    { label: "Total Sell Orders", value: stats.sells, icon: TrendingDown, color: "text-destructive" },
-                  ].map((s, i) => (
-                    <div key={i} className="glass-panel rounded-xl p-6 border border-border/50 flex items-center justify-between">
-                      <div>
-                        <div className="text-[9px] uppercase tracking-widest font-black text-muted-foreground mb-1">{s.label}</div>
-                        <div className="text-2xl font-black text-foreground">{s.value}</div>
+                      <div className="flex items-center gap-2 text-[8px] font-mono font-black text-muted-foreground/20 uppercase tracking-tighter">
+                        <Calendar className="w-3 h-3" />
+                        {format(new Date(trade.timestamp || Date.now()), "HH:mm:ss")}
+                        <span className="text-muted-foreground/10">|</span>
+                        <span>ID_{trade.id || "NULL"}</span>
                       </div>
-                      <s.icon className={`w-8 h-8 opacity-20 ${s.color}`} />
                     </div>
-                  ))}
+                  </div>
+                  <div className="flex items-center gap-8">
+                    <div className="text-right">
+                      <div className="text-[7px] font-mono font-black text-muted-foreground/10 uppercase mb-0.5">UNITS</div>
+                      <IndustrialValue value={trade.quantity} className="text-xs font-black font-mono text-foreground" />
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[7px] font-mono font-black text-muted-foreground/10 uppercase mb-0.5">PRICE</div>
+                      <IndustrialValue value={trade.price || 0} prefix="₹" className="text-xs font-black font-mono text-foreground" />
+                    </div>
+                    <div className="w-20 text-right">
+                      <span className={`text-[8px] font-mono font-black px-2 py-0.5 border uppercase ${trade.status === "filled" ? "text-secondary border-secondary/20" : "text-primary border-primary/20"}`}>
+                        {trade.status?.toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+              {trades.length === 0 && !isLoading && (
+                <div className="h-64 flex flex-col items-center justify-center opacity-20 filter grayscale border border-dashed border-border/20">
+                  <History className="w-8 h-8 mb-4" />
+                  <span className="text-[9px] font-mono font-black uppercase tracking-[0.4em]">Ledger_Empty</span>
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              )}
+            </div>
+          )}
+
+          {activeTab === "Statistics" && (
+            <div className="grid grid-cols-12 gap-4">
+              <div className="col-span-4 border border-border/10 bg-card/5 p-4">
+                <h3 className="text-[9px] font-mono font-black uppercase tracking-widest text-primary mb-4">Direction_Pulse</h3>
+                <div className="h-32">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={[{v:stats.buys, c:"#00D4D4"}, {v:stats.sells, c:"#FF4D4D"}]} cx="50%" cy="50%" innerRadius={30} outerRadius={45} dataKey="v" stroke="none">
+                        {[{c:"#00D4D4"}, {c:"#FF4D4D"}].map((e, i) => (<Cell key={i} fill={e.c} fillOpacity={0.4} />))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              
+              <div className="col-span-8 grid grid-cols-2 gap-4">
+                <StatMetric label="TOTAL_LOG" value={stats.total} icon={Activity} color="text-foreground" />
+                <StatMetric label="FILLED_EXEC" value={stats.filled} icon={TrendingUp} color="text-secondary" />
+                <StatMetric label="BUY_BIAS" value={stats.buys} icon={TrendingUp} color="text-secondary" />
+                <StatMetric label="SELL_BIAS" value={stats.sells} icon={TrendingDown} color="text-destructive" />
+              </div>
+            </div>
+          )}
         </div>
         <RightPanel />
       </div>
-
-      <NewOrderModal isOpen={orderModalOpen} onClose={() => setOrderModalOpen(false)} prefilledSymbol={prefilledSymbol} />
+      <NewOrderModal isOpen={false} onClose={() => {}} prefilledSymbol="" />
     </div>
   );
 }
 
-
+function StatMetric({ label, value, icon: Icon, color }: { label: string, value: number, icon: any, color: string }) {
+  return (
+    <div className="border border-border/10 bg-card/5 p-4 group hover:bg-card/10 transition-all">
+      <div className="flex justify-between items-center mb-2">
+        <span className="text-[8px] font-mono font-black text-muted-foreground/20 uppercase tracking-widest">{label}</span>
+        <Icon className={`w-3 h-3 ${color} opacity-20`} />
+      </div>
+      <IndustrialValue value={value} className={`text-2xl font-black font-syne ${color}`} />
+    </div>
+  );
+}

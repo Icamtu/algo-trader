@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { CONFIG } from "@/lib/config";
 
 type HeartbeatStatus = "online" | "offline" | "checking";
 
@@ -8,7 +9,7 @@ interface HeartbeatState {
   lastCheck: Date | null;
 }
 
-export function useHeartbeat(url = "http://localhost:5001/", intervalMs = 2000) {
+export function useHeartbeat(url = CONFIG.API_BASE_URL + "/", intervalMs = 2000) {
   const [state, setState] = useState<HeartbeatState>({
     status: "checking",
     latencyMs: null,

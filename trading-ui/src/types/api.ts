@@ -219,6 +219,27 @@ export interface IndicatorResponse {
   results: Record<string, number[]>;
 }
 
+// ─── Backtesting (POST /api/backtest/run) ────────────────────────
+export interface BacktestRequest {
+  strategy_key: string;
+  symbol: string;
+  candles?: Record<string, unknown>[];
+  from_date?: string;
+  to_date?: string;
+  initial_cash?: number;
+}
+
+export interface BacktestResponse {
+  status: string;
+  strategy_key: string;
+  symbol: string;
+  net_pnl: number;
+  sharpe: number;
+  trades: any[];
+  equity_curve: { timestamp: string; value: number }[];
+  error?: string;
+}
+
 // ─── API Error ────────────────────────────────────────────────────
 export class ApiError extends Error {
   public status: number;

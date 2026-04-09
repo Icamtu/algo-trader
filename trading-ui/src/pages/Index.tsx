@@ -20,7 +20,8 @@ const Index = () => {
   };
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background">
+    <div className="h-screen flex flex-col overflow-hidden bg-background industrial-grid selection:bg-primary/30">
+      <div className="scanline" />
       <GlobalHeader />
 
       <MarketNavbar activeTab="/" />

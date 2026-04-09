@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
-import { X, TrendingUp, TrendingDown, BarChart3, Shield, Zap, Target, ArrowLeft, Download, Share2, Maximize2, Database, Loader2 } from "lucide-react";
+import { X, TrendingUp, TrendingDown, BarChart3, Shield, Zap, Target, ArrowLeft, Download, Share2, Maximize2, Database, Loader2, Activity } from "lucide-react";
+import { motion } from "framer-motion";
 import {
   AreaChart, Area, LineChart, Line, BarChart, Bar, ScatterChart, Scatter,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell,
@@ -84,21 +85,20 @@ export function BacktestAnalyticsView({ result, onClose }: Props) {
       ...t,
       id: i + 1,
       pnlPct: Math.round((t.pnl / (t.entry_price * t.quantity)) * 10000) / 100,
-      date: t.entry_time.split(" ")[0], // Extract date from ISO/timestamp
+      date: t.entry_time.split(" ")[0],
     }));
   }, [result.trades]);
-
 
   const handleSaveToDB = async () => {
     setIsSaving(true);
     try {
       const { data: authData } = await supabase.auth.getUser();
       if (!authData?.user) {
-        toast.error("Authentication required to persist data");
+        toast.error("AUTH_REQUIRED: ACCESS_DENIED");
         return;
       }
 
-      const { data, error } = await supabase.from("backtest_results").insert({
+      const { error } = await supabase.from("backtest_results").insert({
         user_id: authData.user.id,
         strategy_name: result.name,
         instrument: "Basket",
@@ -114,9 +114,9 @@ export function BacktestAnalyticsView({ result, onClose }: Props) {
       });
 
       if (error) throw error;
-      toast.success("Backtest results archived in Data Vault");
+      toast.success("SIMULATION_ARCHIVED: KERNEL_SYNC_COMPLETE");
     } catch (err: any) {
-      toast.error(err.message || "Failed to persist backtest");
+      toast.error("SYNC_FAILURE: " + (err.message || "UNKNOWN_ERROR"));
     } finally {
       setIsSaving(false);
     }
@@ -129,12 +129,6 @@ export function BacktestAnalyticsView({ result, onClose }: Props) {
     else t.sort((a, b) => a.entry_time.localeCompare(b.entry_time));
     return t;
   }, [processedTrades, tradeSort]);
-
-  const cyanColor = "hsl(183, 100%, 49%)";
-  const purpleColor = "hsl(272, 87%, 53%)";
-  const greenColor = "hsl(142, 71%, 45%)";
-  const redColor = "hsl(0, 72%, 51%)";
-  const mutedColor = "hsl(0, 0%, 55%)";
 
   const totalPnl = result.metrics?.net_pnl || result.metrics?.net_profit || 0;
   const winCount = result.trades?.filter(t => t.pnl > 0).length || 0;
@@ -153,198 +147,196 @@ export function BacktestAnalyticsView({ result, onClose }: Props) {
   }, [processedTrades]);
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-background">
-      {/* Top Bar */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border glass-panel-elevated">
-        <div className="flex items-center gap-3">
-          <button onClick={onClose} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors">
-            <ArrowLeft className="w-4 h-4 text-muted-foreground" />
+    <div className="fixed inset-0 z-[100] flex flex-col bg-background industrial-grid overflow-hidden">
+      <div className="scanline" />
+      
+      {/* Simulation Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-card/10 relative z-10">
+        <div className="flex items-center gap-6">
+          <button onClick={onClose} className="p-2 border border-border group hover:border-primary transition-all">
+            <ArrowLeft className="w-5 h-5 text-muted-foreground group-hover:text-primary" />
           </button>
           <div>
-            <h2 className="text-sm font-semibold text-foreground">{result.name}</h2>
-            <p className="text-[10px] text-muted-foreground">Backtest run: {result.date} · {result.tradesCount.toLocaleString()} trades</p>
+            <h2 className="text-xl font-black font-mono uppercase tracking-[0.2em] text-foreground leading-none mb-2">{result.name}</h2>
+            <div className="flex items-center gap-4">
+               <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Runtime: {result.date}</span>
+               <div className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse shadow-[0_0_8px_rgba(0,245,255,0.5)]" />
+               <span className="text-[10px] font-mono text-secondary uppercase font-black">{result.tradesCount.toLocaleString()} DATA_POINTS</span>
+            </div>
           </div>
         </div>
+
         <div className="flex items-center gap-2">
-          {/* Quick stats */}
-          {[
-            { label: "CAGR", value: `${result.cagr}%`, color: "text-neon-green" },
-            { label: "Sharpe", value: `${result.sharpe}`, color: "text-primary" },
-            { label: "Sortino", value: `${result.metrics?.sortino_ratio || 0.0}`, color: "text-neon-purple" },
-            { label: "Calmar", value: `${result.metrics?.calmar_ratio || 0.0}`, color: "text-primary" },
-            { label: "Max DD", value: `${result.maxDD}%`, color: "text-neon-red" },
-            { label: "Win Rate", value: `${result.winRate}%`, color: "text-foreground" },
-            { label: "PF", value: `${result.pf}`, color: "text-primary" },
-          ].map(s => (
-            <div key={s.label} className="text-right px-3 border-l border-border first:border-l-0">
-              <div className="metric-label">{s.label}</div>
-              <div className={`metric-value ${s.color}`}>{s.value}</div>
-            </div>
-          ))}
-          <div className="w-px h-6 bg-border ml-2" />
+          <div className="flex bg-background border border-border/50 overflow-hidden mr-4">
+            {[
+              { label: "CAGR", value: `${result.cagr}%`, color: "text-secondary" },
+              { label: "SHARPE", value: `${result.sharpe}`, color: "text-primary" },
+              { label: "MAX_DD", value: `${result.maxDD}%`, color: "text-destructive" },
+              { label: "WIN_RATE", value: `${result.winRate}%`, color: "text-foreground" },
+            ].map(s => (
+              <div key={s.label} className="px-5 py-2 border-r border-border/30 last:border-0 bg-card/5">
+                <div className="text-[8px] font-mono font-black text-muted-foreground/40 uppercase tracking-widest mb-1">{s.label}</div>
+                <div className={`text-sm font-mono font-black ${s.color}`}>{s.value}</div>
+              </div>
+            ))}
+          </div>
           
           <button
             onClick={handleSaveToDB}
             disabled={isSaving}
-            className="flex items-center gap-2 bg-primary/10 hover:bg-primary/20 text-primary px-3 py-1.5 rounded-md border border-primary/20 transition-all disabled:opacity-50"
+            className={`flex items-center gap-3 px-5 py-2.5 border-2 transition-all group ${
+              isSaving 
+                ? "border-muted text-muted-foreground" 
+                : "border-primary text-primary hover:bg-primary hover:text-black shadow-[0_0_15px_rgba(255,176,0,0.2)]"
+            }`}
           >
-            {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Database className="w-3.5 h-3.5" />}
-            <span className="text-[11px] font-bold uppercase tracking-wider">Persist to Vault</span>
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+            <span className="text-[10px] font-mono font-black uppercase tracking-[0.2em]">PERSIST_TO_KERNEL</span>
           </button>
 
-          <button className="p-1.5 rounded-md hover:bg-muted/50 transition-colors">
-            <Download className="w-4 h-4 text-muted-foreground" />
-          </button>
-          <button onClick={onClose} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors">
-            <X className="w-4 h-4 text-muted-foreground" />
+          <button onClick={onClose} className="p-2 ml-2 hover:bg-destructive/10 group transition-all">
+            <X className="w-5 h-5 text-muted-foreground group-hover:text-destructive" />
           </button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-0.5 px-4 pt-3 pb-0">
+      {/* Navigation Matrix */}
+      <div className="flex px-6 pt-4 gap-0 border-b border-border z-10">
         {tabs.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-xs font-medium rounded-t-md transition-all border-b-2 ${
+            className={`px-8 py-3 text-[10px] font-mono font-black uppercase tracking-[0.3em] transition-all relative ${
               activeTab === tab
-                ? "text-primary border-primary bg-primary/5"
-                : "text-muted-foreground border-transparent hover:text-foreground hover:border-muted"
+                ? "text-primary bg-primary/5"
+                : "text-muted-foreground/40 hover:text-foreground hover:bg-card/5"
             }`}
           >
             {tab}
+            {activeTab === tab && (
+              <motion.div layoutId="activeAnalyticsTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary shadow-[0_0_10px_rgba(255,176,0,0.5)]" />
+            )}
           </button>
         ))}
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-auto p-4">
+      {/* Core Readout Area */}
+      <div className="flex-1 overflow-auto p-6 space-y-8 no-scrollbar z-10 relative">
         {activeTab === "Equity Curve" && (
-          <div className="space-y-4">
-            {/* Equity + Benchmark */}
-            <div className="glass-panel rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-semibold text-foreground">Equity Curve vs Benchmark</h3>
-                <div className="flex items-center gap-4">
-                  <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                    <span className="w-3 h-0.5 rounded" style={{ background: cyanColor }} /> Strategy
-                  </span>
-                  <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                    <span className="w-3 h-0.5 rounded" style={{ background: mutedColor }} /> Benchmark
-                  </span>
-                </div>
+          <div className="space-y-6">
+            <div className="bg-background border border-border p-6 shadow-2xl">
+              <div className="flex items-center justify-between mb-8">
+                <h3 className="text-[11px] font-mono font-black uppercase tracking-[0.3em] flex items-center gap-3">
+                   <Activity className="w-4 h-4 text-primary" /> Alpha_Traction_Map
+                </h3>
               </div>
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={processedEquity}>
-                  <defs>
-                    <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={cyanColor} stopOpacity={0.25} />
-                      <stop offset="100%" stopColor={cyanColor} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(0,0%,14%)" />
-                  <XAxis dataKey="index" tick={{ fontSize: 9, fill: mutedColor }} tickLine={false} axisLine={false} />
-                  <YAxis domain={['auto', 'auto']} tick={{ fontSize: 9, fill: mutedColor }} tickLine={false} axisLine={false} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Area type="monotone" dataKey="equity" stroke={cyanColor} fill="url(#eqGrad)" strokeWidth={2} name="Strategy" dot={false} />
-                </AreaChart>
-              </ResponsiveContainer>
+              <div className="h-[400px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={processedEquity}>
+                    <defs>
+                      <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--secondary)" stopOpacity={0.2} />
+                        <stop offset="100%" stopColor="var(--secondary)" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                    <XAxis dataKey="index" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)', fontFamily: 'IBM Plex Mono' }} axisLine={false} tickLine={false} />
+                    <YAxis domain={['auto', 'auto']} tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)', fontFamily: 'IBM Plex Mono' }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Area type="monotone" dataKey="equity" stroke="var(--secondary)" fill="url(#eqGrad)" strokeWidth={2.5} dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
             </div>
 
-            {/* Drawdown Chart */}
-            <div className="glass-panel rounded-lg p-4">
-              <h3 className="text-xs font-semibold text-foreground mb-3">Underwater (Drawdown) Chart</h3>
-              <ResponsiveContainer width="100%" height={160}>
-                <AreaChart data={processedEquity}>
-                  <defs>
-                    <linearGradient id="ddGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={redColor} stopOpacity={0.1} />
-                      <stop offset="100%" stopColor={redColor} stopOpacity={0.4} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(0,0%,14%)" />
-                  <XAxis dataKey="index" tick={{ fontSize: 9, fill: mutedColor }} tickLine={false} axisLine={false} />
-                  <YAxis tick={{ fontSize: 9, fill: mutedColor }} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <ReferenceLine y={0} stroke="hsl(0,0%,20%)" />
-                  <Area type="monotone" dataKey="drawdown" stroke={redColor} fill="url(#ddGrad)" strokeWidth={1.5} name="Drawdown" dot={false} />
-                </AreaChart>
-              </ResponsiveContainer>
+            <div className="bg-background border border-border p-6">
+              <h3 className="text-[11px] font-mono font-black uppercase tracking-[0.3em] text-destructive flex items-center gap-3 mb-6">
+                <TrendingDown className="w-4 h-4" /> Structural_Drain_Analysis
+              </h3>
+              <div className="h-[200px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={processedEquity}>
+                    <defs>
+                      <linearGradient id="ddGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--destructive)" stopOpacity={0.1} />
+                        <stop offset="100%" stopColor="var(--destructive)" stopOpacity={0.4} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                    <XAxis dataKey="index" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)', fontFamily: 'IBM Plex Mono' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)', fontFamily: 'IBM Plex Mono' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <ReferenceLine y={0} stroke="rgba(255,255,255,0.1)" />
+                    <Area type="monotone" dataKey="drawdown" stroke="var(--destructive)" fill="url(#ddGrad)" strokeWidth={1.5} dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-
-            {/* No Monthly Returns for now - derived from trades in future */}
           </div>
         )}
 
         {activeTab === "Trade List" && (
-          <div className="space-y-3">
-            {/* Trade summary cards */}
-            {/* Trade summary cards */}
-            <div className="grid grid-cols-6 gap-3">
+          <div className="space-y-6">
+            <div className="grid grid-cols-6 gap-0 border border-border bg-card/5">
               {[
-                { label: "Total Trades", value: result.tradesCount, color: "text-foreground" },
-                { label: "Winners", value: winCount, color: "text-neon-green" },
-                { label: "Losers", value: lossCount, color: "text-neon-red" },
-                { label: "Avg Win", value: `₹${Math.round(avgWin).toLocaleString()}`, color: "text-neon-green" },
-                { label: "Avg Loss", value: `₹${Math.round(avgLoss).toLocaleString()}`, color: "text-neon-red" },
-                { label: "Net P&L", value: `₹${Math.round(totalPnl).toLocaleString()}`, color: totalPnl >= 0 ? "text-neon-green" : "text-neon-red" },
+                { label: "Aggregate_Flux", value: result.tradesCount, color: "text-foreground" },
+                { label: "Alpha_Vectors", value: winCount, color: "text-secondary" },
+                { label: "Entropy_Loss", value: lossCount, color: "text-destructive" },
+                { label: "Sim_Net_Exposure", value: `₹${Math.round(totalPnl).toLocaleString()}`, color: totalPnl >= 0 ? "text-secondary" : "text-destructive" },
+                { label: "Avg_Capture", value: `₹${Math.round(avgWin).toLocaleString()}`, color: "text-secondary" },
+                { label: "Avg_Drain", value: `₹${Math.round(avgLoss).toLocaleString()}`, color: "text-destructive" },
               ].map(m => (
-                <div key={m.label} className="glass-panel rounded-lg p-3">
-                  <div className="metric-label mb-1">{m.label}</div>
-                  <div className={`metric-value ${m.color}`}>{m.value}</div>
+                <div key={m.label} className="p-5 border-r border-border/30 last:border-0 hover:bg-card/10 transition-colors group">
+                  <div className="text-[8px] font-mono font-black text-muted-foreground/40 uppercase tracking-[0.2em] mb-2 group-hover:text-primary transition-colors">{m.label}</div>
+                  <div className={`text-lg font-mono font-black ${m.color}`}>{m.value}</div>
                 </div>
               ))}
             </div>
 
-            {/* Sort controls */}
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Sort by:</span>
-              {(["date", "pnl", "pnlPct"] as const).map(s => (
-                <button
-                  key={s}
-                  onClick={() => setTradeSort(s)}
-                  className={`px-2 py-1 text-[10px] rounded-md transition-all ${
-                    tradeSort === s ? "bg-primary/10 text-primary border border-primary/20" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {s === "date" ? "Date" : s === "pnl" ? "P&L" : "P&L %"}
-                </button>
-              ))}
-            </div>
-
-            {/* Trade table */}
-            <div className="glass-panel rounded-lg overflow-hidden">
-              <div className="overflow-auto max-h-[calc(100vh-320px)]">
-                <table className="w-full">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="border-b border-border bg-muted/30 backdrop-blur-sm">
-                      {["#", "Date", "Side", "Qty", "Entry", "Exit", "P&L", "P&L %", "MAE", "MFE"].map(h => (
-                        <th key={h} className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-muted-foreground font-medium whitespace-nowrap">{h}</th>
+            <div className="bg-background border border-border overflow-hidden">
+              <div className="px-4 py-3 border-b border-border bg-card/10 flex items-center justify-between">
+                 <div className="flex items-center gap-4">
+                    <span className="text-[10px] font-mono font-black uppercase text-muted-foreground tracking-widest">Trade_Log_Array</span>
+                 </div>
+                 <div className="flex items-center gap-2">
+                   {(["date", "pnl", "pnlPct"] as const).map(s => (
+                     <button
+                       key={s}
+                       onClick={() => setTradeSort(s)}
+                       className={`px-3 py-1 text-[8px] font-mono font-black uppercase tracking-[0.2em] border transition-all ${
+                         tradeSort === s ? "border-primary bg-primary text-black" : "border-border/50 text-muted-foreground/40 hover:text-foreground"
+                       }`}
+                     >
+                       {s}
+                     </button>
+                   ))}
+                 </div>
+              </div>
+              <div className="overflow-auto max-h-[calc(100vh-450px)] no-scrollbar">
+                <table className="w-full border-collapse">
+                  <thead className="sticky top-0 z-10 bg-background">
+                    <tr className="border-b border-border text-muted-foreground/40">
+                      {["Index", "Timestamp", "Volume", "Entry_Base", "Exit_Base", "P&L_Delta", "Net%", "MAE", "MFE"].map(h => (
+                        <th key={h} className="px-4 py-3 text-left text-[9px] font-mono font-black uppercase tracking-[0.2em]">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {sortedTrades.map((t) => (
-                      <tr key={t.id} className="border-b border-border/30 hover:bg-muted/20 transition-colors">
-                        <td className="px-3 py-2 data-cell text-muted-foreground">{t.id}</td>
-                        <td className="px-3 py-2 data-cell text-muted-foreground">{t.date}</td>
-                        <td className="px-3 py-2">
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${t.pnl >= 0 ? "bg-neon-green/10 text-neon-green" : "bg-neon-red/10 text-neon-red"}`}>
-                             TRADE
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 data-cell text-foreground">{t.quantity}</td>
-                        <td className="px-3 py-2 data-cell text-foreground">₹{t.entry_price.toLocaleString()}</td>
-                        <td className="px-3 py-2 data-cell text-foreground">₹{t.exit_price.toLocaleString()}</td>
-                        <td className={`px-3 py-2 data-cell font-semibold ${t.pnl >= 0 ? "text-neon-green" : "text-neon-red"}`}>
+                      <tr key={t.id} className="border-b border-border/30 hover:bg-primary/5 transition-all group">
+                        <td className="px-4 py-3 text-[10px] font-mono text-muted-foreground/30">{t.id}</td>
+                        <td className="px-4 py-3 text-[10px] font-mono text-muted-foreground/60">{t.date}</td>
+                        <td className="px-4 py-3 text-[10px] font-mono font-black text-foreground/80">{t.quantity}</td>
+                        <td className="px-4 py-3 text-[10px] font-mono text-foreground/60">₹{t.entry_price.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-[10px] font-mono text-foreground/60">₹{t.exit_price.toLocaleString()}</td>
+                        <td className={`px-4 py-3 text-[10px] font-mono font-black ${t.pnl >= 0 ? "text-secondary" : "text-destructive"}`}>
                           {t.pnl >= 0 ? "+" : ""}₹{t.pnl.toLocaleString()}
                         </td>
-                        <td className={`px-3 py-2 data-cell ${t.pnlPct >= 0 ? "text-neon-green" : "text-neon-red"}`}>
+                        <td className={`px-4 py-3 text-[10px] font-mono font-black ${t.pnlPct >= 0 ? "text-secondary" : "text-destructive"}`}>
                           {t.pnlPct >= 0 ? "+" : ""}{t.pnlPct}%
                         </td>
-                        <td className="px-3 py-2 data-cell text-neon-red">{t.mae}%</td>
-                        <td className="px-3 py-2 data-cell text-neon-green">+{t.mfe}%</td>
+                        <td className="px-4 py-3 text-[10px] font-mono font-bold text-destructive/60">{t.mae}%</td>
+                        <td className="px-4 py-3 text-[10px] font-mono font-bold text-secondary/60">+{t.mfe}%</td>
                       </tr>
                     ))}
                   </tbody>
@@ -354,80 +346,65 @@ export function BacktestAnalyticsView({ result, onClose }: Props) {
           </div>
         )}
 
-        
         {activeTab === "Distribution" && (
-          <div className="space-y-4">
-            {/* P&L Distribution */}
-            <div className="glass-panel rounded-lg p-4">
-              <h3 className="text-xs font-semibold text-foreground mb-3">Trade P&L Distribution</h3>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={pnlBuckets}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(0,0%,14%)" />
-                  <XAxis dataKey="range" tick={{ fontSize: 9, fill: mutedColor }} tickLine={false} axisLine={false} />
-                  <YAxis tick={{ fontSize: 9, fill: mutedColor }} tickLine={false} axisLine={false} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <ReferenceLine x="0%" stroke="hsl(0,0%,20%)" />
-                  <Bar dataKey="count" name="Trades" radius={[2, 2, 0, 0]}>
-                    {pnlBuckets.map((entry, i) => (
-                      <Cell key={i} fill={entry.value >= 0 ? greenColor : redColor} fillOpacity={0.7} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* MAE vs MFE Scatter */}
-            <div className="glass-panel rounded-lg p-4">
-              <h3 className="text-xs font-semibold text-foreground mb-3">MAE vs MFE (Maximum Adverse / Favorable Excursion)</h3>
-              <ResponsiveContainer width="100%" height={250}>
-                <ScatterChart>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(0,0%,14%)" />
-                  <XAxis type="number" dataKey="mae" name="MAE" tick={{ fontSize: 9, fill: mutedColor }} tickLine={false} axisLine={false} label={{ value: "MAE %", fontSize: 9, fill: mutedColor, position: "bottom" }} />
-                  <YAxis type="number" dataKey="mfe" name="MFE" tick={{ fontSize: 9, fill: mutedColor }} tickLine={false} axisLine={false} label={{ value: "MFE %", fontSize: 9, fill: mutedColor, angle: -90, position: "left" }} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <ReferenceLine x={0} stroke="hsl(0,0%,20%)" />
-                  <ReferenceLine y={0} stroke="hsl(0,0%,20%)" />
-                  <Scatter name="Trades" data={processedTrades} fill={cyanColor} fillOpacity={0.6} r={4} />
-                </ScatterChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Win/Loss streak */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="glass-panel rounded-lg p-4">
-                <h3 className="text-xs font-semibold text-foreground mb-3">Win/Loss Ratio</h3>
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 h-4 rounded-full overflow-hidden bg-muted/30 flex">
-                    <div className="h-full rounded-l-full" style={{ width: `${(winCount / result.tradesCount) * 100}%`, background: greenColor, opacity: 0.7 }} />
-                    <div className="h-full rounded-r-full" style={{ width: `${(lossCount / result.tradesCount) * 100}%`, background: redColor, opacity: 0.7 }} />
-                  </div>
-                </div>
-                <div className="flex justify-between mt-2">
-                  <span className="text-[10px] text-neon-green">{winCount} wins ({((winCount / result.tradesCount) * 100).toFixed(1)}%)</span>
-                  <span className="text-[10px] text-neon-red">{lossCount} losses ({((lossCount / result.tradesCount) * 100).toFixed(1)}%)</span>
-                </div>
+          <div className="grid grid-cols-2 gap-6">
+            <div className="bg-background border border-border p-6 shadow-2xl">
+              <h3 className="text-[11px] font-mono font-black uppercase tracking-[0.3em] text-foreground mb-8 border-b border-border/50 pb-2">Entropy_Distribution (P&L %)</h3>
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={pnlBuckets}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                    <XAxis dataKey="range" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)', fontFamily: 'IBM Plex Mono' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)', fontFamily: 'IBM Plex Mono' }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <ReferenceLine x="0%" stroke="rgba(255,255,255,0.1)" />
+                    <Bar dataKey="count" radius={[1, 1, 0, 0]}>
+                      {pnlBuckets.map((entry, i) => (
+                        <Cell key={i} fill={entry.value >= 0 ? 'var(--secondary)' : 'var(--destructive)'} fillOpacity={0.6} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
-              <div className="glass-panel rounded-lg p-4">
-                <h3 className="text-xs font-semibold text-foreground mb-3">Expectancy</h3>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-xs text-muted-foreground">Expected Value</span>
-                    <span className={`data-cell font-semibold ${totalPnl / result.tradesCount >= 0 ? "text-neon-green" : "text-neon-red"}`}>
-                      ₹{Math.round(totalPnl / result.tradesCount).toLocaleString()}/trade
+            </div>
+
+            <div className="bg-background border border-border p-6 shadow-2xl">
+              <h3 className="text-[11px] font-mono font-black uppercase tracking-[0.3em] text-foreground mb-8 border-b border-border/50 pb-2">Vector_Excursion_Matrix (MAE vs MFE)</h3>
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ScatterChart>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <XAxis type="number" dataKey="mae" name="MAE" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)', fontFamily: 'IBM Plex Mono' }} axisLine={false} tickLine={false} label={{ value: "ADVERSE (%)", fontSize: 8, fill: 'rgba(255,255,255,0.2)', position: "bottom", fontFamily: 'IBM Plex Mono' }} />
+                    <YAxis type="number" dataKey="mfe" name="MFE" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)', fontFamily: 'IBM Plex Mono' }} axisLine={false} tickLine={false} label={{ value: "FAVORABLE (%)", fontSize: 8, fill: 'rgba(255,255,255,0.2)', angle: -90, position: "left", fontFamily: 'IBM Plex Mono' }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <ReferenceLine x={0} stroke="rgba(255,255,255,0.1)" />
+                    <ReferenceLine y={0} stroke="rgba(255,255,255,0.1)" />
+                    <Scatter name="Vectors" data={processedTrades} fill="var(--primary)" fillOpacity={0.4} r={4} strokeWidth={1} stroke="var(--primary)" />
+                  </ScatterChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="bg-card/5 border border-border p-6">
+               <h3 className="text-[11px] font-mono font-black uppercase tracking-[0.3em] text-primary mb-6">Aggregate_Expectancy_Readout</h3>
+               <div className="space-y-4">
+                  <div className="flex justify-between border-l-2 border-primary/20 pl-4 py-1">
+                    <span className="text-[10px] font-mono text-muted-foreground uppercase">Expected_Value_per_Cycle</span>
+                    <span className={`text-[12px] font-mono font-black ${totalPnl / result.tradesCount >= 0 ? "text-secondary" : "text-destructive"}`}>
+                      ₹{Math.round(totalPnl / result.tradesCount).toLocaleString()}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-xs text-muted-foreground">Avg Win / Avg Loss</span>
-                    <span className="data-cell text-primary">{Math.abs(avgWin / avgLoss).toFixed(2)}x</span>
+                  <div className="flex justify-between border-l-2 border-primary/20 pl-4 py-1">
+                    <span className="text-[10px] font-mono text-muted-foreground uppercase">Efficiency_Ratio (Capture/Drain)</span>
+                    <span className="text-[12px] font-mono font-black text-primary">{Math.abs(avgWin / avgLoss).toFixed(2)}X</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-xs text-muted-foreground">Kelly %</span>
-                    <span className="data-cell text-neon-purple">
+                  <div className="flex justify-between border-l-2 border-primary/20 pl-4 py-1">
+                    <span className="text-[10px] font-mono text-muted-foreground uppercase">Kelly_Fractional_Threshold</span>
+                    <span className="text-[12px] font-mono font-black text-secondary">
                       {(((winCount / result.tradesCount) - ((lossCount / result.tradesCount) / (Math.abs(avgWin / avgLoss) || 1))) * 100).toFixed(1)}%
                     </span>
                   </div>
-                </div>
-              </div>
+               </div>
             </div>
           </div>
         )}

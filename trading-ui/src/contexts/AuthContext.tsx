@@ -37,7 +37,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error("SIGN_OUT_FAILURE", e);
+    } finally {
+      // Force clear all local storage to ensure fresh login state
+      if (typeof window !== "undefined") {
+        Object.keys(localStorage).forEach((key) => {
+          if (key.includes("supabase") || key.includes("algodesk") || key.includes("sb-")) {
+            localStorage.removeItem(key);
+          }
+        });
+        window.location.href = "/auth";
+      }
+    }
   };
 
   return (

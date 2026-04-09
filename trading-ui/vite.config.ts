@@ -8,9 +8,13 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    allowedHosts: ["kamaleswaralgo-vcn.tail716e1a.ts.net"],
     hmr: {
       overlay: false,
     },
+  },
+  preview: {
+    allowedHosts: ["kamaleswaralgo-vcn.tail716e1a.ts.net"],
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

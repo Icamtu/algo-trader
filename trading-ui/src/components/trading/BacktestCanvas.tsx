@@ -4,6 +4,7 @@ import { BacktestAnalyticsView } from "./BacktestAnalyticsView";
 import { supabase } from "@/integrations/supabase/client";
 import { algoApi } from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
+import { IndustrialValue } from "./IndustrialValue";
 
 const canvasTabs = ["Backtest", "Walk-Forward", "Monte Carlo", "Forward Test", "Live"] as const;
 
@@ -45,7 +46,7 @@ export function BacktestCanvas() {
           tradesCount: metrics.total_trades || metrics.trades || 0,
           trades: meta.trades || [],
           equityCurve: meta.equity_curve || meta.equityCurve || [],
-          metrics: metrics, // Store full metrics
+          metrics: metrics,
           isReal: true
         };
       });
@@ -56,56 +57,40 @@ export function BacktestCanvas() {
 
   useEffect(() => {
     fetchResults();
-
     const channel = supabase
       .channel("backtest-updates")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "backtest_results" }, () => {
-        fetchResults();
-      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "backtest_results" }, fetchResults)
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => supabase.removeChannel(channel);
   }, []);
 
   const resultsData = useMemo(() => [...dbResults, ...mockData], [dbResults]);
 
   return (
-    <div className="flex-1 flex flex-col min-w-0">
-      {/* Canvas Tabs */}
-      <div className="flex items-center gap-0.5 px-4 pt-3 pb-0">
-        {canvasTabs.map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-t-md transition-all border-b-2 ${
-              activeTab === tab
-                ? "text-primary border-primary bg-primary/5"
-                : "text-muted-foreground border-transparent hover:text-foreground hover:border-muted"
-            }`}
-          >
-            {tab}
-            {tab === "Live" && <span className="ml-1.5 status-dot-live inline-block" />}
-          </button>
-        ))}
-      </div>
-
-      {/* Controls Bar */}
-      <div className="px-4 py-3 flex items-center gap-3 border-b border-border flex-wrap">
-        <ControlDropdown label="Strategy" value="Momentum Alpha" />
-        <ControlDropdown label="Script Group" value="Nifty-Momentum-5min" />
-        
-        <div className="flex items-center gap-1.5 glass-panel px-2.5 py-1.5 rounded-md">
-          <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-          <span className="text-xs text-foreground">Jan 2020 — Dec 2024</span>
+    <div className="flex-1 flex flex-col min-w-0 industrial-grid relative border-r border-border/50 bg-background/50">
+      <div className="noise-overlay" />
+      <div className="scanline opacity-10" />
+      
+      {/* Simulation Controls */}
+      <div className="px-3 py-2 bg-card/10 border-b border-border flex items-center gap-3 flex-wrap relative z-10">
+        <div className="flex items-center gap-2 border-r border-border/20 pr-3">
+            <div className={`w-1.5 h-1.5 rounded-full ${isRunning ? 'bg-primary animate-pulse shadow-[0_0_8px_#ffb000]' : 'bg-muted/20'}`} />
+            <h2 className="text-[9px] font-mono font-black uppercase tracking-[0.2em] text-foreground">Kernel_v4</h2>
         </div>
 
-        <ControlDropdown label="Universe" value="Nifty 50" />
+        <ControlDropdown label="STRAT" value="Momentum Alpha" />
+        <ControlDropdown label="SCRIPT" value="Nifty_M5" />
+        
+        <div className="flex items-center gap-2 px-2 py-1 border border-border/30 bg-background/30">
+          <Calendar className="w-2.5 h-2.5 text-muted-foreground/40" />
+          <span className="text-[8px] font-mono font-black text-foreground/60 uppercase">2020-2024</span>
+        </div>
 
-        <button className="flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-border hover:bg-muted/30 transition-colors">
-          <Settings2 className="w-3.5 h-3.5 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">Advanced Criteria</span>
+        <ControlDropdown label="UNI" value="NIFTY_50" />
+
+        <button className="flex items-center gap-1.5 px-2 py-1 border border-border/20 hover:bg-card/20 transition-all">
+          <Settings2 className="w-2.5 h-2.5 text-muted-foreground/30" />
+          <span className="text-[8px] font-mono font-black text-muted-foreground/30 uppercase">Config</span>
         </button>
 
         <div className="flex-1" />
@@ -115,51 +100,39 @@ export function BacktestCanvas() {
           onClick={async () => {
             setIsRunning(true);
             try {
-              // 1. Fetch historical candles for the selected symbol
-              const historyData = await algoApi.getHistory({ symbol: "SBIN", exchange: "NSE", interval: "D", start_date: "2020-01-01" });
-              const candles = Array.isArray(historyData) ? historyData : historyData?.data || historyData?.candles || [];
-              if (!candles.length) {
-                toast({ title: "No Data", description: "No candle data returned for the selected symbol.", variant: "destructive" });
-                setIsRunning(false);
-                return;
-              }
-              // 2. Run backtest via backend
-              const result = await algoApi.runBacktest({ strategy_key: "sample_strategy", symbol: "SBIN", candles, initial_cash: 100000 });
-              toast({ title: "Backtest Complete", description: `Strategy returned ${result.total_trades || 0} trades.` });
-              // 3. Refresh results table
+              const res = await algoApi.runBacktest({ strategy_key: "sample_strategy", symbol: "SBIN", initial_cash: 100000 });
+              toast({ title: "SIM_COMPLETE", description: `EVENTS: ${res.total_trades || 0}` });
               fetchResults();
             } catch (err) {
-              toast({ title: "Backtest Failed", description: String(err), variant: "destructive" });
+              toast({ variant: "destructive", title: "KERNEL_ERR", description: String(err) });
             } finally {
               setIsRunning(false);
             }
           }}
-          className="glow-button rounded-md px-4 py-1.5 flex items-center gap-2 group disabled:opacity-50"
+          className={`px-4 py-1.5 border-2 font-mono font-black text-[9px] uppercase tracking-[0.2em] transition-all flex items-center gap-2 ${
+            isRunning 
+              ? "border-muted text-muted-foreground" 
+              : "border-primary text-primary hover:bg-primary hover:text-black shadow-[0_0_15px_rgba(255,176,0,0.1)]"
+          }`}
         >
-          {isRunning ? (
-            <Loader2 className="w-3.5 h-3.5 text-primary-foreground animate-spin" />
-          ) : (
-            <Play className="w-3.5 h-3.5 text-primary-foreground transition-transform group-hover:scale-110" />
-          )}
-          <span className="text-xs font-bold text-primary-foreground uppercase tracking-wider">
-            {isRunning ? "Running..." : "Run Backtest"}
-          </span>
+          {isRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+          {isRunning ? "TX..." : "RUN_SIM"}
         </button>
       </div>
 
-      {/* Results Table */}
-      <div className="flex-1 overflow-auto px-4 py-3">
-        <div className="glass-panel rounded-lg overflow-hidden relative">
+      {/* Historical Telemetry Table */}
+      <div className="flex-1 overflow-auto p-3 no-scrollbar relative z-10">
+        <div className="border border-border bg-card/5 overflow-hidden relative">
           {isLoading && (
-             <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-20">
+             <div className="absolute inset-0 bg-background/50 backdrop-blur-sm flex items-center justify-center z-20">
                 <Loader2 className="w-6 h-6 text-primary animate-spin" />
              </div>
           )}
-          <table className="w-full">
+          <table className="w-full border-collapse">
             <thead>
-              <tr className="border-b border-border">
-                {["Name", "Date", "CAGR", "Sharpe", "Max DD", "Win Rate", "PF", "Trades", ""].map((h) => (
-                  <th key={h} className="px-3 py-2.5 text-left text-[10px] uppercase tracking-widest text-muted-foreground font-medium">
+              <tr className="border-b border-border bg-card/20 text-muted-foreground">
+                {["TAG", "DATE", "CAGR", "SHARPE", "MAX_DD", "WIN%", "PF", "FLUX", ""].map((h) => (
+                  <th key={h} className="px-3 py-2 text-left text-[8px] font-mono font-black uppercase tracking-[0.2em] border-r border-border/10 last:border-r-0">
                     {h}
                   </th>
                 ))}
@@ -170,35 +143,40 @@ export function BacktestCanvas() {
                 <tr
                   key={row.id}
                   onClick={() => setSelectedRow(row.id)}
-                  className={`border-b border-border/50 cursor-pointer transition-colors ${
-                    selectedRow === row.id
-                      ? "bg-primary/5 border-l-2 border-l-primary"
-                      : "hover:bg-muted/20"
+                  className={`border-b border-border/10 cursor-crosshair transition-all hover:bg-primary/[0.03] group ${
+                    selectedRow === row.id ? "bg-primary/[0.05]" : ""
                   }`}
                 >
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-1.5 border-r border-border/5">
                     <div className="flex items-center gap-2">
-                       <span className="text-xs font-medium text-foreground">{row.name}</span>
-                       {row.isReal && <span className="px-1 py-0.5 rounded-[2px] bg-primary/20 text-primary text-[8px] font-bold uppercase tracking-tighter">Vault</span>}
+                       <div className="w-1 h-1 bg-primary/20 group-hover:bg-primary transition-colors" />
+                       <span className="text-[10px] font-mono font-black text-foreground/80 uppercase tracking-widest truncate max-w-[120px]">{row.name}</span>
+                       {row.isReal && <div className="w-1 h-1 rounded-full bg-secondary animate-pulse" />}
                     </div>
                   </td>
-                  <td className="px-3 py-2.5 data-cell text-muted-foreground">{row.date}</td>
-                  <td className="px-3 py-2.5 data-cell text-neon-green">{row.cagr}%</td>
-                  <td className="px-3 py-2.5 data-cell text-primary">{row.sharpe}</td>
-                  <td className="px-3 py-2.5 data-cell text-neon-red">{row.maxDD}%</td>
-                  <td className="px-3 py-2.5 data-cell text-foreground">{row.winRate}%</td>
-                  <td className="px-3 py-2.5 data-cell text-foreground">{row.pf}</td>
-                  <td className="px-3 py-2.5 data-cell text-muted-foreground">{(row.tradesCount || 0).toLocaleString()}</td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex items-center gap-1">
+                  <td className="px-3 py-1.5 text-[9px] font-mono text-muted-foreground/30 tabular-nums border-r border-border/5">{row.date}</td>
+                  <td className="px-3 py-1.5 border-r border-border/5">
+                    <IndustrialValue value={row.cagr} suffix="%" className="text-[10px] font-black text-secondary tabular-nums" />
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-border/5">
+                    <IndustrialValue value={row.sharpe} className="text-[10px] font-black text-primary tabular-nums" />
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-border/5">
+                    <IndustrialValue value={row.maxDD} suffix="%" className="text-[10px] font-black text-destructive tabular-nums" />
+                  </td>
+                  <td className="px-3 py-1.5 text-[9px] font-mono font-bold text-foreground/60 tabular-nums border-r border-border/5">{row.winRate}%</td>
+                  <td className="px-3 py-1.5 text-[9px] font-mono font-bold text-foreground/60 tabular-nums border-r border-border/5">{row.pf}</td>
+                  <td className="px-3 py-1.5 text-[9px] font-mono text-muted-foreground/30 tabular-nums border-r border-border/5">{row.tradesCount}</td>
+                  <td className="px-3 py-1.5 text-right">
+                    <div className="flex items-center justify-end gap-2">
                       <button
-                        className="p-1 rounded hover:bg-muted/50 transition-colors"
+                        className="p-1 text-muted-foreground/20 hover:text-primary transition-colors"
                         onClick={(e) => { e.stopPropagation(); setAnalyticsResult(row); }}
                       >
-                        <Eye className="w-3 h-3 text-muted-foreground" />
+                        <Eye className="w-3.5 h-3.5" />
                       </button>
-                      <button className="p-1 rounded hover:bg-muted/50 transition-colors">
-                        <Download className="w-3 h-3 text-muted-foreground" />
+                      <button className="p-1 text-muted-foreground/20 hover:text-foreground transition-colors">
+                        <Download className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </td>
@@ -218,10 +196,14 @@ export function BacktestCanvas() {
 
 function ControlDropdown({ label, value }: { label: string; value: string }) {
   return (
-    <button className="flex items-center gap-1.5 glass-panel px-2.5 py-1.5 rounded-md hover:bg-muted/30 transition-colors">
-      <span className="text-[10px] text-muted-foreground uppercase">{label}:</span>
-      <span className="text-xs font-medium text-foreground">{value}</span>
-      <ChevronDown className="w-3 h-3 text-muted-foreground" />
-    </button>
+    <div className="flex flex-col border border-border/20 bg-background/30 group">
+      <div className="px-1.5 py-0.5 border-b border-border/20 bg-card/5">
+         <span className="text-[7px] font-mono font-black text-muted-foreground/30 uppercase tracking-[0.1em]">{label}</span>
+      </div>
+      <button className="px-1.5 py-1 flex items-center gap-2 hover:bg-primary/5 transition-all">
+        <span className="text-[9px] font-mono font-black text-foreground/70 uppercase tracking-wider">{value}</span>
+        <ChevronDown className="w-2.5 h-2.5 text-muted-foreground/30 group-hover:text-primary transition-colors" />
+      </button>
+    </div>
   );
 }
