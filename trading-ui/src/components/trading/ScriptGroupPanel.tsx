@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { algoApi } from "@/lib/api-client";
+import { algoApi } from "@/features/openalgo/api/client";
 import { X, Plus, GripVertical, Clock, GitBranch, ChevronRight, ChevronDown, Layers, Play, Pause, Trash2, Copy, Tag, History, CheckCircle2, Circle, ArrowUpDown, Search, MoreHorizontal, Sparkles } from "lucide-react";
 
 // --- Types ---

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Terminal, Search, Zap, Command, CornerDownLeft, AlertCircle } from "lucide-react";
-import { algoApi } from "@/lib/api-client";
+import { algoApi } from "@/features/openalgo/api/client";
 import { useToast } from "@/hooks/use-toast";
 
 interface CommandBarProps {

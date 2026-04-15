@@ -1,7 +1,7 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { algoApi } from "@/lib/api-client";
+import { algoApi } from "@/features/openalgo/api/client";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area } from "recharts";
 import { Loader2, Search, Play, Settings2, BarChart2 } from "lucide-react";
 import { toast } from "sonner";

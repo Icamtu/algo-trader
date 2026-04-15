@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { GlobalHeader } from "@/components/trading/GlobalHeader";
 import { StrategySidebar } from "@/components/trading/StrategySidebar";
 import { AnalyticsPanel } from "@/components/trading/AnalyticsPanel";
@@ -8,7 +7,6 @@ import { AICopilotOrb } from "@/components/trading/AICopilotOrb";
 import { RightPanel } from "@/components/trading/RightPanel";
 import { NewOrderModal } from "@/components/trading/NewOrderModal";
 import { MarketNavbar } from "@/components/trading/MarketNavbar";
-import { BarChart3, Shield, Settings, LineChart, Radar, Search, Briefcase, BookOpen, Server, Bell, GitBranch, Activity, Zap, Target, TrendingUp, Monitor, HardDrive } from "lucide-react";
 
 const Index = () => {
   const [orderModalOpen, setOrderModalOpen] = useState(false);

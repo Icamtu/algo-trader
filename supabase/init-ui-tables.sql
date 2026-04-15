@@ -4,7 +4,8 @@
 CREATE TABLE IF NOT EXISTS broker_configs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users NOT NULL,
-    broker_name TEXT,
+    broker_name TEXT NOT NULL,
+    broker_user_id TEXT, -- Added for Shoonya/Finvasia Client ID
     enc_password TEXT,
     enc_totp TEXT,
     enc_api_key TEXT,
@@ -12,7 +13,8 @@ CREATE TABLE IF NOT EXISTS broker_configs (
     imei TEXT,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, broker_name)
 );
 
 -- Enable RLS for broker_configs

@@ -188,6 +188,51 @@ export type Database = {
         }
         Relationships: []
       }
+      broker_configs: {
+        Row: {
+          broker_name: string
+          broker_user_id: string | null
+          created_at: string
+          enc_api_key: string | null
+          enc_password: string | null
+          enc_totp: string | null
+          id: string
+          imei: string | null
+          is_active: boolean
+          updated_at: string
+          user_id: string
+          vendor_code: string | null
+        }
+        Insert: {
+          broker_name: string
+          broker_user_id?: string | null
+          created_at?: string
+          enc_api_key?: string | null
+          enc_password?: string | null
+          enc_totp?: string | null
+          id?: string
+          imei?: string | null
+          is_active?: boolean
+          updated_at?: string
+          user_id: string
+          vendor_code?: string | null
+        }
+        Update: {
+          broker_name?: string
+          broker_user_id?: string | null
+          created_at?: string
+          enc_api_key?: string | null
+          enc_password?: string | null
+          enc_totp?: string | null
+          id?: string
+          imei?: string | null
+          is_active?: boolean
+          updated_at?: string
+          user_id?: string
+          vendor_code?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

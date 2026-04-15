@@ -1,0 +1,42 @@
+# MCP Toolbox for Databases - Configuration for AetherDesk Prime
+# Connection details for all project-managed databases
+
+sources:
+  openalgo-sqlite:
+    type: sqlite
+    connection_string: "sqlite:////home/ubuntu/trading-workspace/openalgo/db/openalgo.db"
+    description: "Main OpenAlgo database containing master contracts and session data."
+
+  trades-sqlite:
+    type: sqlite
+    connection_string: "sqlite:////home/ubuntu/trading-workspace/openalgo/db/trades.db"
+    description: "Database for trade logs, strategy states, and local execution metadata."
+
+  historify-duckdb:
+    type: duckdb
+    connection_string: "duckdb:////home/ubuntu/trading-workspace/openalgo/db/historify.duckdb"
+    description: "High-performance analytical database for historical candle data."
+
+  aether-postgres:
+    type: postgres
+    connection_string: "postgresql://postgres:postgres@localhost:54322/postgres"
+    description: "Supabase-backed metadata and authentication store."
+
+  aether-mongodb:
+    type: mongodb
+    connection_string: "mongodb://root:aether_mongo_pass_2026@localhost:27017"
+    description: "Document store for complex strategy analytics and unstructured logs."
+
+  aether-redis:
+    type: redis
+    connection_string: "redis://:SpeedySecret456@localhost:6379"
+    description: "In-memory cache for real-time telemetry and state signaling."
+
+toolsets:
+  unified-trading-data:
+    - openalgo-sqlite
+    - trades-sqlite
+    - historify-duckdb
+    - aether-postgres
+    - aether-mongodb
+    - aether-redis

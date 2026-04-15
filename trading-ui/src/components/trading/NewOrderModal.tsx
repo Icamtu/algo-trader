@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ArrowUpRight, ArrowDownRight, Search, Tag, AlertCircle, CheckCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { algoApi } from "@/lib/api-client";
+import { algoApi } from "@/features/openalgo/api/client";
 import { ApiError } from "@/types/api";
 
 interface NewOrderModalProps {
@@ -187,7 +187,7 @@ export function NewOrderModal({ isOpen, onClose, prefilledSymbol = "" }: NewOrde
             <div className="flex items-center justify-between p-5 border-b-2 border-border/60 bg-card/20 relative">
               <div className="flex items-center gap-4">
                 <div className="w-3 h-3 bg-primary animate-pulse shadow-[0_0_10px_rgba(255,176,0,0.8)]" />
-                <h2 className="text-[14px] font-black font-syne uppercase tracking-[0.4em] text-foreground italic">Transaction_Gate</h2>
+                <h2 className="text-[14px] font-black font-display uppercase tracking-[0.4em] text-foreground italic">Transaction_Gate</h2>
               </div>
               <button onClick={onClose} className="text-muted-foreground/30 hover:text-destructive transition-all hover:scale-110">
                 <X className="w-5 h-5" />

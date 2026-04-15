@@ -1,11 +1,10 @@
 # Git Ignore Configuration for AetherDesk Prime
 
 # Core/Environment
-.agent/
+.env*
+!.env.sample
 .agents/
 .claude/
-.env
-.sample.env
 **/node_modules/
 **/dist/
 **/build/
@@ -23,7 +22,15 @@ __pycache__/
 *.sqlite3
 *.db
 *.sqlite
+*.duckdb
 algo-trader/data/
+algo-trader/storage/
+mongodb_data/
+openalgo/db/
+openalgo/keys/
+openalgo/log/
+openalgo/strategies/
+ollama_data/
 supabase/volumes/
 openclaw/
 magic.mgc

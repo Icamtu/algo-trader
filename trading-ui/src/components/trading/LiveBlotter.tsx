@@ -1,13 +1,15 @@
 import { ArrowUpRight, ArrowDownRight, MoreHorizontal, Loader2, Activity, XOctagon } from "lucide-react";
 import { useEffect, useState, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { usePositions } from "@/hooks/useTrading";
+import { usePositions } from "@/features/openalgo/hooks/useTrading";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import type { Position as ApiPosition } from "@/types/api";
 import { IndustrialValue } from "./IndustrialValue";
-import { algoApi } from "@/lib/api-client";
+import { algoApi } from "@/features/openalgo/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAppModeStore } from "@/stores/appModeStore";
+import { cn } from "@/lib/utils";
 
 interface Position {
   symbol: string;
@@ -17,6 +19,10 @@ interface Position {
   ltp: number;
   strategy: string;
   lot_size?: number;
+  metadata?: {
+    scaled?: boolean;
+    scaling_stage?: string;
+  };
 }
 
 function BlotterRow({
@@ -31,29 +37,40 @@ function BlotterRow({
   isKilling: string | "ALL" | null;
 }) {
   const lotSize = p.lot_size || 1;
-  const pnlValue = p.side === "LONG" ? (p.ltp - p.entry_price) * p.qty * lotSize : -(p.ltp - p.entry_price) * p.qty * lotSize;
+  const pnlValue = (p.ltp - p.entry_price) * p.qty * lotSize;
   const isPositive = pnlValue >= 0;
   const entryValue = Math.abs(p.entry_price * p.qty * lotSize);
   const pnlPct = entryValue !== 0 ? (pnlValue / entryValue) * 100 : 0;
 
   const prevLtp = useRef(p.ltp);
-  const isUp = p.ltp > prevLtp.current;
-  const isDown = p.ltp < prevLtp.current;
+  const [flashClass, setFlashClass] = useState<string>("");
   
   useEffect(() => {
+    if (p.ltp > prevLtp.current) {
+      setFlashClass("pnl-flash-up");
+      const t = setTimeout(() => setFlashClass(""), 600);
+      return () => clearTimeout(t);
+    } else if (p.ltp < prevLtp.current) {
+      setFlashClass("pnl-flash-down");
+      const t = setTimeout(() => setFlashClass(""), 600);
+      return () => clearTimeout(t);
+    }
     prevLtp.current = p.ltp;
   }, [p.ltp]);
 
-  const flashColor = isUp ? "rgba(0, 245, 255, 0.2)" : isDown ? "rgba(239, 68, 68, 0.2)" : "transparent";
-
   return (
-    <motion.tr 
-      animate={{ backgroundColor: [flashColor, "transparent"] }}
-      transition={{ duration: 0.8, ease: "easeOut" }}
-      className="group/row cursor-crosshair relative border-b border-border/5 last:border-b-0"
+    <tr 
+      className={`group/row cursor-crosshair relative border-b border-border/5 last:border-b-0 transition-colors duration-500 ${flashClass}`}
     >
-      <td className="px-3 py-1.5 text-[10px] font-black font-syne text-foreground tracking-widest uppercase border-r border-border/5">
-        {p.symbol}
+      <td className="px-3 py-1.5 text-[10px] font-black font-display text-foreground tracking-widest uppercase border-r border-border/5">
+        <div className="flex flex-col gap-0.5">
+          {p.symbol}
+          {p.metadata?.scaled && (
+            <span className="text-[7px] font-mono text-secondary animate-pulse px-1 border border-secondary/30 w-fit bg-secondary/5">
+              SCALED_50%
+            </span>
+          )}
+        </div>
       </td>
       <td className="px-3 py-1.5 border-r border-border/5">
         <span className={`text-[8px] font-mono font-black uppercase tracking-widest ${p.side === "LONG" ? "text-secondary" : "text-destructive"}`}>
@@ -91,7 +108,7 @@ function BlotterRow({
           MOD
         </button>
       </td>
-    </motion.tr>
+    </tr>
   );
 }
 
@@ -106,6 +123,12 @@ export function LiveBlotter({ onTradeClick }: LiveBlotterProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isKilling, setIsKilling] = useState<string | "ALL" | null>(null);
+  const { mode } = useAppModeStore();
+  const isAD = mode === 'AD';
+  
+  const accentColor = isAD ? "text-primary" : "text-teal";
+  const accentShadow = isAD ? "shadow-[0_0_8px_rgba(255,176,0,0.4)]" : "shadow-[0_0_8px_rgba(0,212,212,0.4)]";
+  const accentBgSecondary = isAD ? "bg-secondary" : "bg-primary";
 
   const handleKill = async (symbol: string) => {
     setIsKilling(symbol);
@@ -142,14 +165,14 @@ export function LiveBlotter({ onTradeClick }: LiveBlotterProps) {
       entry_price: p.average_price,
       ltp: prices[p.symbol] || p.average_price,
       strategy: p.strategy || "CORE_BUFFER",
-      lot_size: p.lot_size || 1
+      lot_size: p.lot_size || 1,
+      metadata: p.metadata || {}
     })) as Position[];
   }, [positionsData, prices]);
 
   const netPnL = positions.reduce((acc, p) => {
-    const diff = p.ltp - p.entry_price;
     const lotSize = p.lot_size || 1;
-    return acc + (p.side === "LONG" ? diff * p.qty * lotSize : -diff * p.qty * lotSize);
+    return acc + (p.ltp - p.entry_price) * p.qty * lotSize;
   }, 0);
 
   if (loading) {
@@ -157,8 +180,8 @@ export function LiveBlotter({ onTradeClick }: LiveBlotterProps) {
       <div className="bg-background border-t border-border h-[300px] flex flex-col items-center justify-center industrial-grid relative">
         <div className="noise-overlay" />
         <div className="scanline" />
-        <Loader2 className="w-5 h-5 text-primary animate-spin" />
-        <span className="text-[8px] font-mono font-black text-primary animate-pulse mt-4 tracking-[0.5em]">BUFFERING...</span>
+        <Loader2 className={cn("w-5 h-5 animate-spin", accentColor)} />
+        <span className={cn("text-[8px] font-mono font-black animate-pulse mt-4 tracking-[0.5em]", accentColor)}>BUFFERING...</span>
       </div>
     );
   }
@@ -171,9 +194,9 @@ export function LiveBlotter({ onTradeClick }: LiveBlotterProps) {
       {/* Blotter Header */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-card/10 relative z-10">
         <div className="flex items-center gap-4">
-          <h3 className="text-[10px] font-mono font-black uppercase tracking-[0.3em] text-primary">Matrix_Buffer</h3>
+          <h3 className={cn("text-[10px] font-mono font-black uppercase tracking-[0.3em]", accentColor)}>Matrix_Buffer</h3>
           <div className="flex items-center gap-2">
-            <div className={`w-1.5 h-1.5 ${symbols.length > 0 ? "bg-secondary shadow-[0_0_8px_#00d4d4]" : "bg-muted-foreground/20"} animate-pulse`} />
+            <div className={cn("w-1.5 h-1.5 animate-pulse", symbols.length > 0 ? cn(accentBgSecondary, accentShadow) : "bg-muted-foreground/20")} />
             <span className="text-[9px] font-mono font-black text-muted-foreground/40 uppercase tracking-widest">{positions.length} ACTV_NODES</span>
           </div>
         </div>
@@ -198,7 +221,7 @@ export function LiveBlotter({ onTradeClick }: LiveBlotterProps) {
       </div>
 
       {/* Matrix Table */}
-      <div className="flex-1 overflow-auto no-scrollbar relative z-10 bg-background/50">
+      <div className="flex-1 overflow-auto custom-scrollbar relative z-10 bg-background/50">
         <table className="w-full border-collapse">
           <thead>
             <tr className="border-b border-border bg-card/5 sticky top-0 z-20">
@@ -223,7 +246,7 @@ export function LiveBlotter({ onTradeClick }: LiveBlotterProps) {
               <tr>
                 <td colSpan={9} className="px-4 py-20 text-center">
                   <div className="flex flex-col items-center gap-4">
-                    <Activity className="w-5 h-5 text-primary opacity-20" />
+                    <Activity className={cn("w-5 h-5 opacity-20", accentColor)} />
                     <span className="text-[8px] text-muted-foreground/20 font-mono font-black uppercase tracking-[0.5em] italic">ZERO_SIGNALS_DETECTED</span>
                   </div>
                 </td>

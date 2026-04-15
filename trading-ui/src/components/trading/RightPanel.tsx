@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { TrendingUp, TrendingDown, Activity, AlertTriangle, Zap, RefreshCw } from "lucide-react";
 import { IndustrialValue } from "./IndustrialValue";
+import { LiveTelemetry } from "./LiveTelemetry";
 
 // Mock data generators
 const generateEquityBars = () => Array.from({ length: 20 }, (_, i) => ({
@@ -63,7 +64,7 @@ export function RightPanel() {
   ];
 
   return (
-    <div className="w-72 bg-background border-l border-border flex flex-col shrink-0 overflow-y-auto no-scrollbar industrial-grid relative">
+    <div className="w-72 bg-background border-l border-border flex flex-col shrink-0 overflow-y-auto custom-scrollbar industrial-grid relative">
       <div className="noise-overlay" />
       <div className="scanline opacity-10" />
       
@@ -138,36 +139,9 @@ export function RightPanel() {
         </div>
       </div>
 
-      {/* Neural Feedback Log */}
-      <div className="p-3 flex-1 bg-card/10 backdrop-blur-md relative z-10">
-        <h4 className="text-[9px] font-mono font-black uppercase tracking-[0.3em] text-muted-foreground/40 mb-3 flex items-center gap-2">
-          <Zap className="w-3 h-3 text-primary" />
-          Neural_Event_Buffer
-        </h4>
-        <div className="space-y-1">
-          {riskAlerts.map((alert) => (
-            <div
-              key={alert.id}
-              className={`p-2.5 border-l border-b border-border/10 bg-background/50 hover:bg-background transition-all ${
-                alert.type === "warning" ? "border-l-primary" :
-                alert.type === "success" ? "border-l-secondary" :
-                "border-l-muted-foreground/20"
-              }`}
-            >
-              <p className={`text-[9px] font-mono font-black leading-tight mb-1.5 tracking-tight ${
-                alert.type === "warning" ? "text-primary/70" :
-                alert.type === "success" ? "text-secondary/70" :
-                "text-foreground/30"
-              }`}>
-                {alert.message.toUpperCase()}
-              </p>
-              <div className="flex items-center justify-between leading-none">
-                 <span className="text-[7px] font-mono font-black text-muted-foreground/10 uppercase tracking-widest">{alert.type}</span>
-                 <span className="text-[7px] font-mono font-black text-muted-foreground/20 tabular-nums">{alert.time}</span>
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* Real-Time Neural Feed */}
+      <div className="flex-1 min-h-[300px] border-t border-border relative z-10">
+        <LiveTelemetry />
       </div>
     </div>
   );

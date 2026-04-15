@@ -38,7 +38,7 @@ export default function TradingDesk() {
       <GlobalHeader />
 
       {/* Main Terminal Navigation */}
-      <div className="flex items-center gap-0 border-b border-border bg-card/5 overflow-x-auto no-scrollbar relative z-20">
+      <div className="flex items-center gap-0 border-b border-border bg-card/5 overflow-x-auto custom-scrollbar relative z-20">
         <NavTab to="/" icon={BarChart3} label="Console" active={true} />
         <NavTab to="/strategy-lab" icon={GitBranch} label="Lab" />
         <NavTab to="/risk" icon={Shield} label="Risk" />

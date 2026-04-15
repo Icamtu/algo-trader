@@ -1,0 +1,76 @@
+server {
+    listen 80;
+    server_name localhost;
+
+    server_tokens off;
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://${TAILSCALE_IP}:* http://80.225.231.3:* http://localhost:* ws://${TAILSCALE_IP}:* ws://localhost:*; " always;
+
+    location / {
+        root /usr/share/nginx/html;
+        index index.html index.htm;
+        try_files $uri $uri/ /index.html;
+
+        # Disable caching for index.html to force clear stale hashes
+        if ($request_uri ~* "index\.html$|^/$") {
+            add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0";
+            expires off;
+        }
+    }
+
+    # Supabase Proxy
+    location /supabase/ {
+        proxy_pass http://supabase-kong:8000/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Ensure apikey and Authorization headers are passed through
+        proxy_pass_header apikey;
+        proxy_pass_header Authorization;
+        
+        proxy_cache_bypass $http_upgrade;
+    }
+
+
+    # Algo-Engine API Proxy
+    location /algo-api/ {
+        proxy_pass http://algo_engine:18788/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # WebSocket Proxy (Engine Relay)
+    location /algo-ws {
+        proxy_pass http://algo_engine:5002;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 86400;
+    }
+
+    # Direct OpenAlgo Web (Fallback/Original)
+    location /ws {
+        proxy_pass http://openalgo-web:8765;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 86400;
+    }
+
+
+    error_page 500 502 503 504 /50x.html;
+    location = /50x.html {
+        root /usr/share/nginx/html;
+    }
+}

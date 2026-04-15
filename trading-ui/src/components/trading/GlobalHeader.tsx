@@ -1,18 +1,21 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, LogOut, Radio, Power, PowerOff, Brain, Cpu, ShieldAlert, Zap, Skull, Settings } from "lucide-react";
-import { algoApi } from "@/lib/api-client";
+import { algoApi } from "@/features/openalgo/api/client";
 import { BrokerManagementPanel } from "./BrokerManagementPanel";
 import { UnifiedSettings } from "./UnifiedSettings";
 import { ScriptGroupPanel } from "./ScriptGroupPanel";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { useTradingMode, useSystemHealth } from "@/hooks/useTrading";
+import { useTradingMode, useSystemHealth } from "@/features/openalgo/hooks/useTrading";
 import { SlideToConfirm } from "../ui/SlideToConfirm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { IndustrialValue } from "./IndustrialValue";
 import { AnimatePresence, motion } from "framer-motion";
+import { useAppModeStore } from "@/stores/appModeStore";
+import { LatencyMonitor } from "./LatencyMonitor";
+import { cn } from "@/lib/utils";
 
 const initialMarkets = [
   { name: "RELIANCE", value: 2984.50, change: 0.0, status: "live" },
@@ -31,17 +34,17 @@ export function GlobalHeader() {
   const [panicModalOpen, setPanicModalOpen] = useState(false);
   const [engineLive, setEngineLive] = useState(true);
   const [intelSettings, setIntelSettings] = useState<{decision_mode: "ai" | "program" | "human"; llm_model: string; provider: "ollama" | "openclaw"; agent_enabled: boolean; agent_error_reason: string}>({ decision_mode: 'ai', llm_model: 'mistral', provider: 'ollama', agent_enabled: true, agent_error_reason: "" });
+  const intelRef = useRef<HTMLDivElement | null>(null);
   const [intelDropdownOpen, setIntelDropdownOpen] = useState(false);
-  const intelRef = useRef<HTMLDivElement>(null);
+  const [telemetry, setTelemetry] = useState({ regime: "NEUTRAL", active_trades_count: 0 });
   const tradingMode = useTradingMode();
+  const { mode, setMode } = useAppModeStore();
   const [marketData, setMarketData] = useState(initialMarkets);
   const { user, signOut } = useAuth();
   const initials = user?.user_metadata?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() || user?.email?.slice(0, 2).toUpperCase() || "?";
   
   const { data: systemHealth } = useSystemHealth();
-  const latency = systemHealth?.algo_engine?.latency || systemHealth?.broker?.latency || 0;
-
-  const { prices } = useWebSocket(initialMarkets.map(m => m.name));
+  const { prices, latency, isConnected } = useWebSocket(initialMarkets.map(m => m.name));
 
   useEffect(() => {
     if (!engineLive || Object.keys(prices).length === 0) return;
@@ -64,12 +67,17 @@ export function GlobalHeader() {
       try {
         const settings = await algoApi.getSystemSettings();
         setIntelSettings(settings);
+        
+        const telRes = await algoApi.getTelemetry();
+        if (telRes.status === "success") {
+            setTelemetry(telRes.data);
+        }
       } catch (e) {
-        console.error("INTEL_FETCH_FAULT", e);
+        console.error("TELEMETRY_FETCH_FAULT", e);
       }
     };
     fetchIntel();
-    const interval = setInterval(fetchIntel, 10000);
+    const interval = setInterval(fetchIntel, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -105,6 +113,26 @@ export function GlobalHeader() {
 
   return (
     <>
+      {/* Sandbox Warning Banner */}
+      <AnimatePresence>
+        {tradingMode.mode === 'sandbox' && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 24, opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="bg-amber-500/10 border-b border-amber-500/30 w-full flex items-center justify-center gap-6 overflow-hidden z-[60] backdrop-blur-md"
+          >
+            <div className="flex items-center gap-3 animate-glitch-slow">
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-500" />
+              <span className="text-[10px] font-mono font-black text-amber-500 tracking-[0.4em] uppercase">SYSTEM_STATE::SANDBOX_SIMULATION_ACTIVE</span>
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-500" />
+            </div>
+            <div className="h-full w-[1px] bg-amber-500/20" />
+            <span className="text-[8px] font-mono font-black text-amber-500/60 uppercase tracking-widest">REAL_TIME_DATA_ONLY // NO_CAPITAL_EXPOSURE</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <header className="h-10 bg-background border-b border-border flex items-center px-2 z-50 relative industrial-grid overflow-hidden">
         <div className="scanline opacity-10" />
         
@@ -119,9 +147,25 @@ export function GlobalHeader() {
               <Zap className="w-4 h-4 text-primary animate-pulse" />
             </div>
           </div>
-          <div className="flex flex-col leading-none">
-            <span className="text-[12px] font-black tracking-widest text-foreground font-syne uppercase">Aether</span>
-            <span className="text-[7px] font-mono font-black text-primary animate-pulse tracking-[0.2em] mt-0.5">PRIME_v2.4</span>
+          <div className="flex flex-col leading-none mr-2">
+            <span className="text-[12px] font-black tracking-widest text-foreground font-display uppercase">Aether</span>
+            <span className="text-[7px] font-mono font-black text-primary animate-pulse tracking-[0.2em] mt-0.5">PRIME_v2.5</span>
+          </div>
+
+          {/* Regime Pulse */}
+          <div className="flex items-center gap-1.5 px-2 border-l border-border/10">
+            <div className={`w-1.5 h-1.5 rounded-full animate-pulse shadow-[0_0_8px] ${
+              telemetry.regime === "BULLISH" ? "bg-secondary shadow-secondary" :
+              telemetry.regime === "BEARISH" ? "bg-destructive shadow-destructive" :
+              "bg-muted-foreground/30 shadow-transparent"
+            }`} />
+            <span className={`text-[8px] font-mono font-black uppercase tracking-[0.2em] ${
+              telemetry.regime === "BULLISH" ? "text-secondary" :
+              telemetry.regime === "BEARISH" ? "text-destructive" :
+              "text-muted-foreground/40"
+            }`}>
+              {telemetry.regime}
+            </span>
           </div>
         </div>
 
@@ -151,15 +195,90 @@ export function GlobalHeader() {
             >
               SANDBOX
             </button>
+            <Dialog>
+              <DialogTrigger asChild>
+                <button 
+                  className={`px-2 h-6 text-[8px] font-mono font-black transition-all ${
+                    tradingMode.mode === 'live' 
+                      ? "bg-destructive text-destructive-foreground" 
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  LIVE_PROD
+                </button>
+              </DialogTrigger>
+              <DialogContent className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/95 border-2 border-destructive p-8 w-[400px] z-[100] shadow-[0_0_50px_rgba(220,38,38,0.3)]">
+                <DialogHeader>
+                  <DialogTitle className="text-destructive font-display text-2xl font-black uppercase tracking-tighter flex items-center gap-3">
+                    <ShieldAlert className="w-8 h-8" />
+                    LIVE_PROD_ELEVATION
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-6 mt-6">
+                  <div className="p-5 bg-destructive/10 border-2 border-destructive/30 font-mono text-[11px] leading-tight text-destructive-foreground relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-1 bg-destructive text-[8px] font-black text-white">LVL_4_WARN</div>
+                    <p className="font-black mb-3 tracking-widest flex items-center gap-2">
+                       <Radio className="w-3 h-3 animate-pulse" />
+                       CRITICAL_PROTOCOL_ELEVATION:
+                    </p>
+                    <p className="opacity-80">You are transitioning to REAL-CAPITAL execution. Every byte transmitted will impact live equity. Ensure all signal parameters are verified.</p>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 border border-white/10 bg-white/5 flex flex-col gap-1">
+                      <span className="text-[7px] font-black text-muted-foreground uppercase opacity-50">Broker_Gate</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-destructive animate-ping" />
+                        <span className="text-[10px] font-black font-mono">ARMED</span>
+                      </div>
+                    </div>
+                    <div className="p-3 border border-white/10 bg-white/5 flex flex-col gap-1">
+                      <span className="text-[7px] font-black text-muted-foreground uppercase opacity-50">Risk_Engine</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-destructive animate-ping" />
+                        <span className="text-[10px] font-black font-mono">LIVE_CAP</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-4">
+                    <DialogTrigger asChild>
+                      <button 
+                        onClick={() => tradingMode.setMode('live')}
+                        className="w-full h-14 bg-destructive hover:bg-destructive/80 text-white font-black font-mono tracking-[0.4em] transition-all uppercase flex items-center justify-center gap-4 group"
+                      >
+                        <Zap className="w-4 h-4 group-hover:scale-125 transition-transform" />
+                        ENGAGE_LIVE_TRADING
+                        <Zap className="w-4 h-4 group-hover:scale-125 transition-transform" />
+                      </button>
+                    </DialogTrigger>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          {/* AD/OA Mode Toggle Pill */}
+          <div className="flex bg-card/50 p-0.5 border border-border ml-2">
             <button 
-              onClick={() => tradingMode.setMode('live')}
-              className={`px-2 h-6 text-[8px] font-mono font-black transition-all ${
-                tradingMode.mode === 'live' 
-                  ? "bg-destructive text-destructive-foreground" 
+              onClick={() => setMode('AD')}
+              className={`px-3 h-6 text-[8px] font-mono font-black transition-all ${
+                mode === 'AD' 
+                  ? "bg-amber-500 text-black" 
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              LIVE_PROD
+              AD
+            </button>
+            <button 
+              onClick={() => setMode('OA')}
+              className={`px-3 h-6 text-[8px] font-mono font-black transition-all ${
+                mode === 'OA' 
+                  ? "bg-teal-500 text-black" 
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              OA
             </button>
           </div>
 
@@ -249,7 +368,7 @@ export function GlobalHeader() {
                 </DialogTrigger>
                 <DialogContent className="bg-background border-2 border-destructive p-6">
                     <DialogHeader>
-                        <DialogTitle className="text-destructive font-syne text-xl font-black uppercase tracking-tighter">TERMINATION_GATE</DialogTitle>
+                        <DialogTitle className="text-destructive font-display text-xl font-black uppercase tracking-tighter">TERMINATION_GATE</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4">
                         <p className="font-mono text-[11px] text-foreground font-black">IMMEDIATE LIQUIDATION INITIATED.</p>
@@ -258,13 +377,24 @@ export function GlobalHeader() {
                 </DialogContent>
             </Dialog>
 
-            <Link to="/infrastructure" className="flex flex-col items-end gap-0.5 px-3 h-7 border border-border bg-card justify-center">
-              <span className="text-[7px] font-mono font-black text-foreground/40 uppercase">LTNCY::{latency}ms</span>
-              <div className="flex items-center gap-1">
-                 <Radio className={`w-2 h-2 ${latency < 50 ? 'text-secondary' : 'text-primary'} animate-pulse`} />
-                 <span className="text-[7px] font-mono font-black text-foreground/40 uppercase">{systemHealth?.algo_engine?.status === "HEALTHY" ? "AUTH::PASS" : "AUTH::FAIL"}</span>
-              </div>
+            <Link to="/infrastructure" className="flex items-center">
+              <LatencyMonitor 
+                latency={latency} 
+                isConnected={isConnected} 
+                className="h-8 border-none bg-transparent"
+              />
             </Link>
+            
+            <div className="flex flex-col items-end gap-0.5 px-3 h-8 justify-center border-l border-border/10">
+               <span className="text-[7px] font-mono font-black text-foreground/40 uppercase tracking-tighter">ENGINE_SYNC</span>
+               <div className="flex items-center gap-1.5">
+                  <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse shadow-[0_0_8px]", 
+                    isConnected ? "bg-secondary shadow-secondary" : "bg-destructive shadow-destructive")} />
+                  <span className="text-[7px] font-mono font-black text-foreground/40 uppercase tracking-tighter">
+                    {systemHealth?.algo_engine?.status === "HEALTHY" ? "AUTH::PASS" : "AUTH::FAIL"}
+                  </span>
+               </div>
+            </div>
             
             <div className="flex items-center gap-3">
                <div className="w-7 h-7 bg-primary flex items-center justify-center font-mono text-[10px] font-black text-black">

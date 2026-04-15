@@ -221,7 +221,7 @@ export function BacktestAnalyticsView({ result, onClose }: Props) {
       </div>
 
       {/* Core Readout Area */}
-      <div className="flex-1 overflow-auto p-6 space-y-8 no-scrollbar z-10 relative">
+      <div className="flex-1 overflow-auto p-6 space-y-8 custom-scrollbar z-10 relative">
         {activeTab === "Equity Curve" && (
           <div className="space-y-6">
             <div className="bg-background border border-border p-6 shadow-2xl">
@@ -312,7 +312,7 @@ export function BacktestAnalyticsView({ result, onClose }: Props) {
                    ))}
                  </div>
               </div>
-              <div className="overflow-auto max-h-[calc(100vh-450px)] no-scrollbar">
+              <div className="overflow-auto max-h-[calc(100vh-450px)] custom-scrollbar">
                 <table className="w-full border-collapse">
                   <thead className="sticky top-0 z-10 bg-background">
                     <tr className="border-b border-border text-muted-foreground/40">

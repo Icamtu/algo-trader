@@ -6,7 +6,7 @@ import { RightPanel } from "@/components/trading/RightPanel";
 import { NewOrderModal } from "@/components/trading/NewOrderModal";
 import { Plus, Trash2, BellRing, Mail, MessageSquare, Smartphone, Loader2, Radio } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { algoApi } from "@/lib/api-client";
+import { algoApi } from "@/features/openalgo/api/client";
 import { IndustrialValue } from "@/components/trading/IndustrialValue";
 
 const pageTabs = ["Feed", "Create"] as const;
@@ -131,7 +131,7 @@ export default function Alerts() {
       </div>
 
       <div className="flex-1 flex min-h-0 relative z-10">
-        <div className="flex-1 overflow-auto p-4 no-scrollbar">
+        <div className="flex-1 overflow-auto p-4 custom-scrollbar">
           {activeTab === "Feed" && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
               {isLoading ? (
@@ -153,7 +153,7 @@ export default function Alerts() {
                       <div className="flex-1">
                         <div className="flex items-center justify-between mb-2">
                            <div className="flex items-center gap-3">
-                              <span className="text-sm font-black font-syne uppercase text-foreground">{alert.symbol}</span>
+                              <span className="text-sm font-black font-display uppercase text-foreground">{alert.symbol}</span>
                               <div className="px-1.5 py-0.5 border border-border/20 bg-background text-[7px] font-mono font-black uppercase text-muted-foreground/40">{alert.type}</div>
                            </div>
                            <button onClick={() => deleteAlert(alert.id)} className="text-muted-foreground/20 hover:text-destructive transition-colors">
@@ -176,7 +176,7 @@ export default function Alerts() {
           {activeTab === "Create" && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-xl mx-auto space-y-4">
               <div className="border border-border/20 bg-card/5 p-6">
-                <h3 className="text-xl font-black font-syne uppercase tracking-widest mb-6">Set_Signal</h3>
+                <h3 className="text-xl font-black font-display uppercase tracking-widest mb-6">Set_Signal</h3>
                 
                 <div className="space-y-6">
                   <div>

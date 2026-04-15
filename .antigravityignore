@@ -1,0 +1,67 @@
+# .antigravityignore
+# Files excluded from Antigravity's automatic context window
+# Purpose: prevent context saturation on large/irrelevant files
+
+# Dependencies (never needed in context)
+node_modules/
+trading-ui/node_modules/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+.venv/
+venv/
+
+# Build outputs (not source — don't load)
+trading-ui/dist/
+trading-ui/.vite/
+**/.next/
+**/build/
+
+# Lock files (too large, not useful for AI)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+poetry.lock
+Pipfile.lock
+
+# Test snapshots (large, low signal)
+**/__snapshots__/
+**/*.snap
+
+# Large data files
+**/*.duckdb
+**/*.db
+**/*.sqlite
+**/*.parquet
+**/*.csv
+**/*.json.gz
+
+# Logs
+**/*.log
+**/logs/
+
+# Docker layers cache
+**/.docker/
+
+# Git internals
+.git/
+
+# Reports (load explicitly when needed, not always)
+# Uncomment below to exclude reports from auto-context:
+# .agent/reports/
+
+# IDE files
+.vscode/settings.json
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Secrets (should never be read by AI)
+.env
+.env.*
+secrets/
+**/*.pem
+**/*.key
+**/*.p12

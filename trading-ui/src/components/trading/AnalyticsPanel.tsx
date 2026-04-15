@@ -1,17 +1,18 @@
 import { TrendingUp, TrendingDown, BarChart3, Shield, Zap, Loader2, Activity } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { algoApi } from "@/lib/api-client";
+import { algoApi } from "@/features/openalgo/api/client";
 import { IndustrialValue } from "./IndustrialValue";
-
-const equityData = [10, 12, 11, 14, 13, 16, 15, 18, 20, 19, 22, 24, 23, 26, 28, 27, 30, 32, 31, 34, 33, 36, 38, 40, 39, 42, 44, 43, 46, 48];
-const drawdownData = [0, -1, -2, -1, -3, -1, -2, -1, 0, -1, -2, 0, -1, -2, 0, -1, 0, -1, -2, -1, -3, -1, 0, -1, -2, 0, -1, 0, -1, 0];
 
 export function AnalyticsPanel() {
   const [positions, setPositions] = useState<any[]>([]);
   const [pnlSummary, setPnlSummary] = useState<any>(null);
   const [riskMetricsData, setRiskMetricsData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Rolling live history replacement
+  const [equityData, setEquityData] = useState<number[]>(Array(30).fill(0));
+  const [drawdownData, setDrawdownData] = useState<number[]>(Array(30).fill(0));
 
   const fetchData = async () => {
     try {
@@ -23,6 +24,24 @@ export function AnalyticsPanel() {
       if (posData.positions) setPositions(posData.positions);
       setPnlSummary(pnlData);
       setRiskMetricsData(riskData);
+
+      // Dynamically map real-time PNL to the rolling visual oscilloscope
+      if (pnlData && pnlData.total_pnl !== undefined) {
+        setEquityData(prev => {
+          const newArr = [...prev.slice(1), pnlData.total_pnl];
+          return newArr;
+        });
+        
+        // Calculate a naive drawdown array from equity peak
+        setEquityData(eqLine => {
+           const peak = Math.max(...eqLine, 0.01);
+           const currentEq = pnlData.total_pnl;
+           const dd = currentEq < peak ? (currentEq - peak) : 0;
+           setDrawdownData(prev => [...prev.slice(1), dd]);
+           return eqLine;
+        });
+      }
+
     } catch (e) {
       console.error("ANALYTICS_FETCH_FAULT", e);
     } finally {
@@ -33,15 +52,8 @@ export function AnalyticsPanel() {
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 10000);
-    const channel = supabase
-      .channel("analytics-positions")
-      .on("postgres_changes", { event: "*", schema: "public", table: "positions" }, fetchData)
-      .subscribe();
-    return () => {
-      clearInterval(interval);
-      supabase.removeChannel(channel);
-    };
-  }, []);
+    return () => clearInterval(interval);
+  }, [loading]);
 
   const metrics = [
     { label: "NET_PNL_RT", value: pnlSummary?.total_pnl || 0, isCurrency: true, color: (pnlSummary?.total_pnl || 0) >= 0 ? "text-secondary" : "text-destructive" },
@@ -70,7 +82,7 @@ export function AnalyticsPanel() {
   }
 
   return (
-    <div className="w-80 bg-background border-l border-border flex flex-col shrink-0 overflow-y-auto no-scrollbar industrial-grid relative">
+    <div className="w-80 bg-background border-l border-border flex flex-col shrink-0 overflow-y-auto custom-scrollbar industrial-grid relative">
       <div className="noise-overlay" />
       <div className="scanline opacity-10" />
       
@@ -89,7 +101,7 @@ export function AnalyticsPanel() {
                   value={m.value} 
                   prefix={m.isCurrency ? "₹" : ""} 
                   suffix={m.suffix} 
-                  className={`text-lg font-black font-syne tracking-tighter ${m.color}`} 
+                  className={`text-lg font-black font-display tracking-tighter ${m.color}`} 
                 />
               </div>
               <div className="h-0.5 w-10 bg-border/20 mb-1.5 overflow-hidden">

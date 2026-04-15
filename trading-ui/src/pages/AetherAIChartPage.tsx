@@ -1,17 +1,18 @@
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
 import { GlobalHeader } from "@/components/trading/GlobalHeader";
 import { MarketNavbar } from "@/components/trading/MarketNavbar";
-import { algoApi } from "@/lib/api-client";
+import { algoApi } from "@/features/openalgo/api/client";
 import {
-  TrendingUp, TrendingDown, Brain, Sparkles, Send,
-  Loader2, Search, Activity, Zap, WifiOff
+  TrendingUp, Brain, Sparkles, Send, Loader2
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  CartesianGrid, ReferenceLine
+  CartesianGrid
 } from "recharts";
 import { IndustrialValue } from "@/components/trading/IndustrialValue";
+import { useTerminalSettings } from "@/contexts/TerminalSettingsContext";
+import { LightweightChart } from "@/components/trading/charts/LightweightChart";
+import { TradingViewWidget } from "@/components/trading/charts/TradingViewWidget";
 
 interface AIAnnotation {
   type: "support" | "resistance" | "pattern" | "signal";
@@ -52,6 +53,41 @@ export default function AetherAIChartPage() {
 
   const lastPrice = candles[candles.length - 1]?.close || 0;
 
+  const { settings } = useTerminalSettings();
+
+  const renderChart = () => {
+    if (isLoadingChart) {
+      return (
+        <div className="h-full flex items-center justify-center opacity-20 filter grayscale">
+           <Loader2 className="w-8 h-8 animate-spin" />
+        </div>
+      );
+    }
+
+    switch (settings.chartEngine) {
+      case "lightweight":
+        return <LightweightChart data={candles} />;
+      case "tradingview":
+        return <TradingViewWidget symbol={symbol} />;
+      case "recharts":
+      default:
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={candles} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="2 2" stroke="rgba(255,255,255,0.03)" vertical={false} />
+              <XAxis dataKey="date" hide />
+              <YAxis domain={["auto", "auto"]} orientation="right" tick={{ fill: "rgba(255,255,255,0.1)", fontSize: 8 }} axisLine={false} tickLine={false} />
+              <Tooltip
+                contentStyle={{ background: "#0a0a0a", border: "1px solid #222", borderRadius: "0", padding: "8px" }}
+                itemStyle={{ color: "#ffb000", fontSize: "9px", fontFamily: "IBM Plex Mono" }}
+              />
+              <Area type="step" dataKey="close" stroke="#00f5ff" strokeWidth={1.5} fill="rgba(0,245,255,0.02)" isAnimationActive={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        );
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background industrial-grid relative">
       <div className="noise-overlay" />
@@ -90,7 +126,7 @@ export default function AetherAIChartPage() {
               </div>
 
               <div className="flex items-center gap-4 ml-2 border-l border-border/20 pl-4">
-                <IndustrialValue value={lastPrice} className="text-xl font-black font-syne text-foreground" />
+                <IndustrialValue value={lastPrice} className="text-xl font-black font-display text-foreground" />
                 <div className={`px-2 py-0.5 border text-[8px] font-mono font-black flex items-center gap-1.5 tracking-tighter ${lastPrice >= 20000 ? "bg-secondary/10 text-secondary border-secondary/20" : "bg-destructive/10 text-destructive border-destructive/20"}`}>
                   <TrendingUp className="w-2.5 h-2.5" />
                   +1.24%
@@ -109,25 +145,8 @@ export default function AetherAIChartPage() {
           </div>
 
           {/* Chart Layer */}
-          <div className="flex-1 p-4 min-h-0 bg-background/20 overflow-hidden relative">
-            {isLoadingChart ? (
-              <div className="h-full flex items-center justify-center opacity-20 filter grayscale">
-                 <Loader2 className="w-8 h-8 animate-spin" />
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={candles} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="2 2" stroke="rgba(255,255,255,0.03)" vertical={false} />
-                  <XAxis dataKey="date" hide />
-                  <YAxis domain={["auto", "auto"]} orientation="right" tick={{ fill: "rgba(255,255,255,0.1)", fontSize: 8 }} axisLine={false} tickLine={false} />
-                  <Tooltip
-                    contentStyle={{ background: "#0a0a0a", border: "1px solid #222", borderRadius: "0", padding: "8px" }}
-                    itemStyle={{ color: "#ffb000", fontSize: "9px", fontFamily: "IBM Plex Mono" }}
-                  />
-                  <Area type="step" dataKey="close" stroke="#00f5ff" strokeWidth={1.5} fill="rgba(0,245,255,0.02)" isAnimationActive={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
+          <div className="flex-1 p-0 min-h-0 bg-background/20 overflow-hidden relative">
+            {renderChart()}
           </div>
 
           {/* AI Console */}
@@ -155,7 +174,7 @@ export default function AetherAIChartPage() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
             <div className="border border-primary/20 bg-primary/5 p-4 relative">
               <div className="flex items-center gap-2 mb-3">
                  <div className="w-1.5 h-1.5 bg-primary animate-pulse" />
@@ -171,7 +190,7 @@ export default function AetherAIChartPage() {
                {[1, 2, 3].map(i => (
                  <div key={i} className="border border-border/10 bg-card/5 p-3 hover:bg-card/10 transition-all">
                     <div className="flex justify-between items-center mb-2">
-                       <span className="text-[10px] font-black font-syne uppercase text-foreground/80">NODE_MATCH_{i}</span>
+                       <span className="text-[10px] font-black font-display uppercase text-foreground/80">NODE_MATCH_{i}</span>
                        <span className="text-[8px] font-mono font-black text-secondary border border-secondary/20 px-1.5">9{i}%</span>
                     </div>
                     <div className="flex items-center gap-2 mb-1">

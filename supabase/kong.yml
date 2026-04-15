@@ -9,6 +9,7 @@ services:
         paths:
           - /auth/v1
         strip_path: true
+
   - name: rest
     url: http://supabase-rest:3000
     routes:
@@ -17,10 +18,27 @@ services:
           - /rest/v1
         strip_path: true
 
+  - name: functions
+    url: http://supabase-functions:9999
+    routes:
+      - name: functions-route
+        paths:
+          - /functions/v1
+        strip_path: true
+
+  - name: realtime
+    url: http://supabase-realtime:4000
+    routes:
+      - name: realtime-route
+        paths:
+          - /realtime/v1
+        strip_path: true
+
 plugins:
   - name: cors
     config:
       origins:
+        - "http://100.66.171.30"
         - "http://100.66.171.30:3001"
         - "http://100.66.171.30:3000"
       methods:
@@ -34,6 +52,9 @@ plugins:
         - Content-Type
         - Authorization
         - apikey
+        - accept-profile
+        - x-api-key
+        - x-requested-with
         - Prefer
         - Range
         - x-client-info

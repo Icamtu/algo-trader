@@ -1,84 +1,131 @@
 import hashlib
 import json
 import os
-
 import httpx
 
 from utils.httpx_client import get_httpx_client
 from utils.logging import get_logger
 
-
 logger = get_logger(__name__)
-
 
 def sha256_hash(text):
     """Generate SHA256 hash."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
-
-def authenticate_broker(userid, password, totp_code):
+def authenticate_broker(*args):
     """
-    Authenticate with Shoonya and return the auth token.
+    Polymorphic authentication function for Shoonya.
+    
+    Signatures:
+    1. authenticate_broker(code) -> OAuth flow
+    2. authenticate_broker(userid, password, totp) -> Manual/Programmatic flow
     """
-    # Get the Shoonya API key and other credentials from environment variables
-    api_secretkey = os.getenv("BROKER_API_SECRET")
-    vendor_code = os.getenv("BROKER_API_KEY")
-    # Read the custom IMEI from .env if it exists
-    imei = os.getenv("BROKER_IMEI", "abc1234")
+    if len(args) == 1:
+        return _authenticate_oauth(args[0])
+    elif len(args) == 3:
+        return _authenticate_manual(args[0], args[1], args[2])
+    else:
+        return None, f"Invalid number of arguments for Shoonya auth: {len(args)}"
 
+def _authenticate_oauth(code):
+    """Exchanges authorization code for a session token."""
     try:
-        # Use the stable QuickAuth endpoint; the TP variant is currently
-        # returning a raw 502 even for empty test posts.
-        url = "https://api.shoonya.com/NorenWClient/QuickAuth"
+        full_api_key = os.getenv("BROKER_API_KEY")
+        if not full_api_key or ":::" not in full_api_key:
+            return None, "BROKER_API_KEY must be in format userid:::client_id"
+        
+        parts = full_api_key.split(":::", 1)
+        client_id = parts[1]
+        secret_key = os.getenv("BROKER_API_SECRET")
+        
+        if not secret_key:
+            return None, "BROKER_API_SECRET is required"
 
-        # Prepare login payload
+        url = "https://api.shoonya.com/NorenWClientAPI/GenAcsTok"
+
+        checksum_input = f"{client_id}{secret_key}{code}"
+        checksum = hashlib.sha256(checksum_input.encode()).hexdigest()
+
         payload = {
-            "uid": userid,  # User ID
-            "pwd": sha256_hash(password),  # SHA256 hashed password
-            "factor2": totp_code,  # PAN/TOTP/DOB (second factor)
-            "apkversion": "1.0.0",  # Stable per Shoonya spec
-            # Shoonya expects SHA256 of "userid|API_KEY" (API key comes from Prism portal)
-            "appkey": sha256_hash(f"{userid}|{api_secretkey}"),
-            "imei": imei,  # IMEI or MAC address
-            "vc": vendor_code,  # Vendor code
-            "source": "API",  # Source of login request
+            "code": code,
+            "checksum": checksum,
+            "uid": parts[0] # The userid part of BROKER_API_KEY
         }
 
-        # Set headers for the API request
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        payload_str = "jData=" + json.dumps(payload, separators=(',', ':'))
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
 
-        # BUILDING DATA BODY
-        # We must use compact JSON (no spaces) as required by many trading APIs.
-        # Use a raw string with 'jData=' prefix to prevent double URL-encoding by the HTTP client.
-        json_payload = json.dumps(payload, separators=(',', ':'))
-        payload_str = f"jData={json_payload}"
-
-        # Get the shared httpx client and send the POST request
+        logger.info(f"Shoonya GenAcsTok request to {url}")
         client = get_httpx_client()
-        # Pass payload_str directly as 'data' (non-dict) to prevent httpx from encoding braces
-        # We manually set headers to ensure Shoonya recognizes the format
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        response = client.post(url, data=payload_str, headers=headers, timeout=10.0)
+        response = client.post(url, data=payload_str, headers=headers, timeout=15.0)
 
-        # Handle the response
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("stat") == "Ok" and "susertoken" in data:
+                return data["susertoken"], None
+            return None, data.get("emsg", "OAuth failed")
+        return None, f"HTTP Error {response.status_code}"
+
+    except Exception as e:
+        logger.exception(f"Shoonya OAuth exception: {e}")
+        return None, str(e)
+
+def _authenticate_manual(userid, password, totp_code):
+    """Performs programmatic login using userid, password, and TOTP."""
+    try:
+        userid = userid.strip() if userid else ""
+        password = password.strip() if password else ""
+        totp_code = totp_code.strip() if totp_code else ""
+        
+        api_secretkey = os.getenv("BROKER_API_SECRET", "").strip()
+        full_api_key = os.getenv("BROKER_API_KEY", "").strip()
+        # Per SHOONYA_AUTH_CONFIGURATION.md: vendor_code is the part after ::: or the full key if no :::
+        vendor_code = full_api_key.split(":::")[-1] if ":::" in full_api_key else full_api_key
+        imei = os.getenv("BROKER_IMEI", "abc1234").strip()
+
+        # Shoonya Retail API endpoint (Corrected as per Configuration MD)
+        url = "https://api.shoonya.com/NorenWClient/QuickAuth"
+        
+        # appkey hash is SHA256 of (userid + vendor_code)
+        appkey_input = f"{userid}{vendor_code}"
+        appkey_hash = sha256_hash(appkey_input)
+
+        payload = {
+            "apkkey": vendor_code,         # Added as per MD
+            "uid": userid,
+            "pwd": sha256_hash(password),
+            "factor2": totp_code,
+            "apkversion": "1.1.3",
+            "appkey": appkey_hash,
+            "imei": imei,
+            "vc": vendor_code,
+            "source": "API",
+        }
+        
+        payload_data = json.dumps(payload, separators=(',', ':'))
+        payload_str = f"jData={payload_data}"
+        
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        
+        logger.info(f"Shoonya Manual Login attempt (Synced with MD) for User: {userid}")
+        
+        client = get_httpx_client()
+        response = client.post(url, content=payload_str, headers=headers, timeout=15.0)
+        
         if response.status_code == 200:
             data = response.json()
             if data.get("stat") == "Ok":
-                logger.info(f"Shoonya auth successful for user {userid}")
                 return data.get("susertoken"), None
-            
-            # Log server-side error details for debugging
-            emsg = data.get("emsg", "Unknown Error")
-            logger.error(f"Shoonya auth failed: stat={data.get('stat')} emsg={emsg} resp={data}")
-            
-            # Special handling for whitelisting errors to alert the user
-            if "not whitelisted" in emsg.lower() or "not_ok" in data.get("stat", "").lower():
-                return None, f"Shoonya Error: {emsg}. Please ensure your IP 80.225.231.3 is whitelisted."
-            
-            return None, f"Shoonya Error: {emsg}"
-
-        logger.error(f"Shoonya auth HTTP error {response.status_code}: {response.text}")
-        return None, f"Shoonya HTTP Error {response.status_code}: {response.text}"
-
+            logger.error(f"Shoonya Login Rejected: {data}")
+            return None, data.get("emsg", "Manual login failed")
+        
+        logger.error(f"Shoonya HTTP {response.status_code}: {response.text}")
+        return None, f"HTTP Error {response.status_code}: {response.text[:100]}"
     except Exception as e:
+        logger.exception(f"Shoonya manual login exception: {e}")
         return None, str(e)

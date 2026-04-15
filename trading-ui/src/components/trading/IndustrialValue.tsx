@@ -12,9 +12,9 @@ interface IndustrialValueProps {
 
 /**
  * IndustrialValue: Professional telemetry display
- * - 400ms ease-out count-up animation
- * - Color flash on delta change (teal for up, red for down)
- * - IBM Plex Mono styling
+ * - 600ms count-up animation
+ * - Color flash on delta change (secondary for up, destructive for down)
+ * - JetBrains Mono styling
  */
 export function IndustrialValue({
   value,
@@ -28,7 +28,7 @@ export function IndustrialValue({
   const prevValue = useRef(value);
 
   // Motion Value for count-up
-  const spring = useSpring(value, {
+  const spring = useSpring(value ?? 0, {
     stiffness: 100,
     damping: 30,
     restDelta: 0.001,
@@ -42,32 +42,32 @@ export function IndustrialValue({
   );
 
   useEffect(() => {
-    if (flashOnUpdate && value !== prevValue.current) {
-      setFlash(value > prevValue.current ? "up" : "down");
+    const safeValue = value ?? 0;
+    if (flashOnUpdate && safeValue !== prevValue.current) {
+      setFlash(safeValue > prevValue.current ? "up" : "down");
       setTimeout(() => setFlash(null), 400);
     }
-    spring.set(value);
-    prevValue.current = value;
+    spring.set(safeValue);
+    prevValue.current = safeValue;
   }, [value, spring, flashOnUpdate]);
 
   return (
     <div className={`relative inline-flex items-center font-mono tabular-nums ${className}`}>
-      {/* Background Flash Layer */}
+      {/* Background Flash Layer - Integrated with global CSS classes */}
       <AnimatePresence>
         {flash && (
           <motion.div
-            initial={{ opacity: 0.4 }}
+            initial={{ opacity: 1 }}
             animate={{ opacity: 0 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.4, ease: "easeOut" }}
             className={`absolute inset-x-[-4px] inset-y-[-2px] z-[-1] ${
-              flash === "up" ? "bg-secondary" : "bg-destructive"
+              flash === "up" ? "pnl-flash-up" : "pnl-flash-down"
             }`}
           />
         )}
       </AnimatePresence>
 
-      <span className="flex items-center">
+      <span className={`flex items-center transition-colors duration-200 ${flash === "up" ? "text-secondary font-black" : flash === "down" ? "text-destructive font-black" : ""}`}>
         {prefix && <span className="opacity-40 mr-0.5">{prefix}</span>}
         <motion.span>{displayValue}</motion.span>
         {suffix && <span className="opacity-40 ml-0.5">{suffix}</span>}

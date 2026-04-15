@@ -3,7 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import { 
   BarChart3, Shield, Search, Briefcase, 
   BookOpen, Server, Bell, GitBranch, Terminal,
-  LayoutDashboard, TrendingUp
+  LayoutDashboard, TrendingUp, Globe, Cpu
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
@@ -52,7 +52,7 @@ interface MarketNavbarProps {
 
 export function MarketNavbar({ activeTab }: MarketNavbarProps) {
   return (
-    <nav className="h-10 flex items-center bg-background border-b border-border overflow-x-auto no-scrollbar z-40 sticky top-12 industrial-grid">
+    <nav className="h-10 flex items-center bg-background border-b border-border overflow-x-auto custom-scrollbar z-40 sticky top-12 industrial-grid">
       <div className="scanline opacity-5" />
       <div className="flex items-center h-full border-l border-border/10">
         <NavTab to="/" icon={BarChart3} label="Trading_Desk" active={activeTab === "/"} />
@@ -60,11 +60,13 @@ export function MarketNavbar({ activeTab }: MarketNavbarProps) {
         <NavTab to="/risk" icon={Shield} label="Risk_Analysis" active={activeTab === "/risk"} />
         <NavTab to="/scanner" icon={Search} label="Scanning_Array" active={activeTab === "/scanner"} />
         <NavTab to="/portfolio" icon={Briefcase} label="Asset_Vault" active={activeTab === "/portfolio"} />
-        <NavTab to="/journal" icon={BookOpen} label="Event_Registry" active={activeTab === "/journal"} />
+        <NavTab to="/openalgo" icon={Cpu} label="Agent_Array" active={activeTab === "/openalgo"} />
+        <NavTab to="/journal" icon={BookOpen} label="Registry" active={activeTab === "/journal"} />
         <NavTab to="/terminal" icon={Terminal} label="Expert_IO" active={activeTab === "/terminal"} />
         <NavTab to="/charting" icon={TrendingUp} label="Visual_Core" active={activeTab === "/charting"} />
-        <NavTab to="/infrastructure" icon={Server} label="System_Nodes" active={activeTab === "/infrastructure"} />
-        <NavTab to="/alerts" icon={Bell} label="Signal_Log" active={activeTab === "/alerts"} />
+        <NavTab to="/infrastructure" icon={Server} label="Nodes" active={activeTab === "/infrastructure"} />
+        <NavTab to="/brokers" icon={Globe} label="Hub" active={activeTab === "/brokers"} />
+        <NavTab to="/alerts" icon={Bell} label="Signals" active={activeTab === "/alerts"} />
       </div>
       
       <div className="flex-1 h-full border-l border-border/10 flex items-center justify-end px-6">

@@ -1,8 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
-import { Calendar, ChevronDown, Play, Settings2, Download, Eye, Loader2 } from "lucide-react";
+import { Calendar, ChevronDown, Settings2, Download, Eye, Loader2 } from "lucide-react";
 import { BacktestAnalyticsView } from "./BacktestAnalyticsView";
-import { supabase } from "@/integrations/supabase/client";
-import { algoApi } from "@/lib/api-client";
+import { algoApi } from "@/features/openalgo/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { IndustrialValue } from "./IndustrialValue";
 
@@ -23,45 +22,46 @@ export function BacktestCanvas() {
   const [isRunning, setIsRunning] = useState(false);
   const { toast } = useToast();
 
-  const fetchResults = async () => {
+  const fetchResults = async (retryCount = 0) => {
     setIsLoading(true);
-    const { data, error } = await supabase
-      .from("backtest_results")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (!error && data) {
-      const mapped = data.map((r: any) => {
-        const meta = r.metadata || {};
-        const metrics = meta.metrics || {};
-        return {
-          id: r.id,
-          name: r.strategy_name,
-          date: new Date(r.created_at).toISOString().split("T")[0],
-          cagr: metrics.cagr || 0,
-          sharpe: metrics.sharpe_ratio || metrics.sharpe || 0,
-          maxDD: metrics.max_drawdown || metrics.maxDD || 0,
-          winRate: metrics.winRate || metrics.win_rate || 0,
-          pf: metrics.profit_factor || metrics.pf || 0,
-          tradesCount: metrics.total_trades || metrics.trades || 0,
-          trades: meta.trades || [],
-          equityCurve: meta.equity_curve || meta.equityCurve || [],
-          metrics: metrics,
+    try {
+      // Small delay on first fetch to allow kernel to finalize disk write
+      if (retryCount === 0) await new Promise(r => setTimeout(r, 800));
+      
+      const results = await algoApi.getBacktestResults();
+      if (results) {
+        const mapped = [{
+          id: Date.now().toString(),
+          name: results.strategy || "Institutional Strategy",
+          date: new Date().toISOString().split("T")[0],
+          cagr: results.performance?.total_return_pct || 0,
+          sharpe: results.performance?.sharpe_ratio || 0,
+          maxDD: results.performance?.max_drawdown_pct || 0,
+          winRate: results.performance?.win_rate_pct || 0,
+          pf: results.performance?.profit_factor || 0,
+          tradesCount: results.total_trades || 0,
+          trades: results.trades || [],
+          equityCurve: results.equity_curve || [],
+          metrics: results.performance || {},
           isReal: true
-        };
-      });
-      setDbResults(mapped);
+        }];
+        setDbResults(mapped);
+      } else if (retryCount < 2) {
+        // Retry if nothing found yet
+        setTimeout(() => fetchResults(retryCount + 1), 1000);
+      }
+    } catch (err) {
+      console.warn("Retrying backtest fetch...", retryCount);
+      if (retryCount < 2) {
+        setTimeout(() => fetchResults(retryCount + 1), 1000);
+      }
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   useEffect(() => {
     fetchResults();
-    const channel = supabase
-      .channel("backtest-updates")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "backtest_results" }, fetchResults)
-      .subscribe();
-    return () => supabase.removeChannel(channel);
   }, []);
 
   const resultsData = useMemo(() => [...dbResults, ...mockData], [dbResults]);
@@ -87,41 +87,10 @@ export function BacktestCanvas() {
         </div>
 
         <ControlDropdown label="UNI" value="NIFTY_50" />
-
-        <button className="flex items-center gap-1.5 px-2 py-1 border border-border/20 hover:bg-card/20 transition-all">
-          <Settings2 className="w-2.5 h-2.5 text-muted-foreground/30" />
-          <span className="text-[8px] font-mono font-black text-muted-foreground/30 uppercase">Config</span>
-        </button>
-
-        <div className="flex-1" />
-
-        <button
-          disabled={isRunning}
-          onClick={async () => {
-            setIsRunning(true);
-            try {
-              const res = await algoApi.runBacktest({ strategy_key: "sample_strategy", symbol: "SBIN", initial_cash: 100000 });
-              toast({ title: "SIM_COMPLETE", description: `EVENTS: ${res.total_trades || 0}` });
-              fetchResults();
-            } catch (err) {
-              toast({ variant: "destructive", title: "KERNEL_ERR", description: String(err) });
-            } finally {
-              setIsRunning(false);
-            }
-          }}
-          className={`px-4 py-1.5 border-2 font-mono font-black text-[9px] uppercase tracking-[0.2em] transition-all flex items-center gap-2 ${
-            isRunning 
-              ? "border-muted text-muted-foreground" 
-              : "border-primary text-primary hover:bg-primary hover:text-black shadow-[0_0_15px_rgba(255,176,0,0.1)]"
-          }`}
-        >
-          {isRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-          {isRunning ? "TX..." : "RUN_SIM"}
-        </button>
       </div>
 
       {/* Historical Telemetry Table */}
-      <div className="flex-1 overflow-auto p-3 no-scrollbar relative z-10">
+      <div className="flex-1 overflow-auto p-3 custom-scrollbar relative z-10">
         <div className="border border-border bg-card/5 overflow-hidden relative">
           {isLoading && (
              <div className="absolute inset-0 bg-background/50 backdrop-blur-sm flex items-center justify-center z-20">

@@ -3,7 +3,24 @@ import { Sparkles, X, Send } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export function AICopilotOrb() {
-  const [isOpen, setIsOpen] = useState(false);
+   const [isOpen, setIsOpen] = useState(false);
+   const [input, setInput] = useState("");
+   const [messages, setMessages] = useState([
+     { role: "system", content: "MOMENTUM_ALPHA_CORE: 2.3σ DEVIATION DETECTED. HIGH VOL REGIME CONFIRMED. REDUCE SCALE BY 15% FOR ENGINE STABILITY.", time: "12:04:22" },
+     { role: "user", content: "EXEC::OPTIMIZE_REBALANCE_FREQ --TARGET=SHARPE_MAX", time: "12:05:01" },
+     { role: "system", content: "MONTE_CARLO (10K_PATHS): WEEKLY=2.41 SHARPE. DAILY=2.34. GAS_DRAIN REDUCED BY 38%. PREREQUISITE_STATUS::READY.", time: "12:05:03" },
+   ]);
+
+   const handleExecute = () => {
+     if (!input.trim()) return;
+     const now = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+     setMessages([...messages, { role: "user", content: input, time: now }]);
+     setInput("");
+     // Simulate response
+     setTimeout(() => {
+        setMessages(prev => [...prev, { role: "system", content: `RECEIVING_INSTRUCTION::${input.toUpperCase()} // ATTEMPTING_KERNEL_SYNC...`, time: new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) }]);
+     }, 1000);
+   };
 
   return (
     <>
@@ -58,7 +75,7 @@ export function AICopilotOrb() {
               <div className="flex flex-col">
                 <div className="flex items-center gap-3">
                   <span className="w-2 h-2 bg-secondary animate-pulse" />
-                  <span className="text-[12px] font-syne font-black uppercase tracking-[0.3em] text-foreground">Neural_IO_Buffer</span>
+                  <span className="text-[12px] font-display font-black uppercase tracking-[0.3em] text-foreground">Neural_IO_Buffer</span>
                 </div>
                 <span className="text-[8px] font-mono text-muted-foreground/30 uppercase mt-1 tracking-widest pl-5">Status::Stream_Operational_24ms</span>
               </div>
@@ -69,42 +86,23 @@ export function AICopilotOrb() {
             </div>
 
             {/* Message Feed */}
-            <div className="relative z-10 h-96 p-6 overflow-y-auto space-y-6 no-scrollbar">
-              <div className="flex flex-col gap-2 max-w-[95%]">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[8px] font-mono font-black text-primary uppercase bg-primary/10 px-1.5 py-0.5">[SYSTEM_IO]</span>
-                  <span className="text-[7px] font-mono text-muted-foreground/40">12:04:22.41</span>
+            <div className="relative z-10 h-96 p-6 overflow-y-auto space-y-6 custom-scrollbar">
+              {messages.map((m, i) => (
+                <div key={i} className={`flex flex-col gap-2 max-w-[95%] ${m.role === 'user' ? 'ml-auto items-end' : ''}`}>
+                  <div className={`flex items-center gap-2 mb-1 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                    <span className={`text-[8px] font-mono font-black uppercase px-1.5 py-0.5 ${m.role === 'user' ? 'text-secondary bg-secondary/10' : 'text-primary bg-primary/10'}`}>
+                      {m.role === 'user' ? '[USR_CMD]' : '[SYSTEM_IO]'}
+                    </span>
+                    <span className="text-[7px] font-mono text-muted-foreground/40">{m.time}</span>
+                  </div>
+                  <div className={`${m.role === 'user' ? 'bg-secondary/5 border border-secondary/20 p-3 text-right' : 'bg-card/30 border border-border/40 p-3 leading-relaxed'}`}>
+                    <p className={`text-[11px] font-mono tracking-tight ${m.role === 'user' ? 'text-secondary italic' : 'text-foreground/80 uppercase'}`}>
+                      {m.role === 'system' && <span className="text-secondary opacity-60 mr-2">{">>"}</span>}
+                      {m.content}
+                    </p>
+                  </div>
                 </div>
-                <div className="bg-card/30 border border-border/40 p-3 leading-relaxed">
-                  <p className="text-[11px] font-mono text-foreground/80 uppercase tracking-tight">
-                    <span className="text-secondary opacity-60">{">>"}</span> MOMENTUM_ALPHA_CORE: 2.3σ DEVIATION DETECTED. HIGH VOL REGIME CONFIRMED. REDUCE SCALE BY 15% FOR ENGINE STABILITY.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2 max-w-[95%] ml-auto items-end">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[7px] font-mono text-muted-foreground/40">12:05:01.12</span>
-                  <span className="text-[8px] font-mono font-black text-secondary uppercase bg-secondary/10 px-1.5 py-0.5">[USR_CMD]</span>
-                </div>
-                <div className="bg-secondary/5 border border-secondary/20 p-3 text-right">
-                  <p className="text-[11px] font-mono text-secondary italic tracking-wider">
-                    EXEC::OPTIMIZE_REBALANCE_FREQ --TARGET=SHARPE_MAX
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2 max-w-[95%]">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[8px] font-mono font-black text-primary uppercase bg-primary/10 px-1.5 py-0.5">[SYSTEM_IO]</span>
-                  <span className="text-[7px] font-mono text-muted-foreground/40">12:05:03.88</span>
-                </div>
-                <div className="bg-card/30 border border-border/40 p-3 leading-relaxed">
-                  <p className="text-[11px] font-mono text-foreground/80 uppercase tracking-tight">
-                    <span className="text-primary opacity-60">{">>"}</span> MONTE_CARLO (10K_PATHS): WEEKLY=2.41 SHARPE. DAILY=2.34. GAS_DRAIN REDUCED BY 38%. PREREQUISITE_STATUS::READY.
-                  </p>
-                </div>
-              </div>
+              ))}
             </div>
 
             {/* Input Station */}
@@ -113,10 +111,16 @@ export function AICopilotOrb() {
                 <span className="text-primary font-mono text-xs font-black animate-pulse">{">"}</span>
                 <input
                   type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleExecute()}
                   placeholder="INPUT_INSTRUCTION..."
                   className="flex-1 bg-transparent border-none text-[11px] font-mono font-black text-foreground placeholder:text-muted-foreground/20 focus:outline-none uppercase"
                 />
-                <button className="flex items-center gap-2 bg-primary px-3 py-1 font-mono font-black text-[10px] text-black hover:opacity-90 active:scale-95 transition-all">
+                <button 
+                  onClick={handleExecute}
+                  className="flex items-center gap-2 bg-primary px-3 py-1 font-mono font-black text-[10px] text-black hover:opacity-90 active:scale-95 transition-all"
+                >
                   <Send className="w-3 h-3" />
                   <span>[EXEC]</span>
                 </button>

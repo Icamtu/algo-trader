@@ -5,6 +5,9 @@ interface TerminalSettings {
   noiseOpacity: number;
   scanlineIntensity: number;
   accentColor: "amber" | "teal" | "crimson";
+  enableGlint: boolean;
+  chartEngine: "recharts" | "lightweight" | "tradingview";
+  perfProfile: "low" | "balanced" | "ultra";
 }
 
 interface TerminalSettingsContextValue {
@@ -21,6 +24,9 @@ const defaultSettings: TerminalSettings = {
   noiseOpacity: 3,
   scanlineIntensity: 10,
   accentColor: "amber",
+  enableGlint: true,
+  chartEngine: "lightweight",
+  perfProfile: "balanced",
 };
 
 export function TerminalSettingsProvider({ children }: { children: React.ReactNode }) {

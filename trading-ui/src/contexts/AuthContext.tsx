@@ -23,14 +23,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let resolved = false;
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      setLoading(false);
+      if (!resolved) {
+        resolved = true;
+        setLoading(false);
+      }
     });
 
+    // Fallback: if onAuthStateChange hasn't fired after getSession resolves
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
+      if (!resolved) {
+        resolved = true;
+        setSession(session);
+        setLoading(false);
+      }
     });
 
     return () => subscription.unsubscribe();

@@ -25,6 +25,7 @@ export interface Position {
   quantity: number;
   average_price: number;
   current_value: number;
+  metadata?: Record<string, any>;
 }
 
 export interface PositionsResponse {
@@ -68,6 +69,13 @@ export interface RiskStatus {
   max_order_notional: number;
   max_position_qty: number;
   daily_loss_pct: number;
+  broker_session?: {
+    is_healthy: boolean;
+    last_check: string | null;
+    last_error: string;
+    reauth_in_progress: boolean;
+    auto_relogin_enabled: boolean;
+  };
 }
 
 // ─── Risk Limit Updates (PUT /api/risk/limits) ────────────────────
@@ -97,6 +105,33 @@ export interface RiskMetrics {
   concentration_risk: number;
   max_exposure: number;
   drawdown: number;
+}
+
+export interface StrategySafeguard {
+  strategy_id: string;
+  max_drawdown_pct: number;
+  max_loss_inr: number;
+  is_armed: boolean;
+  last_breach_at: string | null;
+  updated_at: string;
+}
+
+export interface StrategyMetrics {
+  sharpe: number;
+  max_drawdown: number;
+  win_rate: number;
+  profit_factor: number;
+  total_trades: number;
+  net_pnl: number;
+  is_active: boolean;
+  safeguard?: StrategySafeguard;
+  is_halted?: boolean;
+}
+
+export interface RiskMatrixResponse {
+  status: string;
+  matrix: Record<string, StrategyMetrics>;
+  count: number;
 }
 
 // ─── System Status (from /api/system/status) ──────────────────────
@@ -223,20 +258,30 @@ export interface IndicatorResponse {
 export interface BacktestRequest {
   strategy_key: string;
   symbol: string;
+  days?: number;
   candles?: Record<string, unknown>[];
   from_date?: string;
   to_date?: string;
   initial_cash?: number;
 }
 
+export interface BacktestPerformance {
+  total_return_pct: number;
+  sharpe_ratio: number;
+  profit_factor: number;
+  max_drawdown_pct: number;
+  win_rate_pct: number;
+  [key: string]: number;
+}
+
 export interface BacktestResponse {
   status: string;
-  strategy_key: string;
+  strategy: string;
   symbol: string;
-  net_pnl: number;
-  sharpe: number;
+  performance: BacktestPerformance;
+  total_trades: number;
   trades: any[];
-  equity_curve: { timestamp: string; value: number }[];
+  equity_curve: { date: string; equity: number }[];
   error?: string;
 }
 
