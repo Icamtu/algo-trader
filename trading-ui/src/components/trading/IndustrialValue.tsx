@@ -34,12 +34,13 @@ export function IndustrialValue({
     restDelta: 0.001,
   });
 
-  const displayValue = useTransform(spring, (latest) => 
-    latest.toLocaleString(undefined, { 
+  const displayValue = useTransform(spring, (latest) => {
+    if (isNaN(latest) || latest === null || latest === undefined) return "0.00";
+    return latest.toLocaleString(undefined, { 
       minimumFractionDigits: decimals, 
       maximumFractionDigits: decimals 
-    })
-  );
+    });
+  });
 
   useEffect(() => {
     const safeValue = value ?? 0;

@@ -15,6 +15,7 @@ import { IndustrialValue } from "./IndustrialValue";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAppModeStore } from "@/stores/appModeStore";
 import { LatencyMonitor } from "./LatencyMonitor";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 const initialMarkets = [
@@ -36,7 +37,7 @@ export function GlobalHeader() {
   const [intelSettings, setIntelSettings] = useState<{decision_mode: "ai" | "program" | "human"; llm_model: string; provider: "ollama" | "openclaw"; agent_enabled: boolean; agent_error_reason: string}>({ decision_mode: 'ai', llm_model: 'mistral', provider: 'ollama', agent_enabled: true, agent_error_reason: "" });
   const intelRef = useRef<HTMLDivElement | null>(null);
   const [intelDropdownOpen, setIntelDropdownOpen] = useState(false);
-  const [telemetry, setTelemetry] = useState({ regime: "NEUTRAL", active_trades_count: 0 });
+  const [telemetry, setTelemetry] = useState({ regime: "NEUTRAL", active_trades_count: 0, uptime: 0 });
   const tradingMode = useTradingMode();
   const { mode, setMode } = useAppModeStore();
   const [marketData, setMarketData] = useState(initialMarkets);
@@ -258,28 +259,21 @@ export function GlobalHeader() {
             </Dialog>
           </div>
 
-          {/* AD/OA Mode Toggle Pill */}
-          <div className="flex bg-card/50 p-0.5 border border-border ml-2">
-            <button 
-              onClick={() => setMode('AD')}
-              className={`px-3 h-6 text-[8px] font-mono font-black transition-all ${
-                mode === 'AD' 
-                  ? "bg-amber-500 text-black" 
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              AD
-            </button>
-            <button 
-              onClick={() => setMode('OA')}
-              className={`px-3 h-6 text-[8px] font-mono font-black transition-all ${
-                mode === 'OA' 
-                  ? "bg-teal-500 text-black" 
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              OA
-            </button>
+          {/* Identity Selector Upgrade */}
+          <div className="flex items-center gap-3 px-3 h-8 bg-card/20 border border-border ml-2 group">
+            <span className={cn(
+              "text-[7px] font-mono font-black transition-colors",
+              mode === 'OA' ? "text-teal-500" : "text-muted-foreground/30"
+            )}>OA</span>
+            <Switch 
+              checked={mode === 'AD'} 
+              onCheckedChange={(checked) => setMode(checked ? 'AD' : 'OA')}
+              className="scale-[0.6]"
+            />
+            <span className={cn(
+              "text-[7px] font-mono font-black transition-colors",
+              mode === 'AD' ? "text-amber-500" : "text-muted-foreground/30"
+            )}>AD</span>
           </div>
 
           {/* Global Settings */}
@@ -316,14 +310,13 @@ export function GlobalHeader() {
                 <div className="scanline opacity-10" />
                 <h4 className="text-[9px] font-black uppercase tracking-[0.3em] text-primary mb-4 border-b border-border pb-1">Neural_Parameters</h4>
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9px] font-black uppercase">AUTO_EXEC</span>
-                    <button
-                      onClick={() => updateIntelSetting('agent_enabled', !intelSettings.agent_enabled)}
-                      className={`w-8 h-4 border ${intelSettings.agent_enabled ? "bg-primary border-primary" : "bg-card border-border"}`}
-                    >
-                      <div className={`w-1.5 h-full transition-all ${intelSettings.agent_enabled ? "translate-x-5 bg-black" : "translate-x-0 bg-muted-foreground/30"}`} />
-                    </button>
+                  <div className="flex items-center justify-between group">
+                    <span className="text-[9px] font-black uppercase text-muted-foreground group-hover:text-foreground transition-colors">AUTO_EXEC</span>
+                    <Switch
+                        checked={intelSettings.agent_enabled}
+                        onCheckedChange={(checked) => updateIntelSetting('agent_enabled', checked)}
+                        className="scale-75"
+                    />
                   </div>
                 </div>
               </motion.div>
@@ -357,6 +350,13 @@ export function GlobalHeader() {
           <div className="text-right flex flex-col items-end pr-4 border-r border-border/10">
             <span className="text-[7px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mb-0.5">DLT</span>
             <IndustrialValue value={382000} prefix="+₹" className="text-[10px] font-black text-secondary" />
+          </div>
+          
+          <div className="text-right flex flex-col items-end pr-4 border-r border-border/10">
+            <span className="text-[7px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mb-0.5">UPTIME</span>
+            <span className="text-[10px] font-black font-mono text-primary">
+               {Math.floor((telemetry?.uptime || 0) / 3600)}H {Math.floor(((telemetry?.uptime || 0) % 3600) / 60)}M
+            </span>
           </div>
           
           <div className="flex items-center gap-4">

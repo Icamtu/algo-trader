@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { PlayCircle, ShieldCheck, Activity, Check, X, Trash2, RefreshCw, Info, ArrowUp, ArrowDown, ChevronDown, ChevronUp, AlertTriangle, Terminal, Settings, Shield, ShieldAlert, ZapOff } from 'lucide-react';
+import { PlayCircle, ShieldCheck, Activity, Check, X, Trash2, RefreshCw, Info, ArrowUp, ArrowDown, ChevronDown, ChevronUp, AlertTriangle, Terminal, Settings, Shield, ShieldAlert, ZapOff, ShieldCheck as ShieldIcon } from 'lucide-react';
 import { AetherPanel } from '@/components/ui/AetherPanel';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { tradingService } from '@/services/tradingService';
 import { cn } from '@/lib/utils';
@@ -500,22 +500,53 @@ export const ActionCenterPage: React.FC = () => {
               </div>
 
               <div className="space-y-6">
-                 <div className="space-y-3">
-                    <label className="text-[9px] font-mono font-black text-muted-foreground/60 uppercase tracking-widest pl-1">Institutional Kill-Switch</label>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between pl-1">
+                      <label className="text-[9px] font-mono font-black text-muted-foreground/60 uppercase tracking-widest leading-none">Institutional Kill-Switch</label>
+                      <Badge variant="outline" className={cn("text-[8px] border-white/5 opacity-50 font-mono", safeguardConfig.is_armed ? primaryColorClass : "text-muted-foreground")}>
+                        {safeguardConfig.is_armed ? "ACTIVE_GUARD" : "BYPASSED"}
+                      </Badge>
+                    </div>
+                    
                     <div 
-                      onClick={() => setSafeguardConfig(prev => ({ ...prev, is_armed: !prev.is_armed }))}
                       className={cn(
-                        "p-4 border font-mono text-[10px] font-black uppercase flex items-center justify-between cursor-pointer transition-all",
-                        safeguardConfig.is_armed ? (isAD ? "bg-primary/10 border-primary text-primary" : "bg-teal-500/10 border-teal-500 text-teal-500") : "bg-muted/10 border-border/20 text-muted-foreground/40"
+                        "p-5 border flex items-center justify-between transition-all duration-500",
+                        safeguardConfig.is_armed 
+                          ? (isAD ? "bg-amber-500/5 border-amber-500/30" : "bg-teal-500/5 border-teal-500/30") 
+                          : "bg-background border-border/10 opacity-60"
                       )}
                     >
-                       <div className="flex items-center gap-3">
-                          {safeguardConfig.is_armed ? <Shield className="w-4 h-4" /> : <ZapOff className="w-4 h-4" />}
-                          {safeguardConfig.is_armed ? "ARMED_AND_WATCHING" : "DISARMED_PROTOCOL"}
+                       <div className="flex items-center gap-4">
+                          <div className={cn(
+                            "p-2 rounded-none border transition-colors",
+                            safeguardConfig.is_armed ? (isAD ? "bg-amber-500/20 border-amber-500 text-amber-500" : "bg-teal-500/20 border-teal-500 text-teal-500") : "bg-muted/10 border-border text-muted-foreground/40"
+                          )}>
+                             {safeguardConfig.is_armed ? <ShieldIcon className="w-5 h-5 animate-pulse" /> : <ZapOff className="w-5 h-5" />}
+                          </div>
+                          <div>
+                            <div className={cn("text-[11px] font-mono font-black uppercase tracking-widest", safeguardConfig.is_armed ? "text-foreground" : "text-muted-foreground/40")}>
+                               {safeguardConfig.is_armed ? "ARMED_AND_WATCHING" : "DISARMED_PROTOCOL"}
+                            </div>
+                            <div className="text-[8px] font-mono text-muted-foreground/30 uppercase mt-0.5">Vector_Breach_Detection_Active</div>
+                          </div>
                        </div>
-                       <div className={cn("w-2 h-2 rounded-full", safeguardConfig.is_armed ? (isAD ? "bg-primary animate-pulse shadow-[0_0_8px_rgba(255,176,0,0.5)]" : "bg-teal-500 animate-pulse shadow-[0_0_8px_rgba(20,184,166,0.5)]") : "bg-muted-foreground/20")} />
+                       
+                        <div className="flex items-center gap-3">
+                          <span className={cn(
+                            "text-[8px] font-mono font-black transition-colors",
+                            !safeguardConfig.is_armed ? "text-rose-500" : "text-muted-foreground/20"
+                          )}>BYPASS</span>
+                          <Switch 
+                            checked={safeguardConfig.is_armed}
+                            onCheckedChange={(checked) => setSafeguardConfig(prev => ({ ...prev, is_armed: checked }))}
+                          />
+                          <span className={cn(
+                            "text-[8px] font-mono font-black transition-colors",
+                            safeguardConfig.is_armed ? (isAD ? "text-amber-500" : "text-teal-500") : "text-muted-foreground/20"
+                          )}>ARMED</span>
+                        </div>
                     </div>
-                 </div>
+                  </div>
 
                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">

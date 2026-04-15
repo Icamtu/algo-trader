@@ -1,0 +1,63 @@
+# OpenAlgo & OpenClaw AI Agent Rules
+# This file provides high-level architectural and behavioral guidance for AI agents working in this repository.
+
+## 1. Architectural Guardrails
+- **Database Strategy**: Use **Pure SQLite ONLY**. NEVER attempt to install or use PostgreSQL.
+- **Docker Paths**: Always use relative paths (e.g., `/app/db`) within Docker containers for volume persistence.
+- **Data Integrity**: Maintain ACID compliance across all SQLite files.
+
+## 2. Environment & Networking
+- **Network Stack**: All services operate on the `trading_net` network.
+- **Service Discovery**: Access other services via their container names and internal ports (e.g., `openalgo-web:8765`).
+- **Resource Constraints**: Strictly adhere to the **1GB RAM limit** for the `algo_engine` Python service.
+
+## 3. File System & Permissions
+- **Database Permissions**: The `openalgo/db/` directory and its contents MUST have **777** permissions for container access.
+- **Database Roles**:
+  - `openalgo.db`: Live trading data/state.
+  - `sandbox.db`: Simulation/testing data.
+  - `logs.db`: System and execution logs.
+  - `latency.db`: Latency audit data and stress-test results.
+
+## 4. Broker & Secrets (Safety First)
+- **Primary Broker**: Shoonya (Finvasia).
+- **Primary Account**: `FA257063_U`.
+- **Sensitive Data**: NEVER hardcode credentials. ALWAYS use `.env` files.
+- **Critical Logic**: Preserve WebSocket heartbeats and safety checks in `live_feed.py`. Avoid modifications that could break live trade connectivity.
+
+## 5. Performance & Auditing
+- **Latency Targets**: Perform periodic audits via `latency.db` to ensure low-latency performance.
+- **Data Compliance**: Ensure ACID compliance is never compromised during batch operations.
+
+## 6. Agent "Status Check" Protocol
+- When a user asks for a "**Status Check**", ALWAYS read the following files first to ensure you have the current configuration:
+  1. `.env`
+  2. `docker-compose.yml`
+  3. `openclaw/openclaw.json` (if working on reporting)
+
+## 7. Frontend Design Canon
+- For `trading-ui` product design, UX strategy, visual refreshes, dashboard concepts, or frontend implementation work, consult `.agents/aetherdesk-frontend-brief.md` first.
+- Preserve the current stack unless the user explicitly asks for a migration:
+  - `SvelteKit 2` + `Svelte 5` + `TypeScript`
+  - `lightweight-charts` and `gsap`
+  - existing `trading-ui/src/lib/components/*` building blocks
+- Do NOT assume a rewrite to `Next.js`, `Tailwind`, `shadcn/ui`, `PostgreSQL`, `TimescaleDB`, or `ClickHouse`. Those may be future options, but the current system is the source of truth.
+- When a design asks for premium multi-broker institutional UX, adapt it to the live workspace reality:
+  - primary broker and live path: `Shoonya` via `OpenAlgo`
+  - current persistence: SQLite files in `openalgo/db/`
+  - current AI layer: `OpenClaw` with local/remote LLM routing
+- Prefer implementing premium UX with progressive enhancement inside the current codebase over proposing a greenfield rebuild.
+
+## 8. Debugging & Versioning Protocol
+- **Location**: All project-level debugging sessions MUST be documented in `.agent/.agents/debug_history/`.
+- **Naming**: Use the `vN_topic.md` convention (e.g., `v1_initial_stabilization.md`).
+- **Indexing**: Always update the `index.md` in the same directory with the latest version, date, and status.
+- **Content**: Reports should include:
+  - `Context`: Why this is happening.
+  - `Diagnosis`: Log analysis, root cause findings.
+  - `Fix Executed`: Exact commands or code changes.
+  - `Outcome`: Current state (RESOLVED/PENDING).
+- **Memory**: Before starting a new debugging task, agents MUST check the `index.md` and the most recent `vN` report to avoid redundant work.
+
+---
+*Created on 2026-04-03 based on Gemini instructions. Updated on 2026-04-07 with Debugging Protocol.*

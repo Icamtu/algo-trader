@@ -18,6 +18,12 @@
 
 ## Response Guidelines
 - ** Concise, code-first, minimal. **
+- ** SUPERPOWERS **: Invoke relevant skills BEFORE every response. Use `using-superpowers` as entry point.
+- ** GSTACK ROLES **: Invoke specialized personas for deep audits:
+  - `/ceo`: Strategic product challenge & scope audit
+  - `/cso`: Security threat modeling (OWASP/STRIDE)
+  - `/qa`: Interactive browser-based quality assurance
+  - `/designer`: UX/UI slop detection and aesthetic review
 - ** UNIFIED Ports **: Always use **18788** for REST and **5002** for Ticks.
 - ** Native Modules **: Prefer `algo-trader/api.py` for all new endpoints.
 

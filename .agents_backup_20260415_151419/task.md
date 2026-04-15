@@ -1,0 +1,7 @@
+- [x] Create `openalgo/db/` directory with 777 permissions
+- [x] Migrate data from `openalgo_db` Docker volume to `openalgo/db/`
+- [x] Migrate data from `data/openclaw` to `openclaw/` in root
+- [x] Update `docker-compose.yml` with RAM limits and new volume paths
+- [x] Verify services start correctly and enforce RAM limits
+- [x] Standardize `maxTokens` to 4096 in OpenClaw config
+- [x] Remove legacy `data/` and PostgreSQL files

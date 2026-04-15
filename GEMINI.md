@@ -1,3 +1,11 @@
+# Superpowers Core
+@.agents/skills/using-superpowers/SKILL.md
+@.agents/skills/using-superpowers/references/gemini-tools.md
+@.agents/skills/gstack-ceo/SKILL.md
+@.agents/skills/gstack-cso/SKILL.md
+@.agents/skills/gstack-qa/SKILL.md
+@.agents/skills/gstack-designer/SKILL.md
+
 # GEMINI.md — Project Memory Map
 
 ## Full Architecture

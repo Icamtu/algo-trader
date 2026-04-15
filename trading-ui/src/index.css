@@ -61,6 +61,25 @@
   * {
     border-radius: var(--radius) !important;
     box-sizing: border-box;
+    /* Apply custom scrollbar globally */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 4px;
+    transition: background 0.3s ease;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
   }
 
   body {

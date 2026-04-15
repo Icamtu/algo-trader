@@ -4,6 +4,7 @@ import { BacktestAnalyticsView } from "./BacktestAnalyticsView";
 import { algoApi } from "@/features/openalgo/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { IndustrialValue } from "./IndustrialValue";
+import { Switch } from "@/components/ui/switch";
 
 const canvasTabs = ["Backtest", "Walk-Forward", "Monte Carlo", "Forward Test", "Live"] as const;
 
@@ -21,6 +22,44 @@ export function BacktestCanvas() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
   const { toast } = useToast();
+  const [selectedStrategy, setSelectedStrategy] = useState("Momentum Alpha");
+  
+  // Simulation Flags
+  const [useCache, setUseCache] = useState(true);
+  const [parallelExec, setParallelExec] = useState(false);
+
+  const handleRunBacktest = async () => {
+    setIsRunning(true);
+    toast({
+      title: "Kernel Initialization",
+      description: `Starting backtest for ${selectedStrategy}...`,
+    });
+
+    try {
+      const response = await algoApi.runBacktest({
+        strategy_key: "AetherScalper", // Match backend map
+        symbol: "RELIANCE",
+        days: 7 // Backend default
+      });
+
+      if (response) {
+        toast({
+          title: "Execution Complete",
+          description: "Backtest successfully finalized.",
+        });
+        // Success: Trigger results refresh
+        fetchResults();
+      }
+    } catch (err: any) {
+      toast({
+        variant: "destructive",
+        title: "Kernel Panic",
+        description: err.message || "An unexpected error occurred during execution.",
+      });
+    } finally {
+      setIsRunning(false);
+    }
+  };
 
   const fetchResults = async (retryCount = 0) => {
     setIsLoading(true);
@@ -87,6 +126,44 @@ export function BacktestCanvas() {
         </div>
 
         <ControlDropdown label="UNI" value="NIFTY_50" />
+
+        <div className="flex items-center gap-6 px-4 py-1.5 border border-border/20 bg-card/5 ml-2">
+            <div className="flex items-center gap-3 group">
+               <span className={cn(
+                 "text-[7px] font-mono font-black transition-colors uppercase tracking-widest",
+                 useCache ? "text-primary" : "text-muted-foreground/30"
+               )}>USE_CACHE</span>
+               <Switch 
+                 checked={useCache} 
+                 onCheckedChange={setUseCache} 
+                 className="scale-75"
+               />
+            </div>
+            <div className="flex items-center gap-3 group">
+               <span className={cn(
+                 "text-[7px] font-mono font-black transition-colors uppercase tracking-widest",
+                 parallelExec ? "text-primary" : "text-muted-foreground/30"
+               )}>PARALLEL_EXEC</span>
+               <Switch 
+                 checked={parallelExec} 
+                 onCheckedChange={setParallelExec} 
+                 className="scale-75"
+               />
+            </div>
+        </div>
+
+        <button
+          onClick={handleRunBacktest}
+          disabled={isRunning}
+          className="ml-auto flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground font-mono text-[9px] font-black uppercase tracking-widest hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-[0_4px_0_0_rgba(0,0,0,0.2)] active:translate-y-[2px] active:shadow-none"
+        >
+          {isRunning ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <Settings2 className="w-3 h-3" />
+          )}
+          {isRunning ? "Kernel Active" : "Run Backtest"}
+        </button>
       </div>
 
       {/* Historical Telemetry Table */}

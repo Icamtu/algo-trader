@@ -3,6 +3,7 @@ import { Key, Copy, RefreshCw, Eye, EyeOff, ShieldCheck, Zap, AlertCircle, Termi
 import { AetherPanel } from '@/components/ui/AetherPanel';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { tradingService } from '@/services/tradingService';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
@@ -159,38 +160,54 @@ export const ConnectivityPage: React.FC = () => {
               </div>
             </div>
 
-             <div className="grid grid-cols-2 gap-3">
-               <button 
-                 onClick={() => handleToggleMode('auto')}
+             <div className="space-y-4">
+               <div 
                  className={cn(
-                   "flex flex-col items-center justify-center p-6 border transition-all gap-3 rounded-none",
+                   "p-5 border flex items-center justify-between transition-all duration-500",
                    orderMode === 'auto' 
-                     ? (isAD ? "bg-primary/5 border-primary text-primary shadow-[0_4px_20px_rgba(255,176,0,0.1)]" : "bg-teal-500/5 border-teal-500 text-teal-500 shadow-[0_4px_20px_rgba(20,184,166,0.1)]")
-                     : "bg-background border-white/[0.05] text-muted-foreground/40 hover:border-white/[0.1] hover:text-muted-foreground/60"
+                     ? (isAD ? "bg-amber-500/5 border-amber-500/30 shadow-[0_4px_20px_rgba(255,176,0,0.1)]" : "bg-teal-500/5 border-teal-500/30 shadow-[0_4px_20px_rgba(20,184,166,0.1)]") 
+                     : "bg-background border-border/10 opacity-60"
                  )}
                >
-                 <Zap className={cn("w-6 h-6 transition-all", orderMode === 'auto' ? "animate-pulse" : "opacity-10")} />
-                 <div className="text-center">
-                   <div className="text-[10px] font-black font-mono uppercase tracking-widest">Auto_Mode</div>
-                   <div className="text-[8px] font-mono opacity-20 mt-1 uppercase italic">Direct_Fire</div>
-                 </div>
-               </button>
+                  <div className="flex items-center gap-4">
+                     <div className={cn(
+                       "p-2 rounded-none border transition-colors",
+                       orderMode === 'auto' ? (isAD ? "bg-amber-500/20 border-amber-500 text-amber-500" : "bg-teal-500/20 border-teal-500 text-teal-500") : "bg-muted/10 border-border text-muted-foreground/40"
+                     )}>
+                        <Zap className={cn("w-5 h-5", orderMode === 'auto' && "animate-pulse")} />
+                     </div>
+                     <div>
+                       <div className={cn("text-[11px] font-mono font-black uppercase tracking-widest transition-colors", orderMode === 'auto' ? "text-foreground" : "text-muted-foreground/40")}>
+                          AUTO_EXECUTION_MODE
+                       </div>
+                       <div className="text-[8px] font-mono text-muted-foreground/30 uppercase mt-0.5 italic">Direct_Engine_Handoff</div>
+                     </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={cn(
+                      "text-[8px] font-mono font-black transition-colors",
+                      orderMode === 'semi_auto' ? (isAD ? "text-amber-500" : "text-teal-500") : "text-muted-foreground/20"
+                    )}>SEMI</span>
+                    <Switch 
+                      checked={orderMode === 'auto'}
+                      onCheckedChange={(checked) => handleToggleMode(checked ? 'auto' : 'semi_auto')}
+                    />
+                    <span className={cn(
+                      "text-[8px] font-mono font-black transition-colors",
+                      orderMode === 'auto' ? (isAD ? "text-amber-500" : "text-teal-500") : "text-muted-foreground/20"
+                    )}>AUTO</span>
+                  </div>
+               </div>
 
-               <button 
-                 onClick={() => handleToggleMode('semi_auto')}
-                 className={cn(
-                   "flex flex-col items-center justify-center p-6 border transition-all gap-3 rounded-none",
-                   orderMode === 'semi_auto' 
-                     ? (isAD ? "bg-primary/5 border-primary text-primary shadow-[0_4px_20px_rgba(255,176,0,0.1)]" : "bg-teal-500/5 border-teal-500 text-teal-500 shadow-[0_4px_20px_rgba(20,184,166,0.1)]")
-                     : "bg-background border-white/[0.05] text-muted-foreground/40 hover:border-white/[0.1] hover:text-muted-foreground/60"
-                 )}
-               >
-                 <AlertCircle className={cn("w-6 h-6 transition-all", orderMode === 'semi_auto' ? "animate-pulse" : "opacity-10")} />
-                 <div className="text-center">
-                   <div className="text-[10px] font-black font-mono uppercase tracking-widest">Semi_Auto</div>
-                   <div className="text-[8px] font-mono opacity-20 mt-1 uppercase italic">Manual_Gate</div>
-                 </div>
-               </button>
+               <div className="p-4 bg-foreground/[0.02] border border-white/[0.03] space-y-3">
+                  <div className="flex items-center gap-3">
+                    <AlertCircle className="w-3.5 h-3.5 text-muted-foreground/40" />
+                    <span className="text-[9px] font-mono font-black text-muted-foreground/60 uppercase tracking-widest">Operator_Gate_Requirements</span>
+                  </div>
+                  <p className="text-[9px] font-mono text-muted-foreground/40 uppercase leading-relaxed tracking-wider italic">
+                    When Auto Mode is disabled, all incoming signals will require manual authorization in the Action Center.
+                  </p>
+               </div>
             </div>
 
              <div className="mt-8 p-3 bg-foreground/[0.01] border border-white/[0.03] relative overflow-hidden italic">

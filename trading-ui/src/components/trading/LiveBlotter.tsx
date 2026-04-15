@@ -62,7 +62,7 @@ function BlotterRow({
     <tr 
       className={`group/row cursor-crosshair relative border-b border-border/5 last:border-b-0 transition-colors duration-500 ${flashClass}`}
     >
-      <td className="px-3 py-1.5 text-[10px] font-black font-display text-foreground tracking-widest uppercase border-r border-border/5">
+      <td className="px-4 py-1.5 text-[10px] font-black font-display text-foreground tracking-widest uppercase border-r border-border/5">
         <div className="flex flex-col gap-0.5">
           {p.symbol}
           {p.metadata?.scaled && (
@@ -72,27 +72,27 @@ function BlotterRow({
           )}
         </div>
       </td>
-      <td className="px-3 py-1.5 border-r border-border/5">
+      <td className="px-4 py-1.5 border-r border-border/5">
         <span className={`text-[8px] font-mono font-black uppercase tracking-widest ${p.side === "LONG" ? "text-secondary" : "text-destructive"}`}>
           {p.side}
         </span>
       </td>
-      <td className="px-3 py-1.5 text-[10px] font-mono font-black text-foreground/70 tabular-nums border-r border-border/5">{Math.abs(p.qty)}</td>
-      <td className="px-3 py-1.5 text-[9px] font-mono font-black text-muted-foreground/30 tabular-nums border-r border-border/5">{p.entry_price.toFixed(2)}</td>
-      <td className="px-3 py-1.5 border-r border-border/5">
+      <td className="px-4 py-1.5 text-[10px] font-mono font-black text-foreground/70 tabular-nums border-r border-border/5">{Math.abs(p.qty)}</td>
+      <td className="px-4 py-1.5 text-[9px] font-mono font-black text-muted-foreground/30 tabular-nums border-r border-border/5">{p.entry_price.toFixed(2)}</td>
+      <td className="px-4 py-1.5 border-r border-border/5">
         <IndustrialValue value={p.ltp} className="text-[10px] font-black text-foreground tabular-nums" />
       </td>
-      <td className="px-3 py-1.5 border-r border-border/5">
+      <td className="px-4 py-1.5 border-r border-border/5">
         <IndustrialValue 
           value={pnlValue} 
           prefix="₹" 
           className={`text-[10px] font-black tabular-nums ${isPositive ? "text-secondary" : "text-destructive"}`} 
         />
       </td>
-      <td className={`px-3 py-1.5 text-[9px] font-mono font-black tabular-nums border-r border-border/5 ${isPositive ? "text-secondary" : "text-destructive"}`}>
+      <td className={`px-4 py-1.5 text-[9px] font-mono font-black tabular-nums border-r border-border/5 ${isPositive ? "text-secondary" : "text-destructive"}`}>
         {isPositive ? "+" : ""}{pnlPct.toFixed(2)}%
       </td>
-      <td className="px-3 py-1.5 text-[8px] font-mono font-black text-muted-foreground/20 uppercase tracking-[0.1em] border-r border-border/5">{p.strategy}</td>
+      <td className="px-4 py-1.5 text-[8px] font-mono font-black text-muted-foreground/20 uppercase tracking-[0.1em] border-r border-border/5">{p.strategy}</td>
       <td className="px-3 py-1.5 text-right flex gap-1 justify-end">
         <button 
           onClick={() => handleKill(p.symbol)}
