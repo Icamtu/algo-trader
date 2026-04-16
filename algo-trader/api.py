@@ -1886,7 +1886,7 @@ def create_app():
         """Bridge for /apikey used by UI."""
         return jsonify({
             "status": "success",
-            "apikey": app.config.get("API_KEY", "AetherDesk_Unified_Key_2026")
+            "apikey": app.config.get("API_KEY") or os.getenv("API_KEY")
         }), 200
 
     @app.route("/api/v1/settings", methods=["GET", "POST"])

@@ -9,17 +9,17 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 # --- CONFIG ---
-AUTH_CODE    = "555ced3a-b6d5-482b-b744-d7830c87d4ab"
-USER_ID      = os.getenv("SHOONYA_USER_ID", "FA257063")
-SECRET_KEY   = os.getenv("BROKER_API_SECRET", "15ZHfDJjxb77RBJIIcchEbf0G2ridCZJDN2KIiELA7rG5fPdoIAORNaHqe6hD29l")
-FULL_KEY      = os.getenv("BROKER_API_KEY", "FA257063:::FA257063_U")
-CLIENT_ID    = FULL_KEY.split(":::")[1] if ":::" in FULL_KEY else FULL_KEY
-DB_PATH      = "openalgo/db/openalgo.db"
+AUTH_CODE    = os.getenv("SHOONYA_AUTH_CODE", "") # Should be passed as argument, empty default
+USER_ID      = os.getenv("SHOONYA_USER_ID")
+SECRET_KEY   = os.getenv("BROKER_API_SECRET")
+FULL_KEY      = os.getenv("BROKER_API_KEY")
+CLIENT_ID    = FULL_KEY.split(":::")[1] if FULL_KEY and ":::" in FULL_KEY else FULL_KEY
 
 def get_encrypted_token(raw_token):
-    # Dynamically resolve pepper from environment or use a safe default for development
-    # In production, this MUST be set in the engine environment.
-    pepper = os.getenv('API_KEY_PEPPER', 'a25d94718479b170c16278e321ea6c989358bf499a658fd20c90033cef8ce772')
+    # Dynamically resolve pepper from environment
+    pepper = os.getenv('API_KEY_PEPPER')
+    if not pepper:
+         raise EnvironmentError("API_KEY_PEPPER not set in environment")
     kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=b'openalgo_static_salt', iterations=100000)
     key = base64.urlsafe_b64encode(kdf.derive(pepper.encode()))
     f = Fernet(key)
@@ -27,10 +27,14 @@ def get_encrypted_token(raw_token):
 
 def finalize_shoonya_session(auth_code, user_id=None, api_secret=None, broker_api_key=None, target_name='AetherDesk'):
     """Performs handshake and injects session into OpenAlgo DB."""
-    uid = user_id or os.getenv("SHOONYA_USER_ID", "FA257063")
-    secret = api_secret or os.getenv("BROKER_API_SECRET", "15ZHfDJjxb77RBJIIcchEbf0G2ridCZJDN2KIiELA7rG5fPdoIAORNaHqe6hD29l")
-    full_key = broker_api_key or os.getenv("BROKER_API_KEY", "FA257063:::FA257063_U")
-    client_id = full_key.split(":::")[1] if ":::" in full_key else full_key
+    uid = user_id or os.getenv("SHOONYA_USER_ID")
+    secret = api_secret or os.getenv("BROKER_API_SECRET")
+    full_key = broker_api_key or os.getenv("BROKER_API_KEY")
+
+    if not all([uid, secret, full_key]):
+        return {"status": "error", "message": "Missing required Shoonya credentials in environment"}
+
+    client_id = full_key.split(":::")[1] if full_key and ":::" in full_key else full_key
 
     # Use environment-aware DB path
     default_db = "/data/db/openalgo.db"

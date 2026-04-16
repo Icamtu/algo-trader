@@ -51,11 +51,17 @@ def fast_fill(driver, element, value, field_name=""):
 def get_shoonya_auth_code(user_id=None, password=None, totp_secret=None, broker_api_key=None):
     """Captures the OAuth code using robust performance log scanning."""
     # Prioritize passed params, fallback to environment
-    uid = user_id or os.getenv("SHOONYA_USER_ID", "FA257063")
-    pwd = (password or os.getenv("SHOONYA_PASSWORD", "Shoonya22tu#")).strip('"')
-    totp = totp_secret or os.getenv("SHOONYA_TOTP_SECRET", "4TYLQ5AZ26N6MDDP4HMIQKY5A55753NX")
-    full_key = broker_api_key or os.getenv("BROKER_API_KEY", "FA257063:::FA257063_U")
-    client_id = full_key.split(":::")[1] if ":::" in full_key else full_key
+    uid = user_id or os.getenv("SHOONYA_USER_ID")
+    pwd = (password or os.getenv("SHOONYA_PASSWORD", "")).strip('"')
+    totp = totp_secret or os.getenv("SHOONYA_TOTP_SECRET")
+    full_key = broker_api_key or os.getenv("BROKER_API_KEY")
+
+    # Validate
+    if not all([uid, pwd, totp, full_key]):
+        print("  >> Error: Missing Shoonya credentials (SHOONYA_USER_ID, SHOONYA_PASSWORD, SHOONYA_TOTP_SECRET, BROKER_API_KEY)")
+        return None
+
+    client_id = full_key.split(":::")[1] if full_key and ":::" in full_key else full_key
 
     auth_url = f"https://trade.shoonya.com/OAuthlogin/investor-entry-level/login?api_key={client_id}&route_to={uid}&source=API"
 

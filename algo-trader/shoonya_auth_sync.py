@@ -10,16 +10,23 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 # --- CONFIG ---
-USER_ID      = os.getenv("SHOONYA_USER_ID", "FA257063")
-SECRET_KEY   = os.getenv("BROKER_API_SECRET", "15ZHfDJjxb77RBJIIcchEbf0G2ridCZJDN2KIiELA7rG5fPdoIAORNaHqe6hD29l")
-FULL_KEY      = os.getenv("BROKER_API_KEY", "FA257063:::FA257063_U")
-CLIENT_ID    = FULL_KEY.split(":::")[1] if ":::" in FULL_KEY else FULL_KEY
+USER_ID      = os.getenv("SHOONYA_USER_ID")
+SECRET_KEY   = os.getenv("BROKER_API_SECRET")
+FULL_KEY      = os.getenv("BROKER_API_KEY")
+CLIENT_ID    = FULL_KEY.split(":::")[1] if FULL_KEY and ":::" in FULL_KEY else FULL_KEY
+
+# Validate required configuration
+if not all([USER_ID, SECRET_KEY, FULL_KEY]):
+    raise EnvironmentError("Missing required Shoonya credentials in environment (SHOONYA_USER_ID, BROKER_API_SECRET, BROKER_API_KEY)")
+
 # Path Resolution
 DEFAULT_DB = "/app/storage/openalgo.db"
 DB_PATH = os.getenv("OPENALGO_DB_PATH", DEFAULT_DB)
 
 def get_encrypted_token(raw_token):
-    pepper = 'a25d94718479b170c16278e321ea6c989358bf499a658fd20c90033cef8ce772'
+    pepper = os.getenv('API_KEY_PEPPER')
+    if not pepper:
+         raise EnvironmentError("API_KEY_PEPPER not set in environment")
     kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=b'openalgo_static_salt', iterations=100000)
     key = base64.urlsafe_b64encode(kdf.derive(pepper.encode()))
     f = Fernet(key)
