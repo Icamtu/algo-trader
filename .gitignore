@@ -22,6 +22,7 @@ __pycache__/
 *.sqlite3
 *.db
 *.sqlite
+{{ ... }}
 *.duckdb
 algo-trader/data/
 algo-trader/storage/
@@ -57,3 +58,27 @@ pnpm-debug.log*
 trading-ui_backup/
 aetherdesk-prime-source/
 aetherdesk-prime-repo/
+artifacts/
+scratch/
+f.txt
+files.txt
+files_to_fix.txt
+logs.txt
+*.bak
+auth_api_fixed.py
+fix_auth.py
+start_fixed.sh
+test_browser.js
+pipeline_verification_report.json
+artifacts/
+scratch/
+f.txt
+files.txt
+files_to_fix.txt
+logs.txt
+*.bak
+auth_api_fixed.py
+fix_auth.py
+start_fixed.sh
+test_browser.js
+pipeline_verification_report.json

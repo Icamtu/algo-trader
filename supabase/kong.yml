@@ -38,9 +38,7 @@ plugins:
   - name: cors
     config:
       origins:
-        - "http://100.66.171.30"
-        - "http://100.66.171.30:3001"
-        - "http://100.66.171.30:3000"
+        - "*"
       methods:
         - GET
         - POST

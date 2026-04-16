@@ -1,0 +1,145 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { FileCode, Plus, Search, Loader2, Play } from 'lucide-react';
+import { toast } from 'sonner';
+import { CONFIG } from '@/lib/config';
+
+interface StrategySelectionDialogProps {
+  onSelect: (strategyName: string) => void;
+  currentStrategy?: string;
+}
+
+export function StrategySelectionDialog({ onSelect, currentStrategy }: StrategySelectionDialogProps) {
+  const [open, setOpen] = useState(false);
+  const [files, setFiles] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const fetchFiles = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${CONFIG.API_BASE_URL}strategies/files`, {
+        headers: {
+          "Authorization": `Bearer ${localStorage.getItem("aether_token") || "test-token"}`
+        }
+      });
+      if (!response.ok) throw new Error("Failed to fetch strategies");
+      const data = await response.json();
+      setFiles(data.files || []);
+    } catch (e) {
+      toast.error("Could not load strategies");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (open) {
+      fetchFiles();
+    }
+  }, [open]);
+
+  const filteredFiles = files.filter(f => 
+    f.toLowerCase().includes(search.toLowerCase()) && f.endsWith('.py')
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" className="w-full justify-start gap-2 h-10 bg-background/50 border-white/10 hover:border-primary/50 text-xs text-muted-foreground truncate">
+            {currentStrategy ? (
+                <><FileCode className="w-4 h-4 text-primary" /> {currentStrategy}</>
+            ) : (
+                <><Search className="w-4 h-4" /> Select Base Strategy...</>
+            )}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[425px] bg-slate-950 border-white/10 text-white">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileCode className="w-5 h-5 text-primary" />
+            Strategy Explorer
+          </DialogTitle>
+          <DialogDescription className="text-muted-foreground">
+            Select an existing strategy as a base or start from scratch.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-4">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input 
+                placeholder="Search strategies..." 
+                className="pl-9 bg-black/40 border-white/10"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <ScrollArea className="h-[300px] pr-4">
+            {loading ? (
+              <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
+                <Loader2 className="w-6 h-6 animate-spin" />
+                <span>Scanning strategies...</span>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start gap-2 h-12 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
+                  onClick={() => {
+                    onSelect("sample_strategy");
+                    setOpen(false);
+                  }}
+                >
+                  <Plus className="w-4 h-4" />
+                  <div className="text-left">
+                    <div className="text-sm font-medium">Create New (Basics)</div>
+                    <div className="text-[10px] opacity-70">Start from a clean boilerplate</div>
+                  </div>
+                </Button>
+
+                <div className="py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-2">
+                   Existing Strategies
+                </div>
+
+                {filteredFiles.map((file) => (
+                  <Button
+                    key={file}
+                    variant="ghost"
+                    className={`w-full justify-start gap-2 h-10 ${currentStrategy === file.replace('.py', '') ? 'bg-primary/20 text-primary' : 'hover:bg-white/5 text-muted-foreground hover:text-white'}`}
+                    onClick={() => {
+                      onSelect(file.replace('.py', ''));
+                      setOpen(false);
+                    }}
+                  >
+                    <FileCode className="w-4 h-4" />
+                    <span className="truncate">{file}</span>
+                  </Button>
+                ))}
+
+                {filteredFiles.length === 0 && !loading && (
+                  <div className="text-center py-8 text-xs text-muted-foreground">
+                    No matching strategies found.
+                  </div>
+                )}
+              </div>
+            )}
+          </ScrollArea>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
