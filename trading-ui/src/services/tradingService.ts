@@ -35,6 +35,8 @@ export const tradingService = {
   rejectActionCenterOrder: (id: number, reason?: string) => openAlgoAdapter.rejectActionCenterOrder(id, reason),
   deleteActionCenterOrder: (id: number) => openAlgoAdapter.deleteActionCenterOrder(id),
   approveAllActionCenterOrders: () => openAlgoAdapter.approveAllActionCenterOrders(),
+  approveSelectedActionCenterOrders: (ids: number[]) => openAlgoAdapter.approveSelectedActionCenterOrders(ids),
+  rejectSelectedActionCenterOrders: (ids: number[], reason?: string) => openAlgoAdapter.rejectSelectedActionCenterOrders(ids, reason),
 
   // OI Profile & Search
   getOIProfileData: (params: any) => openAlgoAdapter.getOIProfileData(params),

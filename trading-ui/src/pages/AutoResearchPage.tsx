@@ -404,10 +404,21 @@ export default function AutoResearchPage() {
         <Card className="flex-1 flex flex-col bg-card/40 border-border/40 overflow-hidden">
           <div className="flex-none flex items-center justify-between p-4 border-b border-border/40">
               <div className="flex items-center gap-2">
-                  <Code2 className="w-4 h-4 text-primary" />
+                  <div className="relative">
+                    <Code2 className="w-4 h-4 text-primary relative z-10" />
+                    {isRunning && (
+                      <div className="absolute inset-0 bg-primary/20 rounded-full animate-ping scale-150" />
+                    )}
+                  </div>
                   <span className="text-sm font-semibold">
                       {isViewingHistory ? "Historical Snapshot" : `Strategy Evolution (${iterations.length > 0 ? `v${iterations.length}` : 'Base'})`}
                   </span>
+                  {isRunning && (
+                    <div className="flex items-center gap-1.5 ml-4">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                      <span className="text-[10px] text-primary/80 font-mono uppercase tracking-widest">Neural Optimization in Progress...</span>
+                    </div>
+                  )}
                   {historyLoading && <Loader2 className="w-3 h-3 animate-spin" />}
               </div>
               <div className="flex items-center gap-2">
@@ -438,10 +449,37 @@ export default function AutoResearchPage() {
                   )}
               </div>
           </div>
-          <div className="flex-1 p-4 overflow-auto">
-            <pre className="font-mono text-xs text-muted-foreground p-4 bg-black/40 rounded-md whitespace-pre-wrap outline outline-1 outline-border/20">
-              {activeCode || (isViewingHistory ? "// Loading code..." : "// Optimized logic will appear here synchronously with iterations...")}
-            </pre>
+          <div className="flex-1 p-4 overflow-auto bg-[radial-gradient(circle_at_50%_50%,rgba(theme(colors.primary.DEFAULT),0.02),transparent)]">
+            <div className="relative h-full rounded-xl border border-white/5 bg-black/40 backdrop-blur-sm overflow-hidden group/code">
+              {/* Premium Header/Controls */}
+              <div className="absolute top-0 left-0 right-0 h-8 flex items-center px-4 bg-white/5 border-b border-white/5 pointer-events-none">
+                 <div className="flex gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-red-500/30" />
+                    <div className="w-2 h-2 rounded-full bg-amber-500/30" />
+                    <div className="w-2 h-2 rounded-full bg-emerald-500/30" />
+                 </div>
+                 <span className="ml-4 text-[9px] text-muted-foreground font-mono opacity-50 uppercase tracking-tighter">Strategy_Evolution_v{iterations.length}.py</span>
+              </div>
+              
+              <div className="pt-10 pb-4 px-4 h-full overflow-auto custom-scrollbar">
+                <pre className="font-mono text-[11px] leading-relaxed text-blue-100/70 selection:bg-primary/30">
+                  {activeCode || (isViewingHistory ? "// Loading code..." : "// Optimized logic will appear here synchronously with iterations...")}
+                </pre>
+              </div>
+
+              {/* Decorative Neural Pattern */}
+              <div className="absolute bottom-4 right-4 opacity-10 pointer-events-none group-hover/code:opacity-20 transition-opacity">
+                <div className="flex items-center gap-1">
+                   {[...Array(5)].map((_, i) => (
+                     <div 
+                        key={i} 
+                        className={`w-1 bg-primary rounded-full animate-pulse`} 
+                        style={{ height: `${Math.random() * 20 + 5}px`, animationDelay: `${i * 0.1}s` }} 
+                     />
+                   ))}
+                </div>
+              </div>
+            </div>
           </div>
         </Card>
       </div>

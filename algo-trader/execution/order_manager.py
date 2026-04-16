@@ -192,8 +192,9 @@ class OrderManager:
 
         is_filled = resp_status not in {"error", "rejected", "blocked"}
 
-        # 3. Log to database
-        self.trade_logger.log_trade(
+        # 3. Log to database (Phase 9: Async Logging for latency)
+        asyncio.create_task(asyncio.to_thread(
+            self.trade_logger.log_trade,
             strategy=strategy_name,
             symbol=symbol,
             side=action,
@@ -204,7 +205,7 @@ class OrderManager:
             mode=effective_mode,
             ai_reasoning=ai_reasoning,
             conviction=conviction,
-        )
+        ))
 
         # 4. Update in-memory position
         if is_filled:

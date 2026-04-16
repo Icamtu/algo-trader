@@ -4,15 +4,10 @@ import { BacktestAnalyticsView } from "./BacktestAnalyticsView";
 import { algoApi } from "@/features/openalgo/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { IndustrialValue } from "./IndustrialValue";
+import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 
 const canvasTabs = ["Backtest", "Walk-Forward", "Monte Carlo", "Forward Test", "Live"] as const;
-
-const mockData = [
-  { id: "m1", name: "Momentum Alpha v3", date: "2024-01-15", cagr: 34.2, sharpe: 2.34, maxDD: -8.2, winRate: 67.3, pf: 2.1, trades: 1247 },
-  { id: "m2", name: "Momentum Alpha v2", date: "2024-01-10", cagr: 28.9, sharpe: 2.01, maxDD: -11.4, winRate: 63.1, pf: 1.8, trades: 1189 },
-  { id: "m3", name: "Mean Rev Nifty", date: "2024-01-08", cagr: 22.1, sharpe: 1.89, maxDD: -5.1, winRate: 71.2, pf: 2.4, trades: 856 },
-];
 
 export function BacktestCanvas() {
   const [activeTab, setActiveTab] = useState<typeof canvasTabs[number]>("Backtest");
@@ -22,8 +17,8 @@ export function BacktestCanvas() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
   const { toast } = useToast();
-  const [selectedStrategy, setSelectedStrategy] = useState("Momentum Alpha");
-  
+  const [selectedStrategy, setSelectedStrategy] = useState("AetherSwing");
+
   // Simulation Flags
   const [useCache, setUseCache] = useState(true);
   const [parallelExec, setParallelExec] = useState(false);
@@ -37,7 +32,7 @@ export function BacktestCanvas() {
 
     try {
       const response = await algoApi.runBacktest({
-        strategy_key: "AetherScalper", // Match backend map
+        strategy_key: selectedStrategy, // Uses dynamically selected strategy
         symbol: "RELIANCE",
         days: 7 // Backend default
       });
@@ -66,7 +61,7 @@ export function BacktestCanvas() {
     try {
       // Small delay on first fetch to allow kernel to finalize disk write
       if (retryCount === 0) await new Promise(r => setTimeout(r, 800));
-      
+
       const results = await algoApi.getBacktestResults();
       if (results) {
         const mapped = [{
@@ -103,13 +98,13 @@ export function BacktestCanvas() {
     fetchResults();
   }, []);
 
-  const resultsData = useMemo(() => [...dbResults, ...mockData], [dbResults]);
+  const resultsData = useMemo(() => dbResults, [dbResults]);
 
   return (
     <div className="flex-1 flex flex-col min-w-0 industrial-grid relative border-r border-border/50 bg-background/50">
       <div className="noise-overlay" />
       <div className="scanline opacity-10" />
-      
+
       {/* Simulation Controls */}
       <div className="px-3 py-2 bg-card/10 border-b border-border flex items-center gap-3 flex-wrap relative z-10">
         <div className="flex items-center gap-2 border-r border-border/20 pr-3">
@@ -117,9 +112,9 @@ export function BacktestCanvas() {
             <h2 className="text-[9px] font-mono font-black uppercase tracking-[0.2em] text-foreground">Kernel_v4</h2>
         </div>
 
-        <ControlDropdown label="STRAT" value="Momentum Alpha" />
+        <ControlDropdown label="STRAT" value={selectedStrategy} />
         <ControlDropdown label="SCRIPT" value="Nifty_M5" />
-        
+
         <div className="flex items-center gap-2 px-2 py-1 border border-border/30 bg-background/30">
           <Calendar className="w-2.5 h-2.5 text-muted-foreground/40" />
           <span className="text-[8px] font-mono font-black text-foreground/60 uppercase">2020-2024</span>
@@ -133,9 +128,9 @@ export function BacktestCanvas() {
                  "text-[7px] font-mono font-black transition-colors uppercase tracking-widest",
                  useCache ? "text-primary" : "text-muted-foreground/30"
                )}>USE_CACHE</span>
-               <Switch 
-                 checked={useCache} 
-                 onCheckedChange={setUseCache} 
+               <Switch
+                 checked={useCache}
+                 onCheckedChange={setUseCache}
                  className="scale-75"
                />
             </div>
@@ -144,9 +139,9 @@ export function BacktestCanvas() {
                  "text-[7px] font-mono font-black transition-colors uppercase tracking-widest",
                  parallelExec ? "text-primary" : "text-muted-foreground/30"
                )}>PARALLEL_EXEC</span>
-               <Switch 
-                 checked={parallelExec} 
-                 onCheckedChange={setParallelExec} 
+               <Switch
+                 checked={parallelExec}
+                 onCheckedChange={setParallelExec}
                  className="scale-75"
                />
             </div>

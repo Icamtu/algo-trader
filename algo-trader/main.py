@@ -182,7 +182,10 @@ async def broadcast_tick(tick):
             "timestamp": tick.timestamp
         }
 
-def run_flask_server(app, host="0.0.0.0", port=5001):
+# Network binding configuration
+ALGO_HOST = os.getenv("ALGO_HOST", "0.0.0.0")  # nosec B104
+
+def run_flask_server(app, host=ALGO_HOST, port=5001):
     """Run Flask app in a background thread."""
     logger.info(f"Starting Flask API server on {host}:{port}")
     # Enable threading to prevent backtest execution from blocking other API requests
@@ -197,6 +200,7 @@ async def system_health_monitor(order_manager):
 
     # Internal auth for heartbeat push
     port = int(os.getenv("PORT", 18788))
+    # We use localhost here as it's an internal call within the same container
     heartbeat_url = f"http://localhost:{port}/api/v1/system/heartbeat"
     token = os.getenv("JWT_SECRET")
 
@@ -313,7 +317,7 @@ async def async_main():
     server_port = int(os.getenv("PORT", 18788))
     app = create_app()
     flask_thread = threading.Thread(
-        target=partial(run_flask_server, app, "0.0.0.0", server_port),
+        target=partial(run_flask_server, app, ALGO_HOST, server_port),
         daemon=True,
     )
     flask_thread.start()
@@ -322,7 +326,7 @@ async def async_main():
     # Start the WebSocket Relay server for the Frontend UI
     ws_server = await websockets.serve(
         ws_handler,
-        "0.0.0.0",
+        ALGO_HOST,
         PORT_WS_RELAY,
         ping_interval=15,
         ping_timeout=10,

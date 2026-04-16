@@ -1,5 +1,7 @@
 import logging
 import asyncio
+import os
+import json
 from typing import Dict, List, Optional
 from database.trade_logger import get_trade_logger
 from execution.signal_store import get_signal_store
@@ -105,16 +107,22 @@ class ActionManager:
                 "symbol": order['symbol']
             }))
 
-        # Route to OrderManager
+        # Route to OrderManager or Handle Action
         try:
-            # Reconstruct the order payload
-            # Note: order['raw_order_data'] is a JSON string in SQLite, but we'll handle it
+            # Reconstruct the payload
             if isinstance(order.get('raw_order_data'), str):
                 import json
                 payload = json.loads(order['raw_order_data'])
             else:
                 payload = order.get('raw_order_data', {})
 
+            # Check for special action types
+            action_type = order.get('action_type', 'ORDER')
+            
+            if action_type == 'DEPLOY_STRATEGY':
+                return await self._handle_strategy_deployment(order, payload)
+
+            # Default: Order Execution
             strategy = f"{order.get('strategy', 'Manual')}-Approved"
 
             result = await self.order_manager.place_order(
@@ -138,6 +146,33 @@ class ActionManager:
                 return False
         except Exception as e:
             logger.error(f"Error executing approved order {order_id}: {e}", exc_info=True)
+            return False
+
+    async def _handle_strategy_deployment(self, order: dict, payload: dict) -> bool:
+        """Handles the actual file writing for a strategy deployment action."""
+        try:
+            filename = payload.get("filename")
+            code = payload.get("code")
+            
+            if not filename or not code:
+                logger.error(f"Deployment action failed: Missing filename or code in payload")
+                return False
+                
+            strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'strategies'))
+            file_path = os.path.join(strat_dir, filename)
+            
+            # Security check
+            if not os.path.abspath(file_path).startswith(os.path.abspath(strat_dir)):
+                logger.error(f"Forbidden deployment path: {file_path}")
+                return False
+                
+            with open(file_path, "w") as f:
+                f.write(code)
+                
+            logger.info(f"Strategy deployed successfully via HITL Approval: {filename}")
+            return True
+        except Exception as e:
+            logger.error(f"Strategy deployment fault: {e}")
             return False
 
     async def approve_all_pending(self) -> int:

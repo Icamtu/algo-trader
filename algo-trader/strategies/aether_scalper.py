@@ -20,6 +20,7 @@ class AetherScalper(BaseStrategy):
         self.active_trades: Dict[str, Dict] = {}
         self.positions: Dict[str, int] = {s: 0 for s in self.symbols}
         self.risk_per_trade = 500  # ₹500 risk per scalp
+        self.hitl_enabled = True
 
     async def on_tick(self, tick: Tick):
         self.update_history(tick, max_len=100)
@@ -77,28 +78,29 @@ class AetherScalper(BaseStrategy):
                 qty = int(self.risk_per_trade / stop_dist)
                 if qty < 1: qty = 1
 
-                reasoning, conviction = await self.analyze_signal(tick.symbol, tick.price, rsi, 85, f"Scalp Entry | Vol: {vol:.2f} | Regime: {self.regime_status}")
+                # Phase 9: Speed-First Execution. 
+                # Fire trade instantly; synthesize reasoning in the background.
+                await (self.buy if signal == "BUY" else self.sell)(
+                    tick.symbol,
+                    qty,
+                    ai_reasoning=f"High-frequency Scalp: {signal}",
+                    conviction=0.8, # Default threshold for speed-branch
+                    human_approval=self.hitl_enabled
+                )
+                
+                # Attach deep synthesis asynchronously
+                await self.async_analyze_signal(tick.symbol, tick.price, rsi, 85, f"Scalp Entry | Vol: {vol:.2f} | Regime: {self.regime_status}")
+                sl = tick.price - stop_dist if signal == "BUY" else tick.price + stop_dist
+                tp = tick.price + (stop_dist * 1.5) if signal == "BUY" else tick.price - (stop_dist * 1.5)
 
-                if conviction >= 0.8:
-                    # Use human_approval flag for new entries
-                    await (self.buy if signal == "BUY" else self.sell)(
-                        tick.symbol,
-                        qty,
-                        ai_reasoning=reasoning,
-                        conviction=conviction,
-                        human_approval=self.hitl_enabled
-                    )
-                    sl = tick.price - stop_dist if signal == "BUY" else tick.price + stop_dist
-                    tp = tick.price + (stop_dist * 1.5) if signal == "BUY" else tick.price - (stop_dist * 1.5)
-
-                    self.active_trades[tick.symbol] = {
-                        "side": signal,
-                        "entry_price": tick.price,
-                        "sl": sl,
-                        "tp": tp,
-                        "at_breakeven": False
-                    }
-                    self.positions[tick.symbol] = qty if signal == "BUY" else -qty
+                self.active_trades[tick.symbol] = {
+                    "side": signal,
+                    "entry_price": tick.price,
+                    "sl": sl,
+                    "tp": tp,
+                    "at_breakeven": False
+                }
+                self.positions[tick.symbol] = qty if signal == "BUY" else -qty
 
     async def on_start(self):
         await super().on_start()

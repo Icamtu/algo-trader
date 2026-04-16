@@ -5,6 +5,11 @@ import { useAppModeStore } from "@/stores/appModeStore";
 import { algoApi } from "@/features/openalgo/api/client";
 import { IndustrialValue } from "./IndustrialValue";
 import { useToast } from "@/hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 
 const tabs = ["Live", "Paper", "Backtest", "Optimize"] as const;
 
@@ -39,6 +44,9 @@ export function StrategySidebar() {
   const [filterQuery, setFilterQuery] = useState("");
   const { toast } = useToast();
   const { mode } = useAppModeStore();
+  const [newStrategyOpen, setNewStrategyOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newStratData, setNewStratData] = useState({ name: "", template: "aether_scalper" });
   const isAD = mode === 'AD';
   const accentColor = isAD ? "text-primary" : "text-teal";
   const accentBg = isAD ? "bg-primary/5" : "bg-teal/5";
@@ -77,11 +85,48 @@ export function StrategySidebar() {
     return true;
   }).filter(s => s.name.toUpperCase().includes(filterQuery.toUpperCase()));
 
-  const handleDeploy = () => {
-    toast({
-      title: "DEPLOYMENT_INITIALIZED",
-      description: "Establishing new signal sequence...",
-    });
+  const handleCreate = async () => {
+    if (!newStratData.name) return;
+    try {
+      setIsCreating(true);
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || "http://localhost:18788"}/api/v1/strategies`, {
+        method: "POST",
+        headers: { 
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || ""
+        },
+        body: JSON.stringify(newStratData)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast({
+          title: "STRATEGY_DEployed",
+          description: `Initialized ${newStratData.name} from kernel.`,
+        });
+        setNewStrategyOpen(false);
+        setNewStratData({ name: "", template: "aether_scalper" });
+        // Refresh strategies
+        const updated = await algoApi.getStrategies();
+        setStrategies(updated.strategies.map((s: any) => ({
+          name: s.name,
+          type: s.mode || "Trend",
+          sharpe: 1.5 + Math.random() * 2,
+          dd: -(Math.random() * 15).toFixed(1),
+          status: s.is_active ? "live" : "backtest",
+          pnl: s.is_active ? `${(Math.random() * 5).toFixed(1)}` : "-"
+        })));
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (e: any) {
+      toast({
+        variant: "destructive",
+        title: "INITIALIZATION_FAILED",
+        description: e.message,
+      });
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   return (
@@ -91,13 +136,60 @@ export function StrategySidebar() {
       <div className="p-2.5 border-b border-border bg-card/5 backdrop-blur-md relative z-10">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-[10px] font-mono font-black uppercase tracking-[0.3em] text-primary">Signal_Sets</h2>
-          <button 
-            onClick={handleDeploy}
-            className="flex items-center gap-1.5 px-2 py-1 bg-foreground text-background hover:bg-primary hover:text-black transition-all"
-          >
-            <Plus className="w-2.5 h-2.5" />
-            <span className="text-[8px] font-mono font-black uppercase tracking-widest leading-none">Deploy</span>
-          </button>
+          <Dialog open={newStrategyOpen} onOpenChange={setNewStrategyOpen}>
+            <DialogTrigger asChild>
+              <button 
+                className="flex items-center gap-1.5 px-2 py-1 bg-foreground text-background hover:bg-primary hover:text-black transition-all"
+              >
+                <Plus className="w-2.5 h-2.5" />
+                <span className="text-[8px] font-mono font-black uppercase tracking-widest leading-none">Deploy</span>
+              </button>
+            </DialogTrigger>
+            <DialogContent className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/95 border-2 border-primary/20 p-6 w-[400px] z-[200] shadow-[0_0_50px_rgba(255,160,0,0.1)]">
+              <DialogHeader>
+                <DialogTitle className="text-primary font-display text-lg font-black uppercase tracking-tighter flex items-center gap-2">
+                  <Plus className="w-5 h-5" />
+                  NEW_STRATEGY_KERNEL
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name" className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Strategy_Identity</Label>
+                  <Input 
+                    id="name" 
+                    placeholder="e.g. ALPHA_V1" 
+                    className="h-10 border-border bg-white/5 font-mono text-sm"
+                    value={newStratData.name}
+                    onChange={(e) => setNewStratData({...newStratData, name: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="template" className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Logic_Kernel</Label>
+                  <Select 
+                    value={newStratData.template} 
+                    onValueChange={(v) => setNewStratData({...newStratData, template: v})}
+                  >
+                    <SelectTrigger className="h-10 border-border bg-white/5 font-mono text-sm">
+                      <SelectValue placeholder="Select Template" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-background border-border">
+                      <SelectItem value="aether_scalper" className="text-xs uppercase font-black">Aether_Scalper (v1.2)</SelectItem>
+                      <SelectItem value="aether_swing" className="text-xs uppercase font-black">Aether_Swing (v2.0)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button 
+                  onClick={handleCreate} 
+                  disabled={!newStratData.name || isCreating}
+                  className="w-full bg-primary text-black hover:bg-primary/80 font-mono font-black uppercase tracking-widest"
+                >
+                  {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : "INITIALIZE_SEQUENCE"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Filter Input */}

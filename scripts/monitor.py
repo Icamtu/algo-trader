@@ -28,7 +28,7 @@ def send_telegram_message(message):
         "parse_mode": "HTML"
     }
     try:
-        response = requests.post(url, json=payload)
+        response = requests.post(url, json=payload, timeout=10)
         response.raise_for_status()
     except Exception as e:
         print(f"Error sending Telegram message: {e}")

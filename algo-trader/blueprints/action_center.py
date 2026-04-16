@@ -37,19 +37,24 @@ async def approve_order(id=None):
     try:
         data = request.json or {}
         order_id = id or data.get("id")
+        batch_ids = data.get("ids")
 
-        if not order_id:
-            # Check for batch approve
+        if not order_id and not batch_ids:
+            # Check for approve all shortcut
             if data.get("batch") == "all":
                 count = await action_manager.approve_all_pending()
-                return jsonify({"status": "success", "message": f"Approved {count} orders"}), 200
-            return jsonify({"status": "error", "message": "Missing order ID"}), 400
+                return jsonify({"status": "success", "message": f"Approved {count} signals"}), 200
+            return jsonify({"status": "error", "message": "Missing order ID or batch IDs"}), 400
+
+        if batch_ids:
+            result = await action_manager.approve_selected([int(i) for i in batch_ids])
+            return jsonify({"status": "success", "data": result}), 200
 
         success = await action_manager.approve_order(int(order_id))
         if success:
-            return jsonify({"status": "success", "message": "Order approved and routed"}), 200
+            return jsonify({"status": "success", "message": "Signal approved and routed"}), 200
         else:
-            return jsonify({"status": "error", "message": "Approval failed or execution error"}), 500
+            return jsonify({"status": "error", "message": "Kernel approval fail or route error"}), 500
     except Exception as e:
         logger.error(f"ActionCenter Approval Error: {e}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -61,16 +66,21 @@ def reject_order(id=None):
     try:
         data = request.json or {}
         order_id = id or data.get("id")
+        batch_ids = data.get("ids")
         reason = data.get("reason")
 
-        if not order_id:
-            return jsonify({"status": "error", "message": "Missing order ID"}), 400
+        if not order_id and not batch_ids:
+            return jsonify({"status": "error", "message": "Missing order ID or batch IDs"}), 400
+
+        if batch_ids:
+            result = action_manager.reject_selected([int(i) for i in batch_ids], reason=reason)
+            return jsonify({"status": "success", "data": result}), 200
 
         success = action_manager.reject_order(int(order_id), reason=reason)
         if success:
-            return jsonify({"status": "success", "message": "Order rejected"}), 200
+            return jsonify({"status": "success", "message": "Signal purged from buffer"}), 200
         else:
-            return jsonify({"status": "error", "message": "Rejection failed"}), 500
+            return jsonify({"status": "error", "message": "Purge operation failed"}), 500
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 

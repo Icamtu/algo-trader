@@ -188,32 +188,29 @@ def process_bfo(output_path):
     df["tick_size"] = pd.to_numeric(df["tick_size"], errors="coerce") / 100
     return df
 
+import tempfile
+
 def run_sync():
     logger.info("Starting Master Contract Sync...")
-    output_path = "/tmp/shoonya_symbols"
     try:
-        download_and_unzip(output_path)
-        delete_symtoken_table()
+        with tempfile.TemporaryDirectory() as output_path:
+            download_and_unzip(output_path)
+            delete_symtoken_table()
 
-        conn = get_db_connection()
+            conn = get_db_connection()
 
-        processors = [process_nse, process_nfo, process_cds, process_mcx, process_bse, process_bfo]
-        cols_to_keep = ["symbol", "brsymbol", "name", "exchange", "brexchange", "token", "expiry", "strike", "lotsize", "instrumenttype", "tick_size"]
+            processors = [process_nse, process_nfo, process_cds, process_mcx, process_bse, process_bfo]
+            cols_to_keep = ["symbol", "brsymbol", "name", "exchange", "brexchange", "token", "expiry", "strike", "lotsize", "instrumenttype", "tick_size"]
 
-        for proc in processors:
-            df = proc(output_path)
-            if not df.empty:
-                df_filtered = df[cols_to_keep]
-                df_filtered.to_sql("symtoken", conn, if_exists="append", index=False)
-                logger.info(f"Inserted {len(df_filtered)} records for an exchange.")
+            for proc in processors:
+                df = proc(output_path)
+                if not df.empty:
+                    df_filtered = df[cols_to_keep]
+                    df_filtered.to_sql("symtoken", conn, if_exists="append", index=False)
+                    logger.info(f"Inserted {len(df_filtered)} records for an exchange.")
 
-        conn.commit()
-        conn.close()
-
-        # Cleanup
-        for f in os.listdir(output_path):
-            os.remove(os.path.join(output_path, f))
-        os.rmdir(output_path)
+            conn.commit()
+            conn.close()
 
         logger.info("Sync completed successfully.")
         return True

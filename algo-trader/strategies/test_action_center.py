@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from core.strategy import BaseStrategy
 from data.market_data import Tick

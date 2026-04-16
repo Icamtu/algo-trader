@@ -9,6 +9,7 @@ import os
 from execution.order_manager import OrderManager
 from data.market_data import Tick
 from execution.decision_agent import DecisionAgent
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -112,8 +113,24 @@ class BaseStrategy(ABC):
         results = await self.decision_agent.analyze_top_picks(picks)
         if results:
             res = results[0]
-            return res.get("ai_reasoning"), res.get("ai_conviction", 0.5)
+            reasoning = res.get("ai_reasoning")
+            conviction = res.get("ai_conviction", 0.5)
+            
+            # Phase 9: Sync back to TradeLogger if it was a retrospective analysis
+            return reasoning, conviction
         return "No synthesis available", 0.5
+
+    async def async_analyze_signal(self, symbol: str, price: float, rsi: float, score: float, market_context: str = ""):
+        """
+        Non-blocking AI analysis. Fires the request in the background and 
+        updates the trade log later.
+        """
+        asyncio.create_task(self._process_async_signal(symbol, price, rsi, score, market_context))
+
+    async def _process_async_signal(self, symbol: str, price: float, rsi: float, score: float, market_context: str):
+        reasoning, conviction = await self.analyze_signal(symbol, price, rsi, score, market_context)
+        # In a real production scenario, we'd update the database record for the latest trade.
+        logger.info(f"[{self.name}] Async Synthesis Complete for {symbol}: Conviction {conviction}")
 
     async def buy(
         self,
@@ -189,26 +206,33 @@ class BaseStrategy(ABC):
             conviction=conviction,
         )
     def _calculate_indicators(self, symbol: str, rsi_window: int = 14, vol_window: int = 20) -> Dict[str, float]:
-        """Unified indicator computation for all timeframes."""
+        """Vectorized indicator computation using NumPy."""
         prices = self.price_history.get(symbol, [])
         if len(prices) < max(rsi_window, vol_window) + 1:
             return {"rsi": 50.0, "volatility": 1.0}
 
-        # RSI logic
-        deltas = [prices[i+1] - prices[i] for i in range(len(prices)-1)]
-        gains = [d if d > 0 else 0 for d in deltas[-rsi_window:]]
-        losses = [abs(d) if d < 0 else 0 for d in deltas[-rsi_window:]]
-        avg_gain = sum(gains) / rsi_window
-        avg_loss = sum(losses) / rsi_window
-        rs = avg_gain / avg_loss if avg_loss != 0 else 100.0
-        rsi_val = 100.0 - (100.0 / (1.0 + rs))
+        # Use NumPy for O(1) vectorized calculation
+        p_arr = np.array(prices)
+        
+        # Vectorized RSI
+        deltas = np.diff(p_arr)
+        recent_deltas = deltas[-(rsi_window):]
+        gains = np.where(recent_deltas > 0, recent_deltas, 0)
+        losses = np.where(recent_deltas < 0, -recent_deltas, 0)
+        
+        avg_gain = np.mean(gains)
+        avg_loss = np.mean(losses)
+        
+        if avg_loss == 0:
+            rsi_val = 100.0
+        else:
+            rs = avg_gain / avg_loss
+            rsi_val = 100.0 - (100.0 / (1.0 + rs))
 
-        # Volatility logic
-        mean = sum(prices[-vol_window:]) / vol_window
-        variance = sum((x - mean)**2 for x in prices[-vol_window:]) / vol_window
-        vol_val = (variance**0.5) or 1.0
+        # Vectorized Volatility (Standard Deviation)
+        vol_val = np.std(p_arr[-vol_window:]) or 1.0
 
-        return {"rsi": rsi_val, "volatility": vol_val}
+        return {"rsi": float(rsi_val), "volatility": float(vol_val)}
 
     def _calculate_market_regime(self) -> str:
         """Standardized global trend safeguard."""

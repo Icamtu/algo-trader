@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
-    allowedHosts: ["kamaleswaralgo-vcn.tail716e1a.ts.net"],
+    allowedHosts: [".ts.net", ".local", "localhost", "127.0.0.1"],
     hmr: {
       overlay: false,
     },
@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => ({
     },
   },
   preview: {
-    allowedHosts: ["kamaleswaralgo-vcn.tail716e1a.ts.net"],
+    allowedHosts: [".ts.net", ".local", "localhost", "127.0.0.1"],
   },
   plugins: [react()],
   resolve: {

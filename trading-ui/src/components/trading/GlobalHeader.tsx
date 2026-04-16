@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { ChevronDown, LogOut, Radio, Power, PowerOff, Brain, Cpu, ShieldAlert, Zap, Skull, Settings } from "lucide-react";
+import { ChevronDown, LogOut, Radio, Power, PowerOff, Brain, Cpu, ShieldAlert, Zap, Skull, Settings, Bell } from "lucide-react";
 import { algoApi } from "@/features/openalgo/api/client";
 import { BrokerManagementPanel } from "./BrokerManagementPanel";
 import { UnifiedSettings } from "./UnifiedSettings";
@@ -37,10 +37,18 @@ export function GlobalHeader() {
   const [intelSettings, setIntelSettings] = useState<{decision_mode: "ai" | "program" | "human"; llm_model: string; provider: "ollama" | "openclaw"; agent_enabled: boolean; agent_error_reason: string}>({ decision_mode: 'ai', llm_model: 'mistral', provider: 'ollama', agent_enabled: true, agent_error_reason: "" });
   const intelRef = useRef<HTMLDivElement | null>(null);
   const [intelDropdownOpen, setIntelDropdownOpen] = useState(false);
-  const [telemetry, setTelemetry] = useState({ regime: "NEUTRAL", active_trades_count: 0, uptime: 0 });
+  const [telemetry, setTelemetry] = useState({ 
+    regime: "NEUTRAL", 
+    active_trades_count: 0, 
+    uptime: 0,
+    equity: 0,
+    pnl: 0
+  });
   const tradingMode = useTradingMode();
   const { mode, setMode } = useAppModeStore();
   const [marketData, setMarketData] = useState(initialMarkets);
+  const [alerts, setAlerts] = useState<any[]>([]);
+  const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const { user, signOut } = useAuth();
   const initials = user?.user_metadata?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() || user?.email?.slice(0, 2).toUpperCase() || "?";
   
@@ -73,12 +81,31 @@ export function GlobalHeader() {
         if (telRes.status === "success") {
             setTelemetry(telRes.data);
         }
+
+        // Fetch Market Breadth (Indices + Gainers + Losers)
+        const breadthRes = await fetch(`${import.meta.env.VITE_API_BASE_URL || "http://localhost:18788"}/api/v1/market/breadth`, {
+            headers: { 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || "" }
+        });
+        const breadthData = await breadthRes.json();
+        if (breadthData.status === "success") {
+            const { indices, gainers, losers } = breadthData.data;
+            // Flatten or cycle through them
+            setMarketData([...indices, ...gainers, ...losers]);
+        }
+        // Fetch Alerts
+        const alertsRes = await fetch(`${import.meta.env.VITE_API_BASE_URL || "http://localhost:18788"}/api/v1/alerts?limit=5`, {
+            headers: { 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || "" }
+        });
+        const alertsData = await alertsRes.json();
+        if (alertsData.status === "success") {
+            setAlerts(alertsData.alerts || alertsData.data || []);
+        }
       } catch (e) {
         console.error("TELEMETRY_FETCH_FAULT", e);
       }
     };
     fetchIntel();
-    const interval = setInterval(fetchIntel, 5000);
+    const interval = setInterval(fetchIntel, 10000); // 10s refresh
     return () => clearInterval(interval);
   }, []);
 
@@ -345,11 +372,17 @@ export function GlobalHeader() {
         <div className="flex items-center gap-4 shrink-0 px-4 border-l border-border h-full bg-card/5">
           <div className="text-right flex flex-col items-end">
             <span className="text-[7px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mb-0.5">EQY</span>
-            <IndustrialValue value={42200000} prefix="₹" className="text-[10px] font-black text-foreground" />
+            <IndustrialValue value={telemetry.equity} prefix="₹" className="text-[10px] font-black text-foreground" />
           </div>
           <div className="text-right flex flex-col items-end pr-4 border-r border-border/10">
             <span className="text-[7px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mb-0.5">DLT</span>
-            <IndustrialValue value={382000} prefix="+₹" className="text-[10px] font-black text-secondary" />
+            <IndustrialValue 
+              value={telemetry.pnl} 
+              prefix={telemetry.pnl >= 0 ? "+₹" : "-₹"} 
+              className={cn("text-[10px] font-black tabular-nums", 
+                telemetry.pnl > 0 ? "text-secondary" : telemetry.pnl < 0 ? "text-destructive" : "text-muted-foreground"
+              )} 
+            />
           </div>
           
           <div className="text-right flex flex-col items-end pr-4 border-r border-border/10">
@@ -360,6 +393,66 @@ export function GlobalHeader() {
           </div>
           
           <div className="flex items-center gap-4">
+            {/* Notification Bell */}
+            <div className="relative">
+              <button 
+                onClick={() => setIsAlertsOpen(!isAlertsOpen)}
+                className={cn(
+                  "w-7 h-7 flex items-center justify-center border border-border/40 bg-card/10 hover:bg-card/30 transition-all relative",
+                  alerts.length > 0 && "text-primary border-primary/40"
+                )}
+              >
+                 <Bell className="w-4 h-4" />
+                 {alerts.length > 0 && (
+                   <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full animate-pulse shadow-[0_0_8px_rgba(255,160,0,0.8)]" />
+                 )}
+              </button>
+
+              <AnimatePresence>
+                {isAlertsOpen && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute top-full right-0 mt-2 w-72 bg-background border-2 border-border shadow-2xl z-[150] p-1 overflow-hidden"
+                  >
+                    <div className="px-3 py-2 border-b border-border mb-1 flex items-center justify-between">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-foreground">Active_Alerts</span>
+                      <span className="text-[8px] font-mono text-muted-foreground">{alerts.length} Total</span>
+                    </div>
+                    
+                    <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                      {alerts.length === 0 ? (
+                        <div className="py-8 text-center text-[9px] font-mono text-muted-foreground uppercase opacity-40">Zero_Threats_Detected</div>
+                      ) : (
+                        alerts.map((alert, i) => (
+                          <div key={i} className="p-3 border border-transparent hover:border-border hover:bg-white/5 transition-all mb-1 last:mb-0 group/alert">
+                            <div className="flex items-start justify-between mb-1">
+                              <span className={cn("text-[8px] font-black uppercase tracking-tighter", 
+                                alert.type === "CRITICAL" ? "text-destructive" : "text-primary"
+                              )}>
+                                {alert.tag || alert.type || "SIGNAL"}
+                              </span>
+                              <span className="text-[7px] font-mono text-muted-foreground opacity-50">{alert.timestamp?.split('T')[1]?.slice(0,5) || "NOW"}</span>
+                            </div>
+                            <p className="text-[10px] leading-tight text-foreground font-semibold line-clamp-2">{alert.message || alert.content}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <Link 
+                      to="/alerts" 
+                      onClick={() => setIsAlertsOpen(false)}
+                      className="mt-1 block w-full py-2 bg-white/5 hover:bg-white/10 text-[8px] font-black text-center uppercase tracking-[0.2em] border-t border-border"
+                    >
+                      View_Command_Center
+                    </Link>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
             <Dialog open={panicModalOpen} onOpenChange={setPanicModalOpen}>
                 <DialogTrigger asChild>
                     <button className="w-7 h-7 flex items-center justify-center border border-destructive/40 bg-destructive/5 text-destructive hover:bg-destructive hover:text-white transition-all">
@@ -396,13 +489,28 @@ export function GlobalHeader() {
                </div>
             </div>
             
-            <div className="flex items-center gap-3">
-               <div className="w-7 h-7 bg-primary flex items-center justify-center font-mono text-[10px] font-black text-black">
+            <div className="flex items-center gap-3 relative group/user">
+               <div className="w-7 h-7 bg-primary flex items-center justify-center font-mono text-[10px] font-black text-black cursor-pointer group-hover:bg-primary/80">
                  {initials}
                </div>
-               <button onClick={signOut} className="text-muted-foreground/30 hover:text-destructive">
-                 <LogOut className="w-3.5 h-3.5" />
-               </button>
+               
+               {/* User Dropdown Overlay */}
+               <div className="absolute top-full right-0 mt-1 w-48 bg-background border-2 border-border hidden group-hover/user:flex flex-col p-1 z-[100] shadow-2xl overflow-hidden">
+                 <div className="scanline opacity-10" />
+                 <Link to="/profile" className="px-3 py-2 text-[9px] font-black uppercase tracking-widest hover:bg-white/5 flex items-center gap-2">
+                    <Brain className="w-3 h-3 text-primary" />
+                    Supabase_Profile
+                 </Link>
+                 <Link to="/roles" className="px-3 py-2 text-[9px] font-black uppercase tracking-widest hover:bg-white/5 flex items-center gap-2">
+                    <ShieldAlert className="w-3 h-3 text-amber-500" />
+                    Role_Management
+                 </Link>
+                 <div className="h-[1px] bg-border my-1" />
+                 <button onClick={signOut} className="px-3 py-2 text-[9px] font-black uppercase tracking-widest text-destructive hover:bg-destructive/10 flex items-center gap-2 text-left">
+                    <LogOut className="w-3.5 h-3.5" />
+                    Shutdown_Session
+                 </button>
+               </div>
             </div>
           </div>
         </div>

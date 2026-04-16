@@ -20,6 +20,7 @@ class AetherSwing(BaseStrategy):
         self.positions: Dict[str, int] = {s: 0 for s in self.symbols}
         self.risk_per_trade = 2000  # ₹2000 risk per swing
         self.interval = "1d"
+        self.hitl_enabled = True
 
     async def on_tick(self, tick: Tick):
         self.update_history(tick, max_len=200)
@@ -84,7 +85,13 @@ class AetherSwing(BaseStrategy):
                 reasoning, conviction = await self.analyze_signal(tick.symbol, tick.price, rsi, 75, f"Swing Strategy | Vol: {vol:.2f} | Regime: {self.regime_status}")
 
                 if conviction >= 0.75:
-                    await (self.buy if signal == "BUY" else self.sell)(tick.symbol, qty, ai_reasoning=reasoning, conviction=conviction)
+                    await (self.buy if signal == "BUY" else self.sell)(
+                        tick.symbol, 
+                        qty, 
+                        ai_reasoning=reasoning, 
+                        conviction=conviction,
+                        human_approval=self.hitl_enabled
+                    )
                     sl = tick.price - stop_dist if signal == "BUY" else tick.price + stop_dist
                     t1 = tick.price + stop_dist if signal == "BUY" else tick.price - stop_dist
                     t2 = tick.price + (stop_dist * 2.5) if signal == "BUY" else tick.price - (stop_dist * 2.5)

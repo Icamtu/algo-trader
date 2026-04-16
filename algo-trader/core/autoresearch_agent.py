@@ -8,7 +8,7 @@ import re
 import sys
 import importlib.util
 import inspect
-from urllib import request as urllib_request
+import requests
 from datetime import datetime
 
 # Make sure we can import from core and others
@@ -21,24 +21,25 @@ logger = logging.getLogger("AutoResearchAgent")
 
 def call_ollama(prompt, model="qwen3.5-claude:latest"):
     """Call the local Ollama LLM to generate code improvements."""
-    url = "http://local_ollama:11434/api/generate"
-    # Fallback for running outside docker
-    if not os.environ.get("DOCKER_ENV"):
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://local_ollama:11434")
+    url = f"{base_url.rstrip('/')}/api/generate"
+    
+    # Fallback for running outside docker if local_ollama doesn't resolve
+    if "local_ollama" in url and not os.environ.get("DOCKER_ENV"):
         try:
-            # check if local_ollama resolves
             import socket
             socket.gethostbyname("local_ollama")
-        except:
+        except socket.gaierror:
             url = "http://localhost:11434/api/generate"
 
-    payload = json.dumps({"model": model, "prompt": prompt, "stream": False})
-    req = urllib_request.Request(url, data=payload.encode('utf-8'), headers={'Content-Type': 'application/json'})
+    payload = {"model": model, "prompt": prompt, "stream": False}
     try:
-        with urllib_request.urlopen(req) as response:
-            result = json.loads(response.read().decode('utf-8'))
-            return result.get("response", "")
+        response = requests.post(url, json=payload, timeout=30) # Increased timeout for generation
+        response.raise_for_status()
+        result = response.json()
+        return result.get("response", "")
     except Exception as e:
-        logger.error(f"Failed to call Ollama: {e}")
+        logger.error(f"Failed to call Ollama at {url}: {e}")
         return ""
 
 def extract_python_code(response_text):
@@ -242,7 +243,8 @@ Based on the metrics and the directive, output an IMPROVED version of the above 
 
     if code and file_path and "temp_ar_" in file_path:
         try: os.remove(file_path)
-        except: pass
+        except OSError: # nosec B110
+            pass
 
     return {
         "metrics": perf,

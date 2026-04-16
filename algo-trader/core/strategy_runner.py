@@ -241,33 +241,30 @@ class StrategyRunner:
         """
         while True:
             try:
-                # 1. Period — Wait 30 seconds between audits
-                await asyncio.sleep(30)
+                # Phase 9: High-frequency monitoring (10s interval)
+                await asyncio.sleep(10)
 
                 # Use the risk manager injected via order_manager
                 risk_mgr = self.order_manager.risk_manager
 
-                # Check for each registered strategy (even if not currently in self.strategies)
-                for strategy_id in self._strategies_by_key.keys():
-                    # Evaluate reach — proactive audit
+                # Check for each registered strategy
+                for strategy_id in list(self._strategies_by_key.keys()):
                     outcome = risk_mgr.check_strategy_safeguards(strategy_id)
 
                     if outcome.get("status") == "breached":
-                        reason = outcome.get("reason", "Unknown Breach")
-                        logger.critical(f"SAFEGUARD BREACH DETECTED for {strategy_id}: {reason}")
+                        reason = outcome.get("reason", "Institutional Safeguard Breach")
+                        logger.warning(f"GUARD >> {strategy_id} breached: {reason}")
 
-                        # TRIGGER AUTONOMOUS KILL-SWITCH
-                        # 1. Liquidate target positions
-                        # 2. Halt future entries (handled inside liquidate_strategy via risk_mgr.halt)
+                        # AUTONOMOUS KILL-SWITCH (Phase 7 Requirement)
                         asyncio.create_task(self.order_manager.liquidate_strategy(strategy_id))
 
                         if self.telemetry_callback:
                             asyncio.create_task(self.telemetry_callback("safeguard_breach", {
                                 "strategy": strategy_id,
                                 "reason": reason,
-                                "action": "AUTO_LIQUIDATE"
+                                "action": "HALT_AND_LIQUIDATE"
                             }))
 
             except Exception as e:
-                logger.error(f"Error in safeguard monitor loop: {e}", exc_info=True)
-                await asyncio.sleep(60) # Back off on error
+                logger.error(f"Safeguard Loop Error: {e}")
+                await asyncio.sleep(30)

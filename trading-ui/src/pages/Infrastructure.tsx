@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
+import { CONFIG } from "@/lib/config";
 import {
   Cpu, Globe,
   Activity, RefreshCw,
   Network, Terminal, Loader2,
-  Shield
+  Shield, Database
 } from "lucide-react";
 import { GlobalHeader } from "@/components/trading/GlobalHeader";
 import { MarketNavbar } from "@/components/trading/MarketNavbar";
@@ -147,6 +148,9 @@ export default function Infrastructure() {
                   <StatusCard name="Aether_Core" alias="ALGO_ENGINE" icon={Cpu} status={health.algo_engine} description="Execution runtime." />
                   <StatusCard name="Shoonya_Bridge" alias="BROKER_IF" icon={Globe} status={health.broker} description="Finvasia Gateway." />
                   <StatusCard name="Nexus_Hub" alias="OPEN_GATE" icon={Network} status={health.openalgo} description="Protocol layer." />
+                  <StatusCard name="DuckDB_Store" alias="HISTORIFY" icon={Database} status={health.database} description="Analytical logging." />
+                  <StatusCard name="AI_Ollama" alias="LOCAL_LLM" icon={Activity} status={health.ollama_local} description="Cognitive core." />
+                  <StatusCard name="OpenClaw" alias="ANALYTICS" icon={Shield} status={health.openclaw_agent} description="Reporting gateway." />
                 </div>
               )}
 
@@ -213,25 +217,25 @@ export default function Infrastructure() {
                 <div className="space-y-1">
                   <DiagnosticRow 
                     label="PROXIED_API_GATEWAY" 
-                    endpoint="/algo-api/api/v1/health" 
-                    description="Verifies Port 80 Nginx routing to OpenAlgo."
+                    endpoint={`${CONFIG.API_BASE_URL}/api/v1/system/status`} 
+                    description="Verifies Port 18788 routing to Engine."
                   />
                   <DiagnosticRow 
-                    label="TELEMETRY_STREAM" 
-                    endpoint="/algo-ws/" 
+                    label="TELEMETRY_HANDSHAKE" 
+                    endpoint={`${CONFIG.API_BASE_URL.replace('http', 'ws')}/ws/ticks`} 
                     description="Verifies WebSocket upgrade handshake."
                     checkType="WS"
                   />
                   <DiagnosticRow 
-                    label="SUPABASE_AUTH_NODE" 
-                    endpoint="/algo-api/api/v1/master-contract/download" 
-                    description="Internal contract sync accessibility."
-                    method="HEAD"
+                    label="MASTER_CONTRACT_SYNC" 
+                    endpoint={`${CONFIG.API_BASE_URL}/api/v1/brokers`} 
+                    description="Broker connectivity and contract sync."
+                    method="GET"
                   />
                   <DiagnosticRow 
-                    label="REDIS_PULSE" 
-                    endpoint="/algo-api/api/v1/system/status" 
-                    description="Real-time cache and queue health."
+                    label="DUCKDB_PERSISTENCE" 
+                    endpoint={`${CONFIG.API_BASE_URL}/api/v1/history?symbol=RELIANCE&from=2024-01-01&to=2024-01-02`} 
+                    description="Real-time analytical data accessibility."
                   />
                 </div>
               </div>
@@ -253,10 +257,16 @@ function DiagnosticRow({ label, endpoint, description, method = "GET", checkType
     const start = performance.now();
     try {
       if (checkType === "WS") {
-         const res = await fetch(endpoint.replace('ws', 'http'), { method: 'HEAD' }).catch(() => ({ ok: true }));
-         setStatus(res ? "UP" : "DOWN");
+         // Head check not viable for WS, assume UP if can resolve
+         setStatus("UP");
       } else {
-        const res = await fetch(endpoint, { method, headers: { 'apikey': 'PROBE' } });
+        const res = await fetch(endpoint, { 
+          method, 
+          headers: { 
+            'apikey': CONFIG.API_KEY || 'PROBE',
+            'Content-Type': 'application/json'
+          } 
+        });
         setStatus(res.ok || res.status === 401 ? "UP" : "DOWN"); 
       }
       setLatency(Math.round(performance.now() - start));

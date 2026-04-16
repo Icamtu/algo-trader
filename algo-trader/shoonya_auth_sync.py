@@ -63,7 +63,7 @@ def run_sync():
     payload_str = "jData=" + json.dumps(payload)
     headers = {"Content-Type": "text/plain"}
 
-    resp = requests.post(url, data=payload_str, headers=headers)
+    resp = requests.post(url, data=payload_str, headers=headers, timeout=10)
     print(f"Handshake Status: {resp.status_code}")
     data = resp.json()
 

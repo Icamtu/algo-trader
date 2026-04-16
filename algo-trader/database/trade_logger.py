@@ -351,16 +351,32 @@ class TradeLogger:
             conn = sqlite3.connect(self.db_file)
             cursor = conn.cursor()
             now = datetime.utcnow().isoformat()
-            cols = ["confidence_score", "regime_preference", "learning_rate", "total_profit_factor", "last_failure_reason"]
-            valid_updates = {k: v for k, v in updates.items() if k in cols}
-            if not valid_updates: return
+            # Strict whitelist of allowabled columns for dynamic query construction
+            ALLOWED_COLS = {
+                "confidence_score",
+                "regime_preference",
+                "learning_rate",
+                "total_profit_factor",
+                "last_failure_reason"
+            }
+            # Filter updates to only include allowed columns
+            valid_updates = {k: v for k, v in updates.items() if k in ALLOWED_COLS}
+            if not valid_updates:
+                return
+
+            # Building queries dynamically for columns requires string formatting as SQLite 
+            # doesn't support parameterizing identifiers. Security is ensured via ALLOWED_COLS whitelist.
             upd_str = ", ".join([f"{k} = ?" for k in valid_updates.keys()])
             params = list(valid_updates.values()) + [now, strategy_id]
-            cursor.execute(f"UPDATE strategy_personality SET {upd_str}, updated_at = ? WHERE strategy_id = ?", params)
+            # bandit: ignore B608 (SQL injection) as column names are from a strict whitelist
+            cursor.execute(f"UPDATE strategy_personality SET {upd_str}, updated_at = ? WHERE strategy_id = ?", params) # nosec
+
             if cursor.rowcount == 0:
                 keys = ["strategy_id", "updated_at"] + list(valid_updates.keys())
                 vals = [strategy_id, now] + list(valid_updates.values())
-                cursor.execute(f"INSERT INTO strategy_personality ({', '.join(keys)}) VALUES ({', '.join(['?' for _ in vals])})", vals)
+                placeholders = ", ".join(["?" for _ in vals])
+                # bandit: ignore B608 (SQL injection) as column names are from a strict whitelist
+                cursor.execute(f"INSERT INTO strategy_personality ({', '.join(keys)}) VALUES ({placeholders})", vals) # nosec
             conn.commit()
             conn.close()
         except Exception as e: logger.error(f"Error updating personality: {e}")
@@ -403,7 +419,8 @@ class TradeLogger:
                            (api_type, json.dumps(request_data), json.dumps(response_data), strategy))
             conn.commit()
             conn.close()
-        except: pass
+        except Exception: # nosec B110
+            pass
 
     def get_api_logs(self, limit=50, search=""):
         try:
@@ -422,7 +439,9 @@ class TradeLogger:
             rows = cursor.fetchall()
             conn.close()
             return [ {**dict(r), "request_data": json.loads(r["request_data"]), "response_data": json.loads(r["response_data"])} for r in rows ]
-        except: return []
+        except Exception as e:
+            logger.error(f"Error fetching API logs: {e}")
+            return []
 
     # --- HITL Action Center Methods ---
 
@@ -477,10 +496,13 @@ class TradeLogger:
                 if r.get('raw_order_data'):
                     try:
                         r['raw_order_data'] = json.loads(r['raw_order_data'])
-                    except: pass
+                    except json.JSONDecodeError: # nosec B110
+                        pass
                 result.append(r)
             return result
-        except: return []
+        except Exception as e:
+            logger.error(f"Error fetching action queue: {e}")
+            return []
 
     def update_action_order_status(self, order_id: int, status: str, reason: Optional[str] = None) -> bool:
         try:
@@ -525,6 +547,50 @@ class TradeLogger:
             conn.close()
             return {"pending": row[0], "approved": row[1], "rejected": row[2]}
         except: return {"pending": 0, "approved": 0, "rejected": 0}
+
+    # --- Alert Management Methods ---
+
+    def get_alerts(self, limit: int = 100) -> List[Dict[str, Any]]:
+        try:
+            conn = sqlite3.connect(self.db_file)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM alerts ORDER BY created_at DESC LIMIT ?", (limit,))
+            rows = cursor.fetchall()
+            conn.close()
+            return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"Error fetching alerts: {e}")
+            return []
+
+    def create_alert(self, alert_type: str, symbol: str, condition: str, value: float, channel: str = "telegram", message: str = "") -> Optional[int]:
+        try:
+            conn = sqlite3.connect(self.db_file)
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO alerts (type, symbol, condition, value, channel, message)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (alert_type, symbol, condition, value, channel, message))
+            conn.commit()
+            alert_id = cursor.lastrowid
+            conn.close()
+            return alert_id
+        except Exception as e:
+            logger.error(f"Error creating alert: {e}")
+            return None
+
+    def delete_alert(self, alert_id: int) -> bool:
+        try:
+            conn = sqlite3.connect(self.db_file)
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM alerts WHERE id = ?", (alert_id,))
+            conn.commit()
+            success = cursor.rowcount > 0
+            conn.close()
+            return success
+        except Exception as e:
+            logger.error(f"Error deleting alert: {e}")
+            return False
 
 # Global singleton instance
 _trade_logger: Optional[TradeLogger] = None

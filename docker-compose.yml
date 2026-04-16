@@ -45,8 +45,8 @@ services:
     image: marketcalls/openalgo:latest
     container_name: openalgo-web
     ports:
-      - "127.0.0.1:5000:5000"
-      - "127.0.0.1:8765:8765"
+      - "5000:5000"
+      - "8765:8765"
     env_file: .env
     shm_size: '512m'
     volumes:
@@ -103,6 +103,7 @@ services:
       - OPENALGO_DB_PATH=/app/storage/openalgo.db
       - RISK_MAX_DAILY_LOSS=50000
       - RISK_MAX_DAILY_TRADES=200
+      - TAILSCALE_AUTH_KEY=${TAILSCALE_AUTH_KEY}
     networks:
       - trading_net
     mem_limit: 1.5GB
@@ -112,8 +113,12 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges:false
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:18788/health')"]
       interval: 10s
@@ -234,7 +239,7 @@ services:
       supabase-meta:
         condition: service_started
     ports:
-      - "127.0.0.1:54321:3000"
+      - "54321:3000"
     environment:
       SUPABASE_URL: http://supabase-kong:8000
       STUDIO_PG_META_URL: http://supabase-meta:8080
@@ -273,10 +278,11 @@ services:
     restart: always
     ports:
       - "80:80"
-      - "127.0.0.1:3001:3001"
+      - "3001:3001"
     environment:
       - VITE_SUPABASE_URL=http://${TAILSCALE_IP}:8000
       - VITE_SUPABASE_ANON_KEY=${ANON_KEY}
+      - VITE_API_HOST=${TAILSCALE_IP}
       - TAILSCALE_IP=${TAILSCALE_IP}
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:80/ || exit 1"]
@@ -311,6 +317,8 @@ services:
     environment:
       - VITE_SUPABASE_URL=http://${TAILSCALE_IP}:8000
       - VITE_SUPABASE_ANON_KEY=${ANON_KEY}
+      - VITE_API_HOST=${TAILSCALE_IP}
+      - TAILSCALE_IP=${TAILSCALE_IP}
     volumes:
       - ./trading-ui:/app
     command: ["sh", "-c", "bun install && bun x vite build && bun x vite build --watch"]
@@ -348,7 +356,7 @@ services:
       ollama_engine:
         condition: service_started
     ports:
-      - "127.0.0.1:18789:18789"
+      - "18789:18789"
     environment:
       - OPENCLAW_LLM_TIMEOUT=600000
       - TZ=Asia/Kolkata

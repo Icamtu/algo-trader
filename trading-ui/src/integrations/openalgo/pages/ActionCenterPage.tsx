@@ -1,3 +1,4 @@
+import React, { useState, useEffect, useCallback } from 'react';
 import { PlayCircle, ShieldCheck, Activity, Check, X, Trash2, RefreshCw, Info, ArrowUp, ArrowDown, ChevronDown, ChevronUp, AlertTriangle, Terminal, Settings, Shield, ShieldAlert, ZapOff, ShieldCheck as ShieldIcon } from 'lucide-react';
 import { AetherPanel } from '@/components/ui/AetherPanel';
 import { Button } from '@/components/ui/button';
@@ -24,9 +25,13 @@ interface PendingOrder {
   price_type: string;
   product_type: string;
   status: 'pending' | 'approved' | 'rejected';
-  created_at_ist: string;
-  raw_order_data: Record<string, any>;
+  timestamp: string;
+  created_at_ist?: string;
+  raw_order_data: string | Record<string, any>;
+  action_type?: 'ORDER' | 'DEPLOY_STRATEGY';
   rejection_reason?: string;
+  ai_reasoning?: string;
+  conviction?: number;
 }
 
 export const ActionCenterPage: React.FC = () => {
@@ -43,6 +48,7 @@ export const ActionCenterPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState('pending');
   const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
   const [riskMatrix, setRiskMatrix] = useState<Record<string, StrategyMetrics>>({});
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
   const [editingSafeguard, setEditingSafeguard] = useState<string | null>(null);
   const [safeguardConfig, setSafeguardConfig] = useState<{
@@ -50,7 +56,6 @@ export const ActionCenterPage: React.FC = () => {
     max_loss_inr: number;
     is_armed: boolean;
   }>({ max_drawdown_pct: 10, max_loss_inr: 5000, is_armed: true });
-
   const { mode } = useAppModeStore();
   const { toast } = useToast();
   const isAD = mode === 'AD';
@@ -124,11 +129,61 @@ export const ActionCenterPage: React.FC = () => {
     try {
       await tradingService.approveAllActionCenterOrders();
       toast({ title: "SIGNAL::BATCH_FIRE_INITIATED", description: "All queued signals have been elevated to bridge." });
+      setOrders(prev => prev.map(o => o.status === 'pending' ? { ...o, status: 'approved' } : o));
+      setSelectedIds(new Set());
       fetchData(activeTab);
     } catch (error) {
       console.error('Batch approval failed', error);
       toast({ variant: "destructive", title: "FAULT::BATCH_COLLAPSE", description: "Critical fault during mass elevation." });
     }
+  };
+
+  const handleApproveSelected = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    try {
+      await tradingService.approveSelectedActionCenterOrders(ids);
+      toast({ title: "SIGNAL::VOLATILE_BATCH_ELEVATED", description: `${ids.length} signals routed to bridge.` });
+      setSelectedIds(new Set());
+      fetchData(activeTab);
+    } catch (error) {
+      console.error('Bulk approval failed', error);
+      toast({ variant: "destructive", title: "FAULT::BATCH_ROUTING", description: "Failed to relay selected batch." });
+    }
+  };
+
+  const handleRejectSelected = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const reason = prompt("Enter REJECTION_REASON for batch:");
+    if (reason === null) return;
+    try {
+      await tradingService.rejectSelectedActionCenterOrders(ids, reason);
+      toast({ title: "SIGNAL::BATCH_PURGED", description: `${ids.length} signals removed from buffer.` });
+      setSelectedIds(new Set());
+      fetchData(activeTab);
+    } catch (error) {
+      console.error('Bulk rejection failed', error);
+      toast({ variant: "destructive", title: "FAULT::BATCH_PURGE", description: "Failed to purge selected batch." });
+    }
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedIds.size === orders.filter(o => o.status === 'pending').length) {
+      setSelectedIds(new Set());
+    } else {
+      const pendingIds = orders.filter(o => o.status === 'pending').map(o => o.id);
+      setSelectedIds(new Set(pendingIds));
+    }
+  };
+
+  const handleToggleSelectOrder = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const handleStartStrategy = async (id: string) => {
@@ -230,6 +285,16 @@ export const ActionCenterPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          {activeTab === 'pending' && orders.length > 0 && (
+            <Button 
+                variant="outline"
+                onClick={handleApproveAll}
+                className={cn("h-10 font-mono text-[11px] font-black px-4 border-rose-500/20 text-rose-500 hover:bg-rose-500 hover:text-white")}
+            >
+                <ZapOff className="h-3.5 w-3.5 mr-2" />
+                KILL_ALL_PENDING
+            </Button>
+          )}
           <Button 
             variant="secondary" 
             onClick={() => fetchData(activeTab)} 
@@ -371,6 +436,16 @@ export const ActionCenterPage: React.FC = () => {
                    <table className="w-full text-left font-mono text-[10px]">
                       <thead>
                          <tr className="border-b border-border/10 bg-background/40 uppercase tracking-tighter text-muted-foreground">
+                            <th className="p-4 w-12">
+                               {activeTab === 'pending' && (
+                                 <input 
+                                   type="checkbox" 
+                                   className="rounded-none border-border/20 bg-background/20 checked:bg-primary accent-primary" 
+                                   checked={selectedIds.size > 0 && selectedIds.size === orders.filter(o => o.status === 'pending').length}
+                                   onChange={handleToggleSelectAll}
+                                 />
+                               )}
+                            </th>
                             <th className="p-4 font-black">Strategy</th>
                             <th className="p-4 font-black">Contract</th>
                             <th className="p-4 font-black">Operation</th>
@@ -383,7 +458,17 @@ export const ActionCenterPage: React.FC = () => {
                       <tbody>
                          {orders.map((order, i) => (
                            <React.Fragment key={order.id}>
-                             <tr className={cn("border-b border-border/10 transition-colors group", accentBgSoftClass)}>
+                             <tr className={cn("border-b border-border/10 transition-colors group", accentBgSoftClass, selectedIds.has(order.id) && "bg-primary/5")}>
+                                <td className="p-4">
+                                   {order.status === 'pending' && (
+                                     <input 
+                                       type="checkbox" 
+                                       className="rounded-none border-border/20 bg-background/20 checked:bg-primary accent-primary" 
+                                       checked={selectedIds.has(order.id)}
+                                       onChange={() => handleToggleSelectOrder(order.id)}
+                                     />
+                                   )}
+                                </td>
                                 <td className="p-4">
                                    <div className={cn("font-black", primaryColorClass)}>{order.strategy}</div>
                                    <div className="text-[8px] text-muted-foreground/40 mt-0.5">{order.api_type}</div>
@@ -393,17 +478,30 @@ export const ActionCenterPage: React.FC = () => {
                                    <div className="text-[8px] text-muted-foreground/40 mt-0.5 uppercase tracking-tighter">{order.exchange} // {order.product_type}</div>
                                 </td>
                                 <td className="p-4">
-                                   <Badge className={cn("text-[8px] font-black uppercase tracking-widest h-5 text-black", order.action === 'BUY' ? accentBgClass : "bg-rose-500 text-white")}>
-                                      {order.action === 'BUY' ? <ArrowUp className="w-3 h-3 mr-1" /> : <ArrowDown className="w-3 h-3 mr-1" />}
-                                      {order.action}
-                                   </Badge>
+                                   {order.action_type === 'DEPLOY_STRATEGY' ? (
+                                     <Badge className={cn("text-[8px] font-black uppercase tracking-widest h-5 bg-blue-500 text-white")}>
+                                        <Terminal className="w-3 h-3 mr-1" />
+                                        DEPLOY
+                                     </Badge>
+                                   ) : (
+                                     <Badge className={cn("text-[8px] font-black uppercase tracking-widest h-5 text-black", order.action === 'BUY' ? accentBgClass : "bg-rose-500 text-white")}>
+                                        {order.action === 'BUY' ? <ArrowUp className="w-3 h-3 mr-1" /> : <ArrowDown className="w-3 h-3 mr-1" />}
+                                        {order.action}
+                                     </Badge>
+                                   )}
                                 </td>
-                                <td className="p-4 text-right">{order.quantity}</td>
+                                <td className="p-4 text-right">{order.action_type === 'DEPLOY_STRATEGY' ? '-' : order.quantity}</td>
                                 <td className="p-4 text-right">
-                                   <div>{order.price || 'MTKT'}</div>
-                                   <div className="text-[8px] text-muted-foreground/40 uppercase">{order.price_type}</div>
+                                   {order.action_type === 'DEPLOY_STRATEGY' ? (
+                                     <div className="text-[8px] font-mono text-muted-foreground italic">SCRIPT_BLOB</div>
+                                   ) : (
+                                     <>
+                                       <div>{order.price || 'MKT'}</div>
+                                       <div className="text-[8px] text-muted-foreground/40 uppercase">{order.price_type}</div>
+                                     </>
+                                   )}
                                 </td>
-                                <td className="p-4 text-muted-foreground/60">{order.created_at_ist}</td>
+                                <td className="p-4 text-muted-foreground/60">{order.timestamp || order.created_at_ist}</td>
                                 <td className="p-4 text-right">
                                    <div className="flex justify-end gap-2">
                                       <Button variant="ghost" size="sm" onClick={() => toggleExpand(order.id)} className="h-8 border border-border/10 opacity-20 hover:opacity-100 italic font-mono text-[8px]">
@@ -435,16 +533,36 @@ export const ActionCenterPage: React.FC = () => {
                              </tr>
                              {expandedOrders.has(order.id) && (
                                  <tr className={cn("border-b border-border/10 animate-in slide-in-from-top-2", accentBgSoftClass)}>
-                                    <td colSpan={7} className="p-6">
-                                       <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                                          {Object.entries(order.raw_order_data).map(([key, value]) => (
-                                            <div key={key} className="space-y-1">
-                                               <div className={cn("text-[7px] font-black font-mono uppercase tracking-widest opacity-40")}>{key}</div>
-                                               <div className="text-[10px] font-mono break-all font-black text-muted-foreground italic">
-                                                  {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                    <td colSpan={8} className="p-6">
+                                       <div className="grid grid-cols-1 gap-6">
+                                          {order.action_type === 'DEPLOY_STRATEGY' ? (
+                                            <div className="col-span-full space-y-4">
+                                               <div className="p-4 bg-black/60 border border-blue-500/20 rounded-sm">
+                                                  <div className="flex items-center justify-between mb-2">
+                                                     <div className="text-[8px] font-black font-mono text-blue-400 uppercase tracking-widest">DEPLOYMENT_BLOB_PREVIEW</div>
+                                                     <div className="text-[8px] font-mono text-muted-foreground/40">{JSON.parse(typeof order.raw_order_data === 'string' ? order.raw_order_data : '{}').filename}</div>
+                                                  </div>
+                                                  <pre className="text-[9px] font-mono text-muted-foreground/80 leading-relaxed overflow-x-auto max-h-[300px] whitespace-pre-wrap scrollbar-thin scrollbar-thumb-blue-500/20">
+                                                     {JSON.parse(typeof order.raw_order_data === 'string' ? order.raw_order_data : '{}').code}
+                                                  </pre>
+                                               </div>
+                                               <div className="text-[9px] font-mono text-muted-foreground/40 italic flex items-center gap-2">
+                                                  <Info className="w-3 h-3" />
+                                                  Submitting approval will write this component to the strategies kernel and restart the monitoring engine.
                                                </div>
                                             </div>
-                                          ))}
+                                          ) : (
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                                              {Object.entries(typeof order.raw_order_data === 'string' ? JSON.parse(order.raw_order_data) : order.raw_order_data).map(([key, value]) => (
+                                                <div key={key} className="space-y-1">
+                                                  <div className={cn("text-[7px] font-black font-mono uppercase tracking-widest opacity-40")}>{key}</div>
+                                                  <div className="text-[10px] font-mono break-all font-black text-muted-foreground italic">
+                                                      {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
                                         </div>
                                         {order.rejection_reason && (
                                           <div className="mt-6 p-4 border border-rose-500/20 bg-rose-500/5 rounded-sm">
@@ -461,7 +579,7 @@ export const ActionCenterPage: React.FC = () => {
                          ))}
                          {orders.length === 0 && (
                            <tr>
-                              <td colSpan={7} className="p-20 text-center flex flex-col items-center gap-4 opacity-20">
+                              <td colSpan={8} className="p-20 text-center flex flex-col items-center gap-4 opacity-20">
                                  <ShieldCheck className="w-8 h-8" />
                                  <p className="text-[10px] font-mono uppercase tracking-[0.4em]">NO_ORDERS_QUEUED_IN_BUFFER</p>
                                  <Button variant="ghost" asChild className="text-[8px] underline">
@@ -484,6 +602,52 @@ export const ActionCenterPage: React.FC = () => {
              ENSURE_CONNECTIVITY_MODULE_IS_ARMED_FOR_BROKER_HANDOFF.
           </div>
        </div>
+
+       {/* Batch Action Bar */}
+       {selectedIds.size > 0 && (
+         <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-5">
+           <div className={cn(
+             "px-6 py-4 flex items-center gap-8 backdrop-blur-xl border-t-2 shadow-2xl rounded-sm",
+             isAD ? "bg-amber-500/10 border-amber-500/40" : "bg-teal-500/10 border-teal-500/40"
+           )}>
+             <div className="flex flex-col">
+               <span className={cn("text-[10px] font-black uppercase tracking-widest", primaryColorClass)}>
+                 BATCH_PROTOCOL_OVERRIDE
+               </span>
+               <span className="text-[12px] font-mono font-black text-white">
+                 {selectedIds.size} SIGNALS_CAPTURED
+               </span>
+             </div>
+
+             <div className="h-8 w-px bg-white/10" />
+
+             <div className="flex items-center gap-4">
+               <Button 
+                 onClick={handleApproveSelected}
+                 className={cn("h-11 px-8 text-[11px] font-black uppercase tracking-widest transition-all text-black", accentBgClass, "hover:bg-white hover:scale-105")}
+               >
+                 <ShieldCheck className="w-4 h-4 mr-2" />
+                 ELEVATE_TO_BRIDGE
+               </Button>
+               <Button 
+                 onClick={handleRejectSelected}
+                 variant="ghost"
+                 className="h-11 px-8 text-[11px] font-black uppercase tracking-widest border border-rose-500/30 text-rose-500 hover:bg-rose-500 hover:text-white transition-all shadow-xl"
+               >
+                 <Trash2 className="w-4 h-4 mr-2" />
+                 PURGE_SIGNALS
+               </Button>
+               <Button 
+                variant="ghost"
+                onClick={() => setSelectedIds(new Set())}
+                className="h-10 text-[9px] font-mono text-muted-foreground uppercase hover:text-white scale-75"
+               >
+                 CANCEL_SELECTION
+               </Button>
+             </div>
+           </div>
+         </div>
+       )}
 
        {/* Safeguard Config Modal */}
        {editingSafeguard && (

@@ -158,7 +158,17 @@ export class OpenAlgoAdapter {
   }
 
   async approveAllActionCenterOrders() {
-    const response = await webClient.post('/action-center/approve-all', {});
+    const response = await webClient.post('/action-center/approve', { batch: 'all' });
+    return response.data;
+  }
+
+  async approveSelectedActionCenterOrders(ids: number[]) {
+    const response = await webClient.post('/api/v1/actioncenter/approve', { ids });
+    return response.data;
+  }
+
+  async rejectSelectedActionCenterOrders(ids: number[], reason: string = 'Bulk rejection') {
+    const response = await webClient.post('/api/v1/actioncenter/reject', { ids, reason });
     return response.data;
   }
 

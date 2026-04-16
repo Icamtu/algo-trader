@@ -136,7 +136,13 @@ export function RiskDashboard() {
           const displayPercentage = m.max > 0 ? (Math.abs(numericValue) / m.max * 100).toFixed(1) : "0.0";
           
           return (
-            <motion.div key={m.label} variants={item} className="bg-background border border-border/50 p-2.5 relative overflow-hidden group">
+            <motion.div 
+              key={m.label} 
+              variants={item} 
+              className="bg-background border border-border/50 p-2.5 relative overflow-hidden group"
+              role="status"
+              aria-label={m.label}
+            >
               <div className="flex items-center justify-between mb-3 border-b border-border/20 pb-1.5">
                 <span className="text-[8px] font-mono font-black uppercase tracking-[0.2em] text-muted-foreground/40">{m.label}</span>
                 <div className={`w-1 h-1 rounded-full ${m.color} animate-pulse shadow-[0_0_8px_currentColor]`} />
@@ -398,12 +404,19 @@ export function RiskDashboard() {
 function RiskInput({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   return (
     <div className="space-y-1 group">
-      <label className="text-[8px] font-mono font-black text-muted-foreground/40 uppercase tracking-widest group-hover:text-primary transition-colors leading-none">{label}</label>
+      <label 
+        htmlFor={`risk-input-${label.replace(/\s+/g, '-').toLowerCase()}`}
+        className="text-[8px] font-mono font-black text-muted-foreground/40 uppercase tracking-widest group-hover:text-primary transition-colors leading-none"
+      >
+        {label}
+      </label>
       <div className="relative">
         <input 
+          id={`risk-input-${label.replace(/\s+/g, '-').toLowerCase()}`}
           type="number" 
           value={value}
           onChange={(e) => onChange(Math.max(0, Number(e.target.value)))}
+          aria-label={label}
           className="w-full bg-transparent border-b border-border/30 px-0 py-1 text-[10px] font-mono font-bold text-foreground outline-none focus:border-primary transition-all"
         />
         <div className="absolute bottom-0 right-0 p-0.5 opacity-10 group-hover:opacity-100 transition-opacity">

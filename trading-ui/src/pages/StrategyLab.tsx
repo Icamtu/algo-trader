@@ -31,10 +31,11 @@ const equityData = Array.from({ length: 30 }, (_, i) => ({
   statArb: 100000 + (i * 4200) + Math.random() * 12000,
 }));
 
-const DEFAULT_CODE = `class MomentumAlpha(Strategy):
+const DEFAULT_CODE = `class AetherSwing(BaseStrategy):
     def __init__(self):
+        super().__init__("AetherSwing", ["NSE:NIFTY"], None)
         self.lookback = 14
-        
+
     def on_cycle(self):
         if self.close[-1] > self.sma(self.lookback)[-1]:
             self.buy('NSE:NIFTY', 50)
@@ -46,7 +47,7 @@ export default function StrategyLab() {
   const [searchParams, setSearchParams] = useSearchParams();
   const rawTab = searchParams.get("tab") || "Editor";
   const activeTab = (pageTabs as readonly string[]).includes(rawTab) ? (rawTab as typeof pageTabs[number]) : "Editor";
-  
+
   const { mode } = useAppModeStore();
   const isAD = mode === 'AD';
   const primaryColorClass = isAD ? "text-amber-500" : "text-teal-500";
@@ -76,16 +77,16 @@ export default function StrategyLab() {
       // Extract class name from code (e.g. class MomentumAlpha)
       const classMatch = code.match(/class\s+(\w+)/);
       const stratKey = classMatch ? classMatch[1] : "AetherScalper";
-                       
+
       const res = await algoApi.runBacktest({
         strategy_key: stratKey,
         symbol: backtestSymbol,
         days: 7
       });
-      
-      toast({ 
-        title: "SIM_COMPLETE", 
-        description: `KERNEL_RETURNED_${res.total_trades}_TRADES | SHARPE: ${res.performance.sharpe_ratio.toFixed(2)}` 
+
+      toast({
+        title: "SIM_COMPLETE",
+        description: `KERNEL_RETURNED_${res.total_trades}_TRADES | SHARPE: ${res.performance.sharpe_ratio.toFixed(2)}`
       });
       setActiveTab("Backtest");
     } catch (err) {
@@ -145,22 +146,22 @@ export default function StrategyLab() {
                   <div className="flex items-center gap-3">
                     <div className="flex items-center bg-background border border-border/50 p-0.5">
                       <span className="px-2 text-[8px] font-mono font-black text-muted-foreground/30 uppercase leading-none">SYM:</span>
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         value={backtestSymbol}
                         onChange={(e) => setBacktestSymbol(e.target.value.toUpperCase())}
                         className={cn("bg-transparent border-none text-[9px] font-mono font-black w-16 focus:ring-0 outline-none p-1", primaryColorClass)}
                       />
                     </div>
-                    
-                    <button 
+
+                    <button
                       onClick={handleSave}
                       disabled={isSaving}
                       className={cn("px-4 py-1.5 border font-mono font-black text-[9px] uppercase tracking-widest transition-all disabled:opacity-30", accentBorderClass, "hover:border-primary/50", primaryColorClass)}
                     >
                       {isSaving ? "TX..." : "SAVE"}
                     </button>
-                    <button 
+                    <button
                       onClick={handleRun}
                       disabled={isRunning}
                       className={cn("px-5 py-1.5 font-mono font-black text-[9px] uppercase tracking-widest transition-all disabled:opacity-30 flex items-center gap-2", isAD ? "bg-amber-500 text-black" : "bg-teal-500 text-black", "hover:bg-white")}
