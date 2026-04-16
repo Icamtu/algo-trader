@@ -1,0 +1,21 @@
+# virtual env
+venv/
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+
+# secrets
+.env
+config/settings.yaml
+
+# streamlit cache
+.streamlit/
+
+# logs
+logs/
+*.log
+
+# database
+trades.db

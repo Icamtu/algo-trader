@@ -39,7 +39,7 @@ jobs:
       - name: Install Bandit
         run: pip install bandit
       - name: Bandit Scan
-        run: bandit -r . -ll -x ./scratch,./.agents,./.agents_backup,./openalgo-upstream -f txt
+        run: bandit -r . -ll -x ./scratch,./.agents,./.agents_backup,./openalgo-upstream,./host_venv,./node_modules,./venv -f txt
 
   pip-audit:
     runs-on: ubuntu-latest
@@ -57,4 +57,4 @@ jobs:
         run: pip install pip-audit
       - name: Pip-audit Scan
         run: |
-          find . -name "requirements.txt" -not -path "*/.*" -not -path "./.agents*" -exec pip-audit -r {} +
+          find . -name "requirements.txt" -not -path "*/.*" -not -path "./.agents*" -not -path "./host_venv/*" -not -path "./node_modules/*" -not -path "./venv/*" -exec pip-audit -r {} +

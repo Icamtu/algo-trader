@@ -1,0 +1,27 @@
+{
+  "result_id": "long_term-20260403T120955Z",
+  "strategy_key": "long_term",
+  "strategy_name": "Long Term Strategy",
+  "symbol": "TEST-EQ",
+  "start_date": "2024-01-01T10:00:00Z",
+  "end_date": "2024-01-01T10:09:00Z",
+  "total_trades": 0,
+  "win_rate": 0.0,
+  "gross_pnl": 0,
+  "net_pnl": 0,
+  "max_drawdown": 0.0,
+  "average_hold_minutes": 0.0,
+  "equity_curve": [
+    100000.0,
+    100000.0,
+    100000.0,
+    100000.0,
+    100000.0,
+    100000.0,
+    100000.0,
+    100000.0,
+    100000.0,
+    100000.0
+  ],
+  "trades": []
+}
