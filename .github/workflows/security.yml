@@ -9,23 +9,39 @@ on:
     - cron: '0 0 * * 0' # Weekly scan
 
 jobs:
-  bandit:
+  gitleaks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Bandit Scan
-        uses: shundor/python-bandit-scan@9ccf33ee8cd3766a6aae2ec8d8108cd36e3e57f2
         with:
-          exit_code: true
-          path: "."
-          level: high
+          fetch-depth: 0
+      - name: Gitleaks Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  bandit:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Bandit
+        run: pip install bandit
+      - name: Bandit Scan
+        run: bandit -r . -ll -x ./scratch,./.agents,./.agents_backup -f custom
 
   pip-audit:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v4
       - name: Pip-audit Scan
         uses: pypa/gh-action-pip-audit@v1.1.0
         with:
-          inputs: "."
-          requirements: "requirements.txt"
+          inputs: algo-trader/requirements.txt
