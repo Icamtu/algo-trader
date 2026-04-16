@@ -11,10 +11,14 @@ on:
 jobs:
   gitleaks:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Fix Git Safe Directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Gitleaks Scan
         uses: gitleaks/gitleaks-action@v2
         env:
@@ -26,6 +30,8 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v4
+      - name: Fix Git Safe Directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -33,7 +39,7 @@ jobs:
       - name: Install Bandit
         run: pip install bandit
       - name: Bandit Scan
-        run: bandit -r . -ll -x ./scratch,./.agents,./.agents_backup -f custom
+        run: bandit -r . -ll -x ./scratch,./.agents,./.agents_backup -f txt
 
   pip-audit:
     runs-on: ubuntu-latest
@@ -41,7 +47,21 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v4
-      - name: Pip-audit Scan
-        uses: pypa/gh-action-pip-audit@v1.1.0
+      - name: Fix Git Safe Directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          inputs: algo-trader/requirements.txt
+          python-version: '3.11'
+      - name: Install pip-audit
+        run: pip install pip-audit
+      - name: Pip-audit Scan
+        run: |
+          if [ -f "algo-trader/requirements.txt" ]; then
+            pip-audit -r algo-trader/requirements.txt
+          elif [ -f "requirements.txt" ]; then
+            pip-audit -r requirements.txt
+          else
+            echo "No requirements.txt found!"
+            exit 1
+          fi
