@@ -3078,8 +3078,8 @@ def create_app():
             "Mean-Revert": "Statistical arbitrage using Z-score deviations from VWAP."
         }.get(name, "Institutional-grade trading algorithm.")
 
-    async def run_iteration_api(goal, symbol):
-        # Mocking the research engine response
+    async def _mock_iteration_api(goal, symbol):
+        # Mocking the research engine response (legacy stub — not used)
         return {
             "symbol": symbol,
             "iteration": 42,
@@ -3088,6 +3088,7 @@ def create_app():
             "sharpe": 2.15,
             "timestamp": datetime.now().isoformat()
         }
+
 
     @app.route("/api/v1/aether/registry", methods=["GET"])
     @require_auth
@@ -3133,7 +3134,7 @@ def create_app():
 
         try:
             # Trigger background iteration
-            result = await run_iteration_api(goal=goal, symbol=symbol)
+            result = await _mock_iteration_api(goal=goal, symbol=symbol)
             return jsonify({"status": "success", "data": result}), 200
         except Exception as e:
             return jsonify({"status": "error", "message": str(e)}), 500
