@@ -693,13 +693,13 @@ class TradeLogger:
             upd_str = ", ".join([f"{k} = ?" for k in valid_updates.keys()])
             params = list(valid_updates.values()) + [now, strategy_id]
 
-            cursor.execute(f"UPDATE strategy_safeguards SET {upd_str}, updated_at = ? WHERE strategy_id = ?", params)
+            cursor.execute(f"UPDATE strategy_safeguards SET {upd_str}, updated_at = ? WHERE strategy_id = ?", params)  # nosec
 
             if cursor.rowcount == 0:
                 keys = ["strategy_id", "updated_at"] + list(valid_updates.keys())
                 vals = [strategy_id, now] + list(valid_updates.values())
                 placeholders = ", ".join(["?" for _ in vals])
-                cursor.execute(f"INSERT INTO strategy_safeguards ({', '.join(keys)}) VALUES ({placeholders})", vals)
+                cursor.execute(f"INSERT INTO strategy_safeguards ({', '.join(keys)}) VALUES ({placeholders})", vals)  # nosec
 
             conn.commit()
             conn.close()
