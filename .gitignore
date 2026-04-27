@@ -8,6 +8,7 @@
 **/node_modules/
 **/dist/
 **/build/
+.agents_backup*/
 
 # Python
 __pycache__/
@@ -89,3 +90,10 @@ host_venv/
 graphify-out/
 *.corrupted*
 historify.duckdb*
+
+
+
+
+GEMINI.md
+CLAUDE.md
+docker-compose.override.yml
