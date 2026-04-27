@@ -134,24 +134,40 @@ def trading_mode_gate(f):
     Decorator to ensure trading requests respect the current mode.
     Injects the mode into the request context if needed.
     """
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # We can also check X-Trading-Mode header here for strictness
-        mode_header = request.headers.get("X-Trading-Mode")
-        order_manager = _api_context.get("order_manager")
+    if asyncio.iscoroutinefunction(f):
+        @wraps(f)
+        async def decorated_function(*args, **kwargs):
+            mode_header = request.headers.get("X-Trading-Mode")
+            order_manager = _api_context.get("order_manager")
 
-        if mode_header and order_manager:
-            mode_header = mode_header.lower()
-            if mode_header in {"sandbox", "live"} and order_manager.mode != mode_header:
-                logger.warning(
-                    "UI Mode (%s) differs from Engine Mode (%s). Overriding for this request.",
-                    mode_header, order_manager.mode
-                )
-                # For this request, we'll use the header mode
-                kwargs["mode_override"] = mode_header
+            if mode_header and order_manager:
+                mode_header = mode_header.lower()
+                if mode_header in {"sandbox", "live"} and order_manager.mode != mode_header:
+                    logger.warning(
+                        "UI Mode (%s) differs from Engine Mode (%s). Overriding for this request.",
+                        mode_header, order_manager.mode
+                    )
+                    kwargs["mode_override"] = mode_header
 
-        return f(*args, **kwargs)
-    return decorated_function
+            return await f(*args, **kwargs)
+        return decorated_function
+    else:
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            mode_header = request.headers.get("X-Trading-Mode")
+            order_manager = _api_context.get("order_manager")
+
+            if mode_header and order_manager:
+                mode_header = mode_header.lower()
+                if mode_header in {"sandbox", "live"} and order_manager.mode != mode_header:
+                    logger.warning(
+                        "UI Mode (%s) differs from Engine Mode (%s). Overriding for this request.",
+                        mode_header, order_manager.mode
+                    )
+                    kwargs["mode_override"] = mode_header
+
+            return f(*args, **kwargs)
+        return decorated_function
 
 
 def create_app():
@@ -678,17 +694,17 @@ def create_app():
             new_file_path = os.path.join(strat_dir, new_filename)
 
             # Security check
-            if not os.path.abspath(old_file_path).startswith(os.path.abspath(strat_dir)) or \
+            if not os.path.abspath(file_path).startswith(os.path.abspath(strat_dir)) or \
                not os.path.abspath(new_file_path).startswith(os.path.abspath(strat_dir)):
                 return jsonify({"error": "Forbidden path"}), 403
 
-            if not os.path.exists(old_file_path):
+            if not os.path.exists(file_path):
                 return jsonify({"error": "File not found"}), 404
 
             if os.path.exists(new_file_path):
                 return jsonify({"error": "Destination file already exists"}), 400
 
-            os.rename(old_file_path, new_file_path)
+            os.rename(file_path, new_file_path)
 
             return jsonify({"status": "success", "message": f"Strategy {filename} renamed to {new_filename} successfully"}), 200
         except Exception as e:
@@ -3415,7 +3431,126 @@ def create_app():
             logger.error(f"Backtest results error: {e}", exc_info=True)
             return jsonify({"status": "error", "message": str(e)}), 500
 
+    @app.route("/api/v1/strategies/<strategy_id>/activate", methods=["POST"])
+    @require_auth
+    async def activate_strategy(strategy_id):
+        """POST /api/v1/strategies/{id}/activate - Starts the strategy engine loop."""
+        try:
+            strategy_runner = _api_context.get("strategy_runner")
+            if not strategy_runner:
+                return jsonify({"error": "Engine context not available"}), 503
+
+            # Check if strategy exists
+            if strategy_id not in strategy_runner._definitions_by_key:
+                return jsonify({"error": f"Strategy {strategy_id} not found in registry"}), 404
+
+            await strategy_runner.start_strategies([strategy_id])
+            return jsonify({
+                "status": "success",
+                "message": f"Strategy {strategy_id} activated successfully",
+                "timestamp": datetime.now().isoformat()
+            }), 200
+        except Exception as e:
+            logger.error(f"Error activating strategy {strategy_id}: {e}")
+            return jsonify({"status": "error", "message": str(e)}), 500
+
+    @app.route("/api/v1/strategies/<strategy_id>/stop", methods=["POST"])
+    @require_auth
+    async def stop_strategy(strategy_id):
+        """POST /api/v1/strategies/{id}/stop - Stops strategy and optional square-off."""
+        try:
+            strategy_runner = _api_context.get("strategy_runner")
+            order_manager = _api_context.get("order_manager")
+            if not strategy_runner or not order_manager:
+                return jsonify({"error": "Engine context not available"}), 503
+
+            # 1. Stop the strategy loop
+            await strategy_runner.stop_strategies([strategy_id])
+
+            # 2. Handle square-off if requested
+            data = request.json or {}
+            square_off = data.get("square_off", True)
+            if square_off:
+                logger.warning(f"SQUARE_OFF >> Strategy {strategy_id} halting with liquidation.")
+                await order_manager.liquidate_strategy(strategy_id)
+
+            return jsonify({
+                "status": "success",
+                "message": f"Strategy {strategy_id} stopped{' and squared off' if square_off else ''}",
+                "timestamp": datetime.now().isoformat()
+            }), 200
+        except Exception as e:
+            logger.error(f"Error stopping strategy {strategy_id}: {e}")
+            return jsonify({"status": "error", "message": str(e)}), 500
+
+    @app.route("/api/v1/strategies/<strategy_id>/config", methods=["PATCH", "PUT"])
+    @require_auth
+    def update_strategy_config(strategy_id):
+        """PATCH /api/v1/strategies/{id}/config - Updates runtime parameters for a strategy."""
+        try:
+            data = request.json or {}
+            strategy_runner = _api_context.get("strategy_runner")
+            if not strategy_runner:
+                return jsonify({"error": "Engine context not available"}), 503
+
+            # Update in-memory instance if running
+            instance = strategy_runner._strategies_by_key.get(strategy_id)
+            if instance:
+                for key, value in data.items():
+                    if hasattr(instance, key):
+                        # Basic type safety for runtime updates
+                        old_val = getattr(instance, key)
+                        try:
+                            if isinstance(old_val, int): value = int(value)
+                            elif isinstance(old_val, float): value = float(value)
+                            elif isinstance(old_val, bool): value = str(value).lower() == 'true'
+                        except: pass
+                        setattr(instance, key, value)
+                        logger.info(f"CONFIG >> Updated {strategy_id}.{key} to {value}")
+
+            # Persist to local cache/settings (optional, but good practice)
+            db_logger = get_trade_logger()
+            for key, value in data.items():
+                db_logger.update_system_setting(f"strat_cfg_{strategy_id}_{key}", str(value))
+
+            return jsonify({
+                "status": "success",
+                "message": "Configuration updated successfully",
+                "strategy_id": strategy_id
+            }), 200
+        except Exception as e:
+            logger.error(f"Error updating config for {strategy_id}: {e}")
+            return jsonify({"status": "error", "message": str(e)}), 500
+
+    @app.route("/api/v1/strategies/<strategy_id>/performance", methods=["GET"])
+    @require_auth
+    async def get_strategy_performance(strategy_id):
+        """GET /api/v1/strategies/{id}/performance - Institutional performance audit."""
+        try:
+            db_logger = get_trade_logger()
+
+            # Fetch filtered stats from trade_logger (if supported)
+            # We'll use get_strategy_metrics_async as a baseline
+            stats = await db_logger.get_strategy_metrics_async(strategy_id)
+
+            # Add regime and personality data
+            personality = db_logger.get_strategy_personality(strategy_id)
+            safeguards = db_logger.get_strategy_safeguards(strategy_id)
+
+            return jsonify({
+                "status": "success",
+                "strategy_id": strategy_id,
+                "metrics": stats,
+                "personality": personality,
+                "safeguards": safeguards,
+                "timestamp": datetime.now().isoformat()
+            }), 200
+        except Exception as e:
+            logger.error(f"Error fetching performance for {strategy_id}: {e}")
+            return jsonify({"status": "error", "message": str(e)}), 500
+
     return app
+
 
 
 # Helper functions
