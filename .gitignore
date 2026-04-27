@@ -37,6 +37,13 @@ supabase/volumes/
 openclaw/
 magic.mgc
 
+
+# Trading UI Data
+trading-ui/node_modules
+trading-ui/.next
+trading-ui/.cache
+trading-ui/.turbo
+
 # Logs & Temp
 *.log
 npm-debug.log*
