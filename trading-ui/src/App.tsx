@@ -62,6 +62,8 @@ const MaxPainPage = lazy(() => import("./integrations/openalgo/pages/MaxPainPage
 const StraddleLabPage = lazy(() => import("./integrations/openalgo/pages/StraddleLabPage"));
 const StrategyRegistry = lazy(() => import("./integrations/openalgo/pages/StrategyRegistryPage"));
 const MarketRegime = lazy(() => import("./pages/MarketRegimePage"));
+const StrategyManagerPage = lazy(() => import("./features/strategy-manager/StrategyManagerPage"));
+
 
 const IntelligenceHubPage = lazy(() => import("./pages/IntelligenceHubPage"));
 
@@ -115,6 +117,7 @@ const App = () => (
                       {/* Aether Integrated Core */}
                       <Route path="/" element={<LandingDashboard />} />
                       <Route path="/audit" element={<AuditCenter />} />
+                      <Route path="/execution/command-center" element={<StrategyManagerPage />} />
                       <Route path="/execution/registry" element={<StrategyMonitoring />} />
                       <Route path="/intelligence" element={<IntelligenceHubPage />} />
                       <Route path="/intelligence/regime" element={<MarketRegime />} />
