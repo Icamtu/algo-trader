@@ -45,11 +45,17 @@ export const algoApi = {
   // Strategies
   getStrategies: () => openAlgoClient("/api/v1/strategies"),
   getStrategy: (id: string) => openAlgoClient(`/api/v1/strategies/${id}`),
+  activateStrategy: (id: string) => openAlgoClient(`/api/v1/strategies/${id}/activate`, { method: "POST" }),
   startStrategy: (id: string) => openAlgoClient(`/api/v1/strategies/${id}/start`, { method: "POST" }),
-  stopStrategy: (id: string) => openAlgoClient(`/api/v1/strategies/${id}/stop`, { method: "POST" }),
+  stopStrategy: (id: string, squareOff = true) =>
+    openAlgoClient(`/api/v1/strategies/${id}/stop`, {
+      method: "POST",
+      body: JSON.stringify({ square_off: squareOff })
+    }),
+  getStrategyPerformance: (id: string) => openAlgoClient(`/api/v1/strategies/${id}/performance`),
   liquidateStrategy: (id: string) => openAlgoClient(`/api/v1/strategies/${id}/liquidate`, { method: "POST" }),
   updateStrategyParams: (id: string, params: Record<string, unknown>) =>
-    openAlgoClient(`/api/v1/strategies/${id}/params`, { method: "PUT", body: JSON.stringify(params) }),
+    openAlgoClient(`/api/v1/strategies/${id}/config`, { method: "PATCH", body: JSON.stringify(params) }),
   createStrategy: (data: { name: string, template?: string }) =>
     openAlgoClient("/api/v1/strategies", { method: "POST", body: JSON.stringify(data) }),
   deleteStrategy: (id: string) => openAlgoClient(`/api/v1/strategies/${id}`, { method: "DELETE" }),
