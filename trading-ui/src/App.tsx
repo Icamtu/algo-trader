@@ -33,7 +33,6 @@ const OpenAlgoHub = lazy(() => import("./pages/OpenAlgoHub"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const NotFound = lazy(() => import("./pages/NotFound"));
-const TradingDesk = lazy(() => import("./pages/TradingDesk"));
 
 // OpenAlgo Integration Components (Lazy)
 const Orders = lazy(() => import("./integrations/openalgo/pages/OrderBookPage").then(module => ({ default: module.OrderBookPage })));
@@ -63,6 +62,7 @@ const StraddleLabPage = lazy(() => import("./integrations/openalgo/pages/Straddl
 const StrategyRegistry = lazy(() => import("./integrations/openalgo/pages/StrategyRegistryPage"));
 const MarketRegime = lazy(() => import("./pages/MarketRegimePage"));
 const StrategyManagerPage = lazy(() => import("./features/strategy-manager/StrategyManagerPage"));
+const PnLTracker = lazy(() => import("./pages/PnLTracker"));
 
 
 const IntelligenceHubPage = lazy(() => import("./pages/IntelligenceHubPage"));
@@ -134,11 +134,11 @@ const App = () => (
                       <Route path="/intelligence/straddle-lab" element={<StraddleLabPage />} />
                       <Route path="/governance" element={<Infrastructure />} />
                       <Route path="/risk" element={<Risk />} />
+                      <Route path="/pnl-tracker" element={<PnLTracker />} />
                       <Route path="/journal" element={<TradeJournal />} />
 
                       {/* Legacy / OpenAlgo Bridges */}
                       <Route path="/openalgo/strategy-registry" element={<StrategyRegistry />} />
-                      <Route path="/trading-desk" element={<TradingDesk />} />
                       <Route path="/strategy-lab" element={<StrategyLab />} />
                       <Route path="/scanner" element={<MarketScanner />} />
                       <Route path="/portfolio" element={<Portfolio />} />
