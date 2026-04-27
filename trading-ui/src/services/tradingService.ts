@@ -7,7 +7,7 @@ export const tradingService = {
   getPositions: (apiKey: string) => openAlgoAdapter.getPositionBook(apiKey),
   getHoldings: (apiKey: string) => openAlgoAdapter.getHoldings(apiKey),
   getSystemLogs: (page: number = 1, searchQuery: string = "") => openAlgoAdapter.getSystemLogs(page, searchQuery),
-  
+
   // Configuration
   getApiKey: () => openAlgoAdapter.getApiKey(),
   regenerateApiKey: () => openAlgoAdapter.regenerateApiKey(),
@@ -19,13 +19,13 @@ export const tradingService = {
   downloadMasterContract: (force?: boolean) => openAlgoAdapter.downloadMasterContract(force),
   getCacheHealth: () => openAlgoAdapter.getCacheHealth(),
   reloadCache: () => openAlgoAdapter.reloadCache(),
-  
+
   // Sandbox
   getSandboxConfigs: () => openAlgoAdapter.getSandboxConfigs(),
   updateSandboxConfig: (key: string, value: any) => openAlgoAdapter.updateSandboxConfig(key, value),
   resetSandbox: () => openAlgoAdapter.resetSandbox(),
   getSandboxPnLData: () => openAlgoAdapter.getSandboxPnLData(),
-  
+
   // Analyzer
   getAnalyzerData: (start?: string, end?: string) => openAlgoAdapter.getAnalyzerData(start, end),
 
@@ -34,6 +34,7 @@ export const tradingService = {
   approveActionCenterOrder: (id: number) => openAlgoAdapter.approveActionCenterOrder(id),
   rejectActionCenterOrder: (id: number, reason?: string) => openAlgoAdapter.rejectActionCenterOrder(id, reason),
   deleteActionCenterOrder: (id: number) => openAlgoAdapter.deleteActionCenterOrder(id),
+  retryActionCenterOrder: (id: number) => openAlgoAdapter.retryActionCenterOrder(id),
   approveAllActionCenterOrders: () => openAlgoAdapter.approveAllActionCenterOrders(),
   approveSelectedActionCenterOrders: (ids: number[]) => openAlgoAdapter.approveSelectedActionCenterOrders(ids),
   rejectSelectedActionCenterOrders: (ids: number[], reason?: string) => openAlgoAdapter.rejectSelectedActionCenterOrders(ids, reason),
@@ -57,15 +58,15 @@ export const tradingService = {
   // Playground
   getPlaygroundEndpoints: () => openAlgoAdapter.getPlaygroundEndpoints(),
   getPlaygroundApiKey: () => openAlgoAdapter.getPlaygroundApiKey(),
-  
+
   placeOrder: (payload: any) => openAlgoAdapter.placeOrder(payload),
   cancelOrder: (orderId: string) => openAlgoAdapter.cancelOrder(orderId),
-  closePosition: (symbol: string, exchange: string, product: string) => 
+  closePosition: (symbol: string, exchange: string, product: string) =>
     openAlgoAdapter.closePosition(symbol, exchange, product),
-  
-  getMarketQuotes: (apiKey: string, symbol: string, exchange: string) => 
+
+  getMarketQuotes: (apiKey: string, symbol: string, exchange: string) =>
     openAlgoAdapter.getQuotes(apiKey, symbol, exchange),
-  
+
   getMultiQuotes: (apiKey: string, symbols: Array<{ symbol: string; exchange: string }>) =>
     openAlgoAdapter.getMultiQuotes(apiKey, symbols),
 
@@ -79,11 +80,27 @@ export const tradingService = {
 
   // Historify
   getHistorifyWatchlist: () => openAlgoAdapter.getHistorifyWatchlist(),
-  getHistorifyCatalog: () => openAlgoAdapter.getHistorifyCatalog(),
+  getHistorifyCatalog: (interval?: string) => openAlgoAdapter.getHistorifyCatalog(interval),
+  deleteCatalogEntry: (symbol: string, exchange?: string, interval?: string) =>
+    openAlgoAdapter.deleteCatalogEntry(symbol, exchange, interval),
   getHistorifyJobs: (limit?: number) => openAlgoAdapter.getHistorifyJobs(limit),
   getHistorifySchedules: () => openAlgoAdapter.getHistorifySchedules(),
-  updateHistorifyWatchlist: (action: 'add' | 'remove', exchange: string, symbol: string) => 
-    openAlgoAdapter.updateHistorifyWatchlist(action, exchange, symbol),
+  updateHistorifyWatchlist: (action: 'add' | 'remove', exchange: string, symbol?: string, symbols?: string[]) =>
+    openAlgoAdapter.updateHistorifyWatchlist(action, exchange, symbol, symbols),
+  getHistorifyRecords: (symbol: string, exchange?: string, interval?: string, limit?: number) =>
+    openAlgoAdapter.getHistorifyRecords(symbol, exchange, interval, limit),
+  getHistorifyBreadth: (interval?: string) =>
+    openAlgoAdapter.getHistorifyBreadth(interval),
+  runHistorify: (payload: { symbol?: string; symbols?: string[]; exchange: string; from_date: string; to_date: string; interval: string; is_incremental?: boolean; operator?: string }) =>
+    openAlgoAdapter.runHistorify(payload),
+  cancelHistorifyJob: (jobId: string) =>
+    openAlgoAdapter.cancelHistorifyJob(jobId),
+  exportHistorifyData: (symbol: string, exchange?: string, interval?: string, limit?: number) =>
+    openAlgoAdapter.exportHistorifyData(symbol, exchange, interval, limit),
+  seedHistorify: () => openAlgoAdapter.seedHistorify(),
+  getHistorifyStats: () => openAlgoAdapter.getHistorifyStats(),
+  compactHistorify: () => openAlgoAdapter.compactHistorify(),
+  purgeHistorify: (days?: number) => openAlgoAdapter.purgeHistorify(days),
 
   // Strategy Labs
   getMaxPainData: (params: any) => openAlgoAdapter.getMaxPainData(params),

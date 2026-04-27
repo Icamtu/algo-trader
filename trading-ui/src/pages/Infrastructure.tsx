@@ -1,19 +1,15 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
 import {
-  Cpu, Globe,
-  Activity, RefreshCw,
-  Network, Terminal, Loader2,
-  Shield, Database
+  Cpu, Globe, Activity, RefreshCw,
+  Network, Terminal, Loader2, Shield, Database,
+  Cpu as CpuIcon, Server, HardDrive, Link, Unlock, Lock
 } from "lucide-react";
-import { GlobalHeader } from "@/components/trading/GlobalHeader";
-import { MarketNavbar } from "@/components/trading/MarketNavbar";
 import { algoApi } from "@/features/openalgo/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { IndustrialValue } from "@/components/trading/IndustrialValue";
-import { useAppModeStore } from "@/stores/appModeStore";
 import { cn } from "@/lib/utils";
 
 interface ServiceStatus {
@@ -31,20 +27,14 @@ interface SystemHealth {
   database: ServiceStatus;
 }
 
-const infraTabs = ["System Status", "API Health"] as const;
+const infraTabs = ["System_Status", "API_Probes"] as const;
 
 export default function Infrastructure() {
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
-  const rawTab = searchParams.get("tab") || "System Status";
-  const { mode } = useAppModeStore();
-  const isAD = mode === 'AD';
-  const primaryColorClass = isAD ? "text-amber-500" : "text-teal-500";
-  const accentBorderClass = isAD ? "border-amber-500/20" : "border-teal-500/20";
-  const accentBgClass = isAD ? "bg-amber-500/5" : "bg-teal-500/5";
+  const rawTab = searchParams.get("tab") || "System_Status";
+  const activeTab = infraTabs.includes(rawTab as any) ? (rawTab as typeof infraTabs[number]) : "System_Status";
 
-  const activeTab = (infraTabs as readonly string[]).includes(rawTab) ? (rawTab as typeof infraTabs[number]) : "System Status";
-  
   const [health, setHealth] = useState<SystemHealth | null>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -55,8 +45,10 @@ export default function Infrastructure() {
   const fetchStatus = async () => {
     setIsLoading(true);
     try {
-      const data = await algoApi.getSystemStatus();
-      setHealth(data);
+      const response = await algoApi.getSystemStatus();
+      // Safely unwrap data if it follows the { status, data } pattern
+      const healthData = response?.data || response;
+      setHealth(healthData);
       setLastCheck(new Date());
     } catch (error) {
        toast({ variant: "destructive", title: "KERNEL_ERR", description: "HANDSHAKE_FAILED" });
@@ -67,9 +59,10 @@ export default function Infrastructure() {
 
   const fetchLogs = async () => {
     try {
-      const data = await algoApi.getSystemLogs();
-      setLogs(data);
-    } catch (e) {}
+      const response = await algoApi.getSystemLogs();
+      const logsData = response?.logs || response?.data?.logs || [];
+      setLogs(logsData);
+    } catch (error) {}
   };
 
   useEffect(() => {
@@ -80,269 +73,241 @@ export default function Infrastructure() {
   }, []);
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background industrial-grid relative">
-      <div className="noise-overlay" />
-      <div className="scanline opacity-10" />
-      <GlobalHeader />
-      <MarketNavbar activeTab="/infrastructure" />
-
-      {/* Industrial Sub-Tabs */}
-      <div className="flex px-4 bg-card/5 border-b border-border/20 relative z-10">
-        {infraTabs.map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-[9px] font-mono font-black uppercase tracking-[0.2em] transition-all relative ${
-              activeTab === tab ? primaryColorClass + " bg-primary/5" : "text-muted-foreground/30 hover:text-foreground/60"
-            }`}
-          >
-            {tab}
-            {activeTab === tab && (
-              <motion.div layoutId="activeInfraTab" className={cn("absolute bottom-0 left-0 right-0 h-[1.5px] shadow-[0_0_10px_rgba(255,176,0,0.5)]", isAD ? "bg-amber-500" : "bg-teal-500")} />
-            )}
-          </button>
-        ))}
+    <div className="space-y-8 pb-12">
+      {/* Header Section */}
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-3">
+          <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+          <h1 className="text-3xl font-black uppercase tracking-[0.1em] text-foreground">Hardware_Infrastructure</h1>
+        </div>
+        <p className="text-[10px] font-mono text-muted-foreground/40 uppercase tracking-[0.3em]">
+          Kernel_Telemetry // Distributed_Computing_Matrix_Active
+        </p>
       </div>
 
-      <div className="flex-1 overflow-auto p-4 custom-scrollbar relative z-10">
-        <div className="max-w-7xl mx-auto space-y-6">
-          
-           {activeTab === "System Status" && (
-            <>
-              {/* Telemetry Header */}
-              <div className={cn("flex items-end justify-between border-l pl-4 py-2", accentBorderClass, accentBgClass)}>
-                <div className="flex items-center gap-4">
-                  <div className={cn("bg-card/20 p-2 border rounded-sm shadow-xl", accentBorderClass)}>
-                    <Cpu className={cn("h-6 w-6", primaryColorClass)} />
-                  </div>
-                  <div>
-                    <h1 className={cn("text-2xl font-black font-mono tracking-[0.2em] uppercase", primaryColorClass)}>Infrastructure_Radar_Kernel</h1>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Network className={cn("w-3 h-3 animate-pulse", primaryColorClass)} />
-                      <span className="text-[10px] font-mono font-black text-muted-foreground/60 tracking-widest uppercase italic font-bold">SYSTEM_STABILITY_AUDIT // KERNEL_SYNC_V4</span>
-                    </div>
-                  </div>
-                </div>
+      {/* Sub-Tabs Nav */}
+      <div className="flex items-center justify-between border-b border-border/20 bg-card/2 p-1">
+         <div className="flex items-center gap-1">
+            {infraTabs.map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={cn(
+                  "px-6 py-2 text-[10px] font-black uppercase tracking-widest transition-all",
+                  activeTab === tab ? "bg-primary text-black" : "text-muted-foreground/40 hover:text-foreground/60"
+                )}
+              >
+                {tab}
+              </button>
+            ))}
+         </div>
+         <div className="flex items-center gap-6 px-4">
+            <div className="flex flex-col items-end">
+               <span className="text-[7px] font-black text-muted-foreground/20 uppercase tracking-[0.2em]">Sync_Cycle</span>
+               <span className="text-[9px] font-mono font-black text-primary">{lastCheck.toLocaleTimeString()}</span>
+            </div>
+            <button
+              onClick={fetchStatus}
+              disabled={isLoading}
+              className="p-2 border border-border/30 hover:bg-primary/10 transition-all disabled:opacity-30"
+            >
+               <RefreshCw className={cn("w-4 h-4 text-primary", isLoading && "animate-spin")} />
+            </button>
+         </div>
+      </div>
 
-                <div className="flex items-center gap-6">
-                  <div className="text-right border-r border-border/20 pr-6">
-                    <p className="text-[7px] font-mono font-black text-muted-foreground/30 uppercase tracking-widest mb-0.5">Last_Sync</p>
-                    <p className={cn("text-xs font-mono font-black", primaryColorClass)}>{lastCheck.toLocaleTimeString()}</p>
-                  </div>
-                  <button 
-                    onClick={fetchStatus}
-                    disabled={isLoading}
-                    className={cn("p-2 border bg-background hover:bg-white/5 transition-all", accentBorderClass)}
-                  >
-                    <RefreshCw className={cn("w-4 h-4", primaryColorClass, isLoading ? "animate-spin" : "")} />
-                  </button>
-                </div>
-              </div>
-
+      <AnimatePresence mode="wait">
+        {activeTab === "System_Status" && (
+           <motion.div
+             key="status"
+             initial={{ opacity: 0, y: 10 }}
+             animate={{ opacity: 1, y: 0 }}
+             exit={{ opacity: 0, y: -10 }}
+             className="space-y-6"
+           >
               {!health ? (
-                <div className="h-64 flex items-center justify-center">
-                   <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                <div className="py-20 flex flex-col items-center gap-4">
+                   <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                   <span className="text-[9px] font-mono font-black text-muted-foreground/40 uppercase animate-pulse">Polling_Cluster_Frequencies...</span>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <StatusCard name="Aether_Core" alias="ALGO_ENGINE" icon={Cpu} status={health.algo_engine} description="Execution runtime." />
-                  <StatusCard name="Shoonya_Bridge" alias="BROKER_IF" icon={Globe} status={health.broker} description="Finvasia Gateway." />
-                  <StatusCard name="Nexus_Hub" alias="OPEN_GATE" icon={Network} status={health.openalgo} description="Protocol layer." />
-                  <StatusCard name="DuckDB_Store" alias="HISTORIFY" icon={Database} status={health.database} description="Analytical logging." />
-                  <StatusCard name="AI_Ollama" alias="LOCAL_LLM" icon={Activity} status={health.ollama_local} description="Cognitive core." />
-                  <StatusCard name="OpenClaw" alias="ANALYTICS" icon={Shield} status={health.openclaw_agent} description="Reporting gateway." />
-                </div>
-              )}
+                <>
+                  <div className="grid grid-cols-3 gap-6">
+                    <StatusNode name="Aether_Core" id="ENGINE_01" icon={CpuIcon} status={health.algo_engine} description="Trading execution & strategy runtime." />
+                    <StatusNode name="Shoonya_IF" id="BROKER_01" icon={Globe} status={health.broker} description="Finvasia WebSocket & REST gateway." />
+                    <StatusNode name="Nexus_Bridge" id="PROTOCOL_01" icon={Network} status={health.openalgo} description="OpenAlgo kernel interface layer." />
+                    <StatusNode name="Historify_DB" id="DUCKDB_01" icon={Database} status={health.database} description="Local analytical data storage engine." />
+                    <StatusNode name="Neural_Alpha" id="OLLAMA_01" icon={Activity} status={health.ollama_local} description="Cognitive core for strategy optimization." />
+                    <StatusNode name="Analytics_CX" id="OPENCLAW" icon={Shield} status={health.openclaw_agent} description="Reporting and auditing security layer." />
+                  </div>
 
-              {health && (
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-                  <div className="lg:col-span-8">
-                    <div className="border border-border bg-card/5 h-64 flex flex-col relative overflow-hidden">
-                      <div className="px-3 py-1.5 border-b border-border bg-card/10 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Terminal className="w-3 h-3 text-primary" />
-                          <span className="text-[8px] font-mono font-black uppercase tracking-[0.2em] text-foreground">Diagnostic_Log_Stream</span>
+                  <div className="grid grid-cols-12 gap-6">
+                     {/* Diagnostic Logs */}
+                     <div className="col-span-8 p-6 bg-card/5 border border-border/50 h-80 flex flex-col overflow-hidden">
+                        <div className="flex items-center gap-3 mb-6 shrink-0 border-b border-border/20 pb-4">
+                           <Terminal className="w-4 h-4 text-primary" />
+                           <h3 className="text-[10px] font-black uppercase tracking-widest text-foreground">Kernel_Diagnostic_Stream</h3>
                         </div>
-                        <div className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
-                      </div>
-                      <div className="flex-1 p-3 font-mono text-[9px] leading-snug overflow-auto bg-black/40 custom-scrollbar">
-                        {logs.map((log, idx) => (
-                           <div key={idx} className="flex gap-3 mb-1 hover:bg-white/[0.02] py-0.5 px-2">
-                              <span className="text-muted-foreground/10 shrink-0">[{new Date(log.time).toLocaleTimeString()}]</span>
-                              <span className={cn("font-black w-14 text-[7px] uppercase border px-1", 
-                                log.level === 'SUCCESS' ? 'text-secondary border-secondary/10' : primaryColorClass + ' border-primary/10'
-                              )}>{log.level}</span>
-                              <span className={cn("truncate w-16 opacity-40", primaryColorClass)}>[{log.module}]</span>
-                              <span className="text-foreground/50">{log.msg}</span>
+                        <div className="flex-1 overflow-auto space-y-1 pr-2 custom-scrollbar">
+                           {logs.map((log, i) => (
+                             <div key={i} className="flex gap-4 font-mono text-[9px] hover:bg-muted/5 p-1 transition-all group">
+                                <span className="text-muted-foreground/20 group-hover:text-primary/40 shrink-0">[{new Date(log.time).toLocaleTimeString()}]</span>
+                                <span className={cn("w-16 font-black shrink-0 px-1 border tracking-tighter text-[7px] uppercase", log.level === 'ERROR' ? 'border-destructive/20 text-destructive' : 'border-primary/20 text-primary')}>
+                                   {log.level}
+                                </span>
+                                <span className="text-muted-foreground/40 w-24 shrink-0 font-black uppercase tracking-widest">[{log.module}]</span>
+                                <span className="text-foreground/60 uppercase truncate">{log.msg}</span>
+                             </div>
+                           ))}
+                        </div>
+                     </div>
+
+                     {/* Security & Access */}
+                     <div className="col-span-4 space-y-6">
+                        <div className="p-6 bg-card/5 border border-border/50 h-36">
+                           <div className="flex items-center gap-3 mb-6">
+                              <Lock className="w-4 h-4 text-primary" />
+                              <h3 className="text-[10px] font-black uppercase tracking-widest text-foreground">Security_Isolation</h3>
                            </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="lg:col-span-4">
-                    <div className="border border-border p-4 h-64 flex flex-col justify-between bg-card/5 relative group overflow-hidden">
-                      <h3 className="text-xl font-black font-display italic leading-none">ISOLATION_<span className={primaryColorClass}>WARD</span></h3>
-                      <div className="space-y-3 border-l border-border/20 pl-4 my-4">
-                         {[
-                           { label: "CIPHER", value: "AES_256", color: primaryColorClass },
-                           { label: "SIGNAL", value: "ENCRYPTED", color: "text-secondary" },
-                           { label: "SWITCH", value: "READY", color: "text-rose-500" },
-                         ].map(item => (
-                           <div key={item.label} className="flex flex-col">
-                              <span className="text-[7px] font-mono font-black text-muted-foreground/20 mb-0.5">{item.label}</span>
-                              <span className={cn("text-[9px] font-mono font-black", item.color)}>{item.value}</span>
+                           <div className="space-y-3">
+                              <div className="flex justify-between items-center text-[10px] font-mono">
+                                 <span className="text-muted-foreground/40 uppercase">Cipher_Protocol</span>
+                                 <span className="font-black text-secondary">AES_256_GCM</span>
+                              </div>
+                              <div className="flex justify-between items-center text-[10px] font-mono">
+                                 <span className="text-muted-foreground/40 uppercase">Encryption_State</span>
+                                 <span className="font-black text-secondary">ACTIVE</span>
+                              </div>
                            </div>
-                         ))}
-                      </div>
-                      <button className={cn("w-full py-2 border font-mono font-black text-[9px] uppercase tracking-[0.3em] transition-all", isAD ? "border-amber-500/40 text-amber-500 hover:bg-amber-500" : "border-teal-500/40 text-teal-500 hover:bg-teal-500", "hover:text-black")}>STRESS_TEST</button>
-                    </div>
+                        </div>
+
+                        <div className="p-6 bg-primary/5 border border-primary/20 relative overflow-hidden h-36">
+                           <div className="absolute top-0 right-0 w-16 h-16 bg-primary/20 -mr-8 -mt-8 rotate-45" />
+                           <p className="text-[9px] font-mono text-muted-foreground/60 uppercase leading-snug">
+                              Standard hardware Stress tests are scheduled for every UTC 00:00. Manual probe can be initiated during maintenance cycles.
+                           </p>
+                           <button className="mt-4 px-4 py-1.5 border border-primary/40 text-primary text-[8px] font-black uppercase tracking-widest hover:bg-primary hover:text-black transition-all">
+                              Initiate_Probe
+                           </button>
+                        </div>
+                     </div>
                   </div>
-                </div>
+                </>
               )}
-            </>
-          )}
+           </motion.div>
+        )}
 
-          {activeTab === "API Health" && (
-            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
-              <div className="p-4 border border-border/20 bg-card/5">
-                <div className="flex items-center gap-3 mb-6">
-                  <Shield className={cn("w-5 h-5", primaryColorClass)} />
-                  <div className="flex items-baseline space-x-3">
-                    <h2 className="text-xl font-black font-display uppercase tracking-tighter">Diagnostic_<span className={primaryColorClass}>Probe</span></h2>
-                    <span className={cn("text-[9px] font-mono opacity-40", primaryColorClass)}>v1.2.1-SYNC</span>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <DiagnosticRow 
-                    label="PROXIED_API_GATEWAY" 
-                    endpoint={`${CONFIG.API_BASE_URL}/api/v1/system/status`} 
-                    description="Verifies Port 18788 routing to Engine."
-                  />
-                  <DiagnosticRow 
-                    label="TELEMETRY_HANDSHAKE" 
-                    endpoint={`${CONFIG.API_BASE_URL.replace('http', 'ws')}/ws/ticks`} 
-                    description="Verifies WebSocket upgrade handshake."
-                    checkType="WS"
-                  />
-                  <DiagnosticRow 
-                    label="MASTER_CONTRACT_SYNC" 
-                    endpoint={`${CONFIG.API_BASE_URL}/api/v1/brokers`} 
-                    description="Broker connectivity and contract sync."
-                    method="GET"
-                  />
-                  <DiagnosticRow 
-                    label="DUCKDB_PERSISTENCE" 
-                    endpoint={`${CONFIG.API_BASE_URL}/api/v1/history?symbol=RELIANCE&from=2024-01-01&to=2024-01-02`} 
-                    description="Real-time analytical data accessibility."
-                  />
-                </div>
+        {activeTab === "API_Probes" && (
+           <motion.div
+             key="probes"
+             initial={{ opacity: 0, y: 10 }}
+             animate={{ opacity: 1, y: 0 }}
+             className="p-6 bg-card/5 border border-border/50"
+           >
+              <div className="flex items-center gap-3 mb-8 border-b border-border/20 pb-6">
+                 <Link className="w-4 h-4 text-primary" />
+                 <h3 className="text-xs font-black uppercase tracking-widest text-foreground">Active_Endpoint_Probes</h3>
               </div>
-            </div>
-          )}
 
-        </div>
+              <div className="space-y-2">
+                 <ProbeRow label="Auth_Gateway" endpoint="/supabase/auth/v1/health" info="Internal Supabase Bridge" />
+                 <ProbeRow label="REST_Core" endpoint="/algo-api/api/v1/health" info="Primary REST Proxy (/algo-api)" />
+                 <ProbeRow label="Tick_H-Bridge" endpoint={`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/algo-ws`} info="WebSocket Port 5002" />
+                 <ProbeRow label="Broker_Sync" endpoint="/algo-api/api/v1/brokers" info="Direct Exchange Link" />
+                 <ProbeRow label="DuckDB_I/O" endpoint="/algo-api/api/v1/historify/catalog" info="SSD Persistent Layer" />
+              </div>
+           </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function StatusNode({ name, id, icon: Icon, status, description }: { name: string, id: string, icon: any, status?: ServiceStatus, description: string }) {
+  const isHealthy = status?.status === "HEALTHY";
+  const displayStatus = status?.status || "UNKNOWN";
+
+  return (
+    <div className="p-6 bg-card/5 border border-border/50 group hover:border-primary/40 transition-all relative">
+      <div className="flex justify-between items-start mb-6">
+         <div className="p-3 bg-background border border-border/30 group-hover:border-primary/20 transition-all">
+            <Icon className={cn("w-5 h-5", isHealthy ? "text-primary" : "text-destructive")} />
+         </div>
+         <div className={cn("flex items-center gap-2 px-3 py-1 border font-mono font-black text-[9px] uppercase tracking-widest", isHealthy ? "border-secondary/20 text-secondary" : "border-destructive/20 text-destructive")}>
+            <div className={cn("w-1.5 h-1.5 rounded-full", isHealthy ? "bg-secondary animate-pulse" : "bg-destructive")} />
+            {displayStatus}
+         </div>
+      </div>
+      <div>
+         <h4 className="text-xl font-black uppercase tracking-tight group-hover:text-primary transition-colors leading-none mb-1">{name}</h4>
+         <span className="text-[8px] font-mono font-black text-muted-foreground/20 uppercase tracking-[0.3em]">{id}</span>
+      </div>
+      <p className="mt-4 text-[10px] font-mono text-muted-foreground/40 uppercase leading-snug h-8 overflow-hidden">
+         {description}
+      </p>
+      <div className="mt-6 pt-4 border-t border-border/10 flex justify-between items-end">
+         <div className="flex flex-col">
+            <span className="text-[7px] font-mono font-black text-muted-foreground/10 uppercase mb-1">Latency_P99</span>
+            <span className="text-xs font-black text-secondary font-mono">{status?.latency || '--'}ms</span>
+         </div>
+         <div className="flex flex-col items-end">
+            <span className="text-[7px] font-mono font-black text-muted-foreground/10 uppercase mb-1">State_Hash</span>
+            <span className="text-[9px] font-mono font-black text-foreground truncate w-24 text-right uppercase">{status?.integrity || 'ACTIVE'}</span>
+         </div>
       </div>
     </div>
   );
 }
 
-function DiagnosticRow({ label, endpoint, description, method = "GET", checkType = "HTTP" }: { label: string, endpoint: string, description: string, method?: string, checkType?: "HTTP" | "WS" }) {
-  const [status, setStatus] = useState<"WAITING" | "CHECKING" | "UP" | "DOWN">("WAITING");
+function ProbeRow({ label, endpoint, info }: { label: string, endpoint: string, info: string }) {
+  const [status, setStatus] = useState<"WAIT" | "RUN" | "UP" | "DOWN">("WAIT");
   const [latency, setLatency] = useState<number | null>(null);
 
-  const runCheck = async () => {
-    setStatus("CHECKING");
+  const runProbe = async () => {
+    setStatus("RUN");
     const start = performance.now();
     try {
-      if (checkType === "WS") {
-         // Head check not viable for WS, assume UP if can resolve
-         setStatus("UP");
+      if (endpoint.startsWith('ws')) {
+        setStatus("UP");
       } else {
-        const res = await fetch(endpoint, { 
-          method, 
-          headers: { 
-            'apikey': CONFIG.API_KEY || 'PROBE',
-            'Content-Type': 'application/json'
-          } 
-        });
-        setStatus(res.ok || res.status === 401 ? "UP" : "DOWN"); 
+        const res = await fetch(endpoint, { method: 'HEAD', headers: { 'apikey': 'PROBE' } });
+        setStatus(res.ok || res.status === 401 ? "UP" : "DOWN");
       }
       setLatency(Math.round(performance.now() - start));
-    } catch (e) {
+    } catch {
       setStatus("DOWN");
     }
   };
 
   useEffect(() => {
-    runCheck();
-    const interval = setInterval(runCheck, 30000);
+    runProbe();
+    const interval = setInterval(runProbe, 60000);
     return () => clearInterval(interval);
   }, []);
 
   return (
-    <div className="group flex items-center justify-between py-3 px-4 border border-border/10 hover:bg-primary/5 transition-all">
-      <div className="flex flex-col">
-        <div className="flex items-center gap-2 mb-1">
-          <span className={`w-1 h-3 ${status === 'UP' ? 'bg-secondary' : status === 'DOWN' ? 'bg-destructive' : 'bg-muted-foreground/20'}`} />
-          <span className="text-[10px] font-mono font-black uppercase tracking-widest leading-none">{label}</span>
-        </div>
-        <span className="text-[8px] font-mono text-muted-foreground/40 uppercase tracking-wider">{description}</span>
-      </div>
+    <div className="flex items-center justify-between py-4 px-6 border border-border/10 hover:bg-muted/5 transition-all group">
+       <div className="flex items-center gap-6">
+          <div className={cn("w-1 h-6 shrink-0", status === 'UP' ? "bg-secondary" : status === 'DOWN' ? "bg-destructive" : "bg-muted-foreground/20")} />
+          <div className="flex flex-col">
+             <span className="text-[10px] font-black uppercase tracking-widest text-foreground">{label}</span>
+             <span className="text-[8px] font-mono text-muted-foreground/40 uppercase tracking-widest">{info}</span>
+          </div>
+       </div>
 
-      <div className="flex items-center gap-8">
-        <div className="flex flex-col items-end">
-           <span className="text-[7px] font-mono font-black text-muted-foreground/20 uppercase tracking-widest mb-0.5">ENDPOINT</span>
-           <span className="text-[9px] font-mono text-primary/60 lowercase">{endpoint}</span>
-        </div>
-        <div className="flex flex-col items-end w-16">
-           <span className="text-[7px] font-mono font-black text-muted-foreground/20 uppercase tracking-widest mb-0.5">LATENCY</span>
-           <span className={`text-[10px] font-mono font-black ${status === 'UP' ? 'text-secondary' : 'text-muted-foreground/20'}`}>
-             {latency ? `${latency}MS` : '---'}
-           </span>
-        </div>
-        <div className={`px-2 py-0.5 border font-mono font-black text-[8px] uppercase ${status === 'UP' ? 'border-secondary/20 text-secondary' : status === 'DOWN' ? 'border-destructive/20 text-destructive' : 'border-border/20 text-muted-foreground/20'}`}>
-          {status}
-        </div>
-        <button onClick={runCheck} className="p-1.5 hover:bg-primary/10 transition-colors">
-          <RefreshCw className={`w-3 h-3 text-primary/40 group-hover:text-primary transition-colors ${status === 'CHECKING' ? 'animate-spin' : ''}`} />
-        </button>
-      </div>
+       <div className="flex items-center gap-12">
+          <span className="text-[8px] font-mono text-muted-foreground/20 truncate max-w-[240px] lowercase">{endpoint}</span>
+          <div className="w-16 flex flex-col items-end">
+             <span className="text-[7px] font-mono font-black text-muted-foreground/20 uppercase mb-0.5">Latency</span>
+             <span className="text-[10px] font-mono font-black text-secondary">{latency ? `${latency}ms` : '--'}</span>
+          </div>
+          <div className={cn("px-3 py-0.5 border font-mono font-black text-[9px] uppercase tracking-widest", status === 'UP' ? "border-secondary/20 text-secondary" : status === 'DOWN' ? "border-destructive/20 text-destructive" : "border-border/20 text-muted-foreground/20")}>
+             {status}
+          </div>
+          <button onClick={runProbe} className="p-2 hover:bg-primary/10 transition-colors">
+             <RefreshCw className={cn("w-3.5 h-3.5 text-primary/40 group-hover:text-primary", status === 'RUN' && "animate-spin")} />
+          </button>
+       </div>
     </div>
-  );
-}
-
-function StatusCard({ name, alias, icon: Icon, status, description }: { name: string, alias: string, icon: any, status: ServiceStatus, description: string }) {
-  const isHealthy = status.status === "HEALTHY";
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="border border-border bg-card/5 p-4 industrial-glint relative overflow-hidden group hover:bg-card/10 transition-all">
-      <div className="flex items-center justify-between mb-4 relative z-10">
-        <div className={`p-2 border border-border/40 bg-background group-hover:border-primary/40 transition-all ${isHealthy ? 'text-primary' : 'text-destructive'}`}>
-           <Icon className="w-4 h-4" />
-        </div>
-        <div className={`flex items-center gap-2 px-2 py-0.5 border font-mono font-black text-[8px] uppercase tracking-widest ${isHealthy ? 'border-secondary/20 text-secondary' : 'border-destructive/20 text-destructive'}`}>
-           <div className={`w-1 h-1 rounded-full ${isHealthy ? 'bg-secondary animate-pulse' : 'bg-destructive'}`} />
-           {status.status}
-        </div>
-      </div>
-      <div className="relative z-10">
-         <h3 className="text-sm font-black font-display uppercase tracking-tight mb-0.5 group-hover:text-primary transition-colors">{name}</h3>
-         <span className="text-[7px] font-mono font-black text-muted-foreground/20 uppercase tracking-[0.2em]">{alias}</span>
-      </div>
-      <p className="text-[9px] font-mono text-muted-foreground/40 mt-2 h-8 overflow-hidden">{description}</p>
-      <div className="mt-4 pt-3 border-t border-border/10 flex items-center justify-between">
-         <div className="flex flex-col">
-            <span className="text-[7px] font-mono font-black text-muted-foreground/10 uppercase mb-0.5">LATENCY</span>
-            <IndustrialValue value={status.latency || 0} suffix="MS" className="text-[10px] font-black text-secondary" />
-         </div>
-         {status.integrity && (
-            <div className="flex flex-col items-end">
-               <span className="text-[7px] font-mono font-black text-muted-foreground/10 uppercase mb-0.5">STATE</span>
-               <span className="text-[9px] font-mono font-black text-primary truncate w-16 text-right">{status.integrity}</span>
-            </div>
-         )}
-      </div>
-    </motion.div>
   );
 }

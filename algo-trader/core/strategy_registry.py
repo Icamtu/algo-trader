@@ -60,12 +60,30 @@ def discover_strategy_definitions() -> List[StrategyDefinition]:
             for _, strategy_class in inspect.getmembers(module, inspect.isclass):
                 if strategy_class.__module__ != module.__name__:
                     continue
-                if not issubclass(strategy_class, BaseStrategy) or inspect.isabstract(strategy_class):
+
+                # Robust subclass check for dynamic imports
+                is_valid_strategy = False
+                try:
+                    if issubclass(strategy_class, BaseStrategy):
+                        is_valid_strategy = True
+                except TypeError:
+                    pass
+
+                # Fallback to name-based check if direct check fails
+                if not is_valid_strategy:
+                    mro_names = [c.__name__ for c in inspect.getmro(strategy_class)]
+                    if "BaseStrategy" in mro_names and strategy_class.__name__ != "BaseStrategy":
+                        is_valid_strategy = True
+
+                if not is_valid_strategy or inspect.isabstract(strategy_class):
                     continue
+
+                config_key = resolve_strategy_key(file.stem, strategy_class.__name__)
+                logger.info(f"Discovered strategy class: {strategy_class.__name__} (key: {config_key})")
 
                 definitions.append(
                     StrategyDefinition(
-                        config_key=resolve_strategy_key(file.stem, strategy_class.__name__),
+                        config_key=config_key,
                         module_name=module.__name__,
                         class_name=strategy_class.__name__,
                         strategy_class=strategy_class,

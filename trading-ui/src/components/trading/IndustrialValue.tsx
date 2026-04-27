@@ -8,6 +8,7 @@ interface IndustrialValueProps {
   decimals?: number;
   className?: string;
   flashOnUpdate?: boolean;
+  showPlus?: boolean;
 }
 
 /**
@@ -23,6 +24,7 @@ export function IndustrialValue({
   decimals = 2,
   className = "",
   flashOnUpdate = true,
+  showPlus = false,
 }: IndustrialValueProps) {
   const [flash, setFlash] = useState<"up" | "down" | null>(null);
   const prevValue = useRef(value);
@@ -36,10 +38,12 @@ export function IndustrialValue({
 
   const displayValue = useTransform(spring, (latest) => {
     if (isNaN(latest) || latest === null || latest === undefined) return "0.00";
-    return latest.toLocaleString(undefined, { 
-      minimumFractionDigits: decimals, 
-      maximumFractionDigits: decimals 
+    const formatted = Math.abs(latest).toLocaleString(undefined, {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
     });
+    const sign = showPlus && latest > 0 ? "+" : latest < 0 ? "-" : "";
+    return `${sign}${formatted}`;
   });
 
   useEffect(() => {

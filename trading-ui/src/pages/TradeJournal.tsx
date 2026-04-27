@@ -1,7 +1,5 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { GlobalHeader } from "@/components/trading/GlobalHeader";
-import { MarketNavbar } from "@/components/trading/MarketNavbar";
 import { RightPanel } from "@/components/trading/RightPanel";
 import { NewOrderModal } from "@/components/trading/NewOrderModal";
 import { algoApi } from "@/features/openalgo/api/client";
@@ -9,7 +7,7 @@ import { useTradingMode } from "@/features/openalgo/hooks/useTrading";
 import { useAppModeStore } from "@/stores/appModeStore";
 import { useToast } from "@/hooks/use-toast";
 import type { Trade } from "@/types/api";
-import { 
+import {
   Download, Calendar, History, Hash,
   Activity, TrendingUp, TrendingDown, Loader2
 } from "lucide-react";
@@ -26,7 +24,7 @@ export default function TradeJournal() {
   const { mode: appMode } = useAppModeStore();
   const { toast } = useToast();
   const isAD = appMode === 'AD';
-  
+
   const [activeTab, setActiveTab] = useState<typeof pageTabs[number]>("Log");
   const [trades, setTrades] = useState<Trade[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -53,14 +51,14 @@ export default function TradeJournal() {
     filled: trades.filter(t => t.status === 'filled').length,
     buys: trades.filter(t => t.side === 'BUY').length,
     sells: trades.filter(t => t.side === 'SELL').length,
+    totalCharges: trades.reduce((acc, t) => acc + (t.charges || 0), 0),
+    avgCharges: trades.length > 0 ? trades.reduce((acc, t) => acc + (t.charges || 0), 0) / trades.length : 0,
   };
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background industrial-grid relative">
+    <div className="h-full flex flex-col overflow-hidden bg-background relative">
       <div className="noise-overlay" />
       <div className="scanline opacity-10" />
-      <GlobalHeader />
-      <MarketNavbar activeTab="/journal" />
 
       <div className="flex px-4 py-2 bg-card/5 border-b border-border/20 relative z-10 items-center justify-between">
         <div className="flex items-center gap-6">
@@ -78,13 +76,13 @@ export default function TradeJournal() {
           </div>
           <div className="flex items-center gap-1 bg-background/50 border border-border/20 p-1 rounded-sm">
             {pageTabs.map((tab) => (
-              <button 
-                key={tab} 
-                onClick={() => setActiveTab(tab)} 
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
                 className={cn(
                   "px-4 py-1 text-[9px] font-mono font-black uppercase tracking-widest transition-all rounded-sm",
-                  activeTab === tab 
-                    ? (isAD ? "bg-amber-500 text-black shadow-[0_0_10px_rgba(255,176,0,0.3)]" : "bg-teal-500 text-black shadow-[0_0_10px_rgba(0,212,212,0.3)]") 
+                  activeTab === tab
+                    ? (isAD ? "bg-amber-500 text-black shadow-[0_0_10px_rgba(255,176,0,0.3)]" : "bg-teal-500 text-black shadow-[0_0_10px_rgba(0,212,212,0.3)]")
                     : "text-muted-foreground/30 hover:text-foreground/60"
                 )}
               >
@@ -124,8 +122,8 @@ export default function TradeJournal() {
                          <span className="text-sm font-black font-display uppercase text-foreground">{trade.symbol}</span>
                          <span className={cn(
                            "text-[8px] font-mono font-black px-1.5 border",
-                           trade.side === "BUY" 
-                             ? (isAD ? "border-amber-500/20 text-amber-500" : "border-teal-500/20 text-teal-500") 
+                           trade.side === "BUY"
+                             ? (isAD ? "border-amber-500/20 text-amber-500" : "border-teal-500/20 text-teal-500")
                              : "border-rose-500/20 text-rose-500"
                          )}>
                            {trade.side}
@@ -139,26 +137,45 @@ export default function TradeJournal() {
                       </div>
                     </div>
                   </div>
-                      <div className="flex items-center gap-8">
-                        <div className="text-right">
-                          <div className="text-[7px] font-mono font-black text-muted-foreground/10 uppercase mb-0.5">UNITS</div>
-                          <IndustrialValue value={trade.quantity} className="text-xs font-black font-mono text-foreground" />
-                        </div>
-                        <div className="text-right">
-                          <div className="text-[7px] font-mono font-black text-muted-foreground/10 uppercase mb-0.5">PRICE</div>
-                          <IndustrialValue value={trade.price || 0} prefix="₹" className="text-xs font-black font-mono text-foreground" />
-                        </div>
-                         <div className="w-20 text-right">
-                           <span className={cn(
-                             "text-[8px] font-mono font-black px-2 py-1 border uppercase rounded-sm",
-                             trade.status === "filled" 
-                               ? (isAD ? "text-amber-500 border-amber-500/20 bg-amber-500/5 shadow-[0_0_10px_rgba(255,176,0,0.1)]" : "text-teal-500 border-teal-500/20 bg-teal-500/5 shadow-[0_0_10px_rgba(0,212,212,0.1)]")
-                               : "text-muted-foreground border-border/20"
-                           )}>
-                             {trade.status?.toUpperCase() || "PENDING"}
-                           </span>
+                         <div className="flex items-center gap-8">
+                           {trade.charges !== undefined && (
+                             <div className="text-right">
+                               <div className="text-[7px] font-mono font-black text-muted-foreground/10 uppercase mb-0.5">TAX_FEE</div>
+                               <IndustrialValue value={trade.charges} prefix="₹" className="text-xs font-black font-mono text-rose-500/60" />
+                             </div>
+                           )}
+                           {trade.pnl !== null && trade.pnl !== undefined && (
+                             <div className="text-right">
+                               <div className="text-[7px] font-mono font-black text-muted-foreground/10 uppercase mb-0.5">NET_RESULT</div>
+                               <IndustrialValue
+                                 value={(trade.pnl || 0) - (trade.charges || 0)}
+                                 prefix="₹"
+                                 className={cn(
+                                   "text-xs font-black font-mono",
+                                   ((trade.pnl || 0) - (trade.charges || 0)) >= 0 ? (isAD ? "text-amber-500" : "text-teal-500") : "text-rose-500"
+                                 )}
+                               />
+                             </div>
+                           )}
+                           <div className="text-right">
+                             <div className="text-[7px] font-mono font-black text-muted-foreground/10 uppercase mb-0.5">UNITS</div>
+                             <IndustrialValue value={trade.quantity} className="text-xs font-black font-mono text-foreground" />
+                           </div>
+                           <div className="text-right">
+                             <div className="text-[7px] font-mono font-black text-muted-foreground/10 uppercase mb-0.5">PRICE</div>
+                             <IndustrialValue value={trade.price || 0} prefix="₹" className="text-xs font-black font-mono text-foreground" />
+                           </div>
+                           <div className="w-20 text-right">
+                             <span className={cn(
+                               "text-[8px] font-mono font-black px-2 py-1 border uppercase rounded-sm",
+                               trade.status === "filled"
+                                 ? (isAD ? "text-amber-500 border-amber-500/20 bg-amber-500/5 shadow-[0_0_10px_rgba(255,176,0,0.1)]" : "text-teal-500 border-teal-500/20 bg-teal-500/5 shadow-[0_0_10px_rgba(0,212,212,0.1)]")
+                                 : "text-muted-foreground border-border/20"
+                             )}>
+                               {trade.status?.toUpperCase() || "PENDING"}
+                             </span>
+                           </div>
                          </div>
-                      </div>
                 </motion.div>
               ))}
               {trades.length === 0 && !isLoading && (
@@ -184,12 +201,12 @@ export default function TradeJournal() {
                   </ResponsiveContainer>
                 </div>
               </div>
-                <div className="col-span-8 grid grid-cols-2 gap-4">
-                  <StatMetric label="TOTAL_LOG" value={stats.total} icon={Activity} color="text-foreground" />
-                  <StatMetric label="FILLED_EXEC" value={stats.filled} icon={TrendingUp} color={isAD ? "text-amber-500" : "text-teal-500"} />
-                  <StatMetric label="BUY_BIAS" value={stats.buys} icon={TrendingUp} color={isAD ? "text-amber-500" : "text-teal-500"} />
-                  <StatMetric label="SELL_BIAS" value={stats.sells} icon={TrendingDown} color="text-rose-500" />
-                </div>
+                  <div className="col-span-8 grid grid-cols-2 gap-4">
+                    <StatMetric label="TOTAL_LOG" value={stats.total} icon={Activity} color="text-foreground" />
+                    <StatMetric label="FILLED_EXEC" value={stats.filled} icon={TrendingUp} color={isAD ? "text-amber-500" : "text-teal-500"} />
+                    <StatMetric label="TOTAL_TAX_CHARGES" value={stats.totalCharges} icon={TrendingDown} color="text-rose-500/50" prefix="₹" />
+                    <StatMetric label="AVG_COST_PER_TRADE" value={stats.avgCharges} icon={TrendingDown} color="text-rose-500/40" prefix="₹" />
+                  </div>
             </div>
           )}
         </div>
@@ -200,14 +217,14 @@ export default function TradeJournal() {
   );
 }
 
-function StatMetric({ label, value, icon: Icon, color }: { label: string, value: number, icon: any, color: string }) {
+function StatMetric({ label, value, icon: Icon, color, prefix }: { label: string, value: number, icon: any, color: string, prefix?: string }) {
   return (
     <div className="border border-border/10 bg-card/5 p-4 group hover:bg-card/10 transition-all">
       <div className="flex justify-between items-center mb-2">
         <span className="text-[8px] font-mono font-black text-muted-foreground/20 uppercase tracking-widest">{label}</span>
         <Icon className={`w-3 h-3 ${color} opacity-20`} />
       </div>
-      <IndustrialValue value={value} className={`text-2xl font-black font-display ${color}`} />
+      <IndustrialValue value={value} prefix={prefix} className={`text-2xl font-black font-display ${color}`} />
     </div>
   );
 }

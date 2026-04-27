@@ -1,7 +1,7 @@
 -- Enable TimescaleDB extension
 CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
 
--- 1. Market Ticks Table
+-- 1. Market Ticks Table (Raw Tick Data)
 CREATE TABLE IF NOT EXISTS market_ticks (
     timestamp TIMESTAMPTZ NOT NULL,
     symbol TEXT NOT NULL,
@@ -16,7 +16,7 @@ SELECT create_hypertable('market_ticks', 'timestamp', if_not_exists => TRUE);
 -- Add index for symbol-based lookups
 CREATE INDEX IF NOT EXISTS ix_symbol_timestamp ON market_ticks (symbol, timestamp DESC);
 
--- 2. Strategy Signals Table
+-- 2. Strategy Signals Table (AI Reasonings & Convictions)
 CREATE TABLE IF NOT EXISTS strategy_signals (
     timestamp TIMESTAMPTZ NOT NULL,
     strategy_id TEXT NOT NULL,
@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS trade_registry (
     side TEXT NOT NULL,
     quantity INTEGER NOT NULL,
     price DOUBLE PRECISION NOT NULL,
+    charges DOUBLE PRECISION DEFAULT 0.0,
     pnl DOUBLE PRECISION DEFAULT 0.0,
     mode TEXT DEFAULT 'sandbox'
 );
@@ -47,15 +48,19 @@ CREATE TABLE IF NOT EXISTS trade_registry (
 SELECT create_hypertable('trade_registry', 'timestamp', if_not_exists => TRUE);
 CREATE INDEX IF NOT EXISTS ix_trade_id ON trade_registry (trade_id, timestamp DESC);
 
--- Continuous Aggregates (Example: 1m OHLC from Ticks)
--- CREATE MATERIALIZED VIEW candle_1m
--- WITH (timescaledb.continuous) AS
--- SELECT time_bucket('1 minute', timestamp) AS bucket,
---        symbol,
---        first(price, timestamp) as open,
---        max(price) as high,
---        min(price) as low,
---        last(price, timestamp) as close,
---        sum(quantity) as volume
--- FROM market_ticks
--- GROUP BY bucket, symbol;
+-- --- RETENTION POLICIES ---
+
+-- Prune raw market ticks older than 30 days to save space
+SELECT add_retention_policy('market_ticks', INTERVAL '30 days', if_not_exists => TRUE);
+
+-- Signals and Trades are permanent unless manually purged (Institutional record keeping)
+
+-- --- COMPRESSION ---
+
+-- Enable compression for old ticks (older than 7 days)
+ALTER TABLE market_ticks SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'symbol'
+);
+
+SELECT add_compression_policy('market_ticks', INTERVAL '7 days', if_not_exists => TRUE);

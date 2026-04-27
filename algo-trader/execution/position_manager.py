@@ -9,6 +9,7 @@ class Position:
     symbol: str
     quantity: int = 0
     average_price: float = 0.0
+    last_price: float = 0.0  # Phase 16: Track last known price for MTM
     metadata: Dict[str, Any] = None
 
 
@@ -37,6 +38,7 @@ class PositionManager:
         """
         position = self.get(symbol)
         action = action.upper()
+        position.last_price = price  # Update last price with execution price
 
         if action == "BUY":
             new_total_qty = position.quantity + quantity
@@ -51,15 +53,51 @@ class PositionManager:
             return position
 
         if action == "SELL":
-            position.quantity = max(0, position.quantity - quantity)
+            # Phase 16: Allow negative quantity for shorting support (Institutional)
+            position.quantity -= quantity
             if position.quantity == 0:
                 position.average_price = 0.0
             return position
 
         raise ValueError(f"Unsupported action: {action}")
 
+    def set_position(self, symbol: str, quantity: int, average_price: float):
+        """Force-set the position state (used by reconciliation)."""
+        position = self.get(symbol)
+        position.quantity = quantity
+        position.average_price = average_price
+        position.last_price = average_price  # Initial guess
+        return position
+
+    def update_price(self, symbol: str, price: float):
+        """Update the last known price for a symbol (Phase 16: MTM support)."""
+        if symbol in self._positions:
+            self._positions[symbol].last_price = price
+
+    def get_unrealized_pnl(self, latest_prices: Dict[str, float] = None) -> float:
+        """Calculates total unrealized MTM across all positions."""
+        total_unrealized = 0.0
+        for pos in self._positions.values():
+            if pos.quantity == 0:
+                continue
+
+            # Use provided price, or cached last_price, or fallback to avg_price
+            current_price = (latest_prices or {}).get(pos.symbol)
+            if current_price is None:
+                current_price = pos.last_price if pos.last_price > 0 else pos.average_price
+
+            if current_price > 0:
+                unrealized = (current_price - pos.average_price) * pos.quantity
+                total_unrealized += unrealized
+
+        return round(total_unrealized, 2)
+
     def all_positions(self) -> Dict[str, Position]:
         return dict(self._positions)
+
+    def get_all_quantities(self) -> Dict[str, int]:
+        """Returns a simple symbol -> quantity mapping for all managed positions."""
+        return {sym: pos.quantity for sym, pos in self._positions.items() if pos.quantity != 0}
 
     def total_exposure(self, latest_prices: Dict[str, float]) -> float:
         exposure = 0.0

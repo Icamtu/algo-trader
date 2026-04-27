@@ -66,13 +66,19 @@ def run_sync():
     resp = requests.post(url, data=payload_str, headers=headers, timeout=10)
     print(f"Handshake Status: {resp.status_code}")
     data = resp.json()
+    print(f"DEBUG: Shoonya Handshake Response: {json.dumps(data)}")
 
-    if data.get("stat") != "Ok" or "access_token" not in data:
+    if data.get("stat") != "Ok":
         print(f"Error: Handshake failed. {data.get('emsg', 'Unknown error')}")
         return
 
-    access_token = data["access_token"]
-    print("Success: Access token received.")
+    # Try to find the token in known keys
+    access_token = data.get("access_token") or data.get("susertoken")
+    if not access_token:
+        print(f"Error: Could not find access_token or susertoken in response. Keys: {list(data.keys())}")
+        return
+
+    print(f"Success: Access token received. ({access_token[:5]}...)")
 
     # 3. Inject into Database
     print("Step 3: Injecting token into database...")
@@ -81,20 +87,33 @@ def run_sync():
     conn = sqlite3.connect(DB_PATH, timeout=30)
     cur = conn.cursor()
 
-    # We target 'AetherDesk' for the unified system handle
-    target_name = 'AetherDesk'
+    # Update all rows where broker is 'shoonya'
+    cur.execute("UPDATE auth SET auth=?, user_id=?, is_revoked=0 WHERE broker='shoonya'",
+                (encrypted_token, USER_ID))
+    print(f"Updated {cur.rowcount} auth rows for shoonya")
+
+    # Also ensure AetherDesk entry exists
+    target_name = os.getenv("OPENALGO_USER_ID", "AetherDesk")
     existing = cur.execute("SELECT id FROM auth WHERE name=?", (target_name,)).fetchone()
-    if existing:
-        cur.execute("UPDATE auth SET auth=?, broker='shoonya', user_id=?, is_revoked=0 WHERE name=?",
-                    (encrypted_token, USER_ID, target_name))
-        print(f"Updated auth row for {target_name}")
-    else:
+    if not existing:
         cur.execute("INSERT INTO auth (name, auth, broker, user_id, is_revoked) VALUES (?, ?, 'shoonya', ?, 0)",
                     (target_name, encrypted_token, USER_ID))
         print(f"Inserted new auth row for {target_name}")
 
     conn.commit()
     conn.close()
+    print("Step 4: Triggering engine reconciliation...")
+    try:
+        engine_url = "http://localhost:18788/api/v1/system/reconcile"
+        headers = {"apikey": os.getenv("API_KEY", "AetherDesk_Unified_Key_2026")}
+        reconcile_resp = requests.post(engine_url, headers=headers, timeout=5)
+        if reconcile_resp.status_code == 200:
+            print("Engine reconciliation triggered successfully.")
+        else:
+            print(f"Warning: Engine reconciliation failed with status {reconcile_resp.status_code}")
+    except Exception as e:
+        print(f"Warning: Could not connect to engine for reconciliation: {e}")
+
     print("--- SYNCHRONIZATION COMPLETE ---")
 
 if __name__ == "__main__":

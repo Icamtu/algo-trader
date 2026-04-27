@@ -113,3 +113,52 @@ async def approve_all_orders():
     except Exception as e:
         logger.error(f"ActionCenter Batch Approval Error: {e}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 500
+
+@action_center_bp.route("/api/v1/actioncenter/retry", methods=["POST"])
+@action_center_bp.route("/action-center/retry/<int:id>", methods=["POST"])
+@require_auth
+def retry_order(id=None):
+    try:
+        data = request.json or {}
+        order_id = id or data.get("id")
+
+        if not order_id:
+            return jsonify({"status": "error", "message": "Missing order ID"}), 400
+
+        new_id = action_manager.retry_order(int(order_id))
+        if new_id:
+            return jsonify({
+                "status": "success",
+                "message": "Signal re-queued for approval",
+                "data": {"id": new_id}
+            }), 200
+        else:
+            return jsonify({"status": "error", "message": "Retry operation failed"}), 500
+    except Exception as e:
+        logger.error(f"ActionCenter Retry Error: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@action_center_bp.route("/api/v1/action/audit/auto", methods=["POST"])
+@require_auth
+def toggle_auto_execution():
+    """Toggles global auto-execution mode."""
+    try:
+        data = request.json or {}
+        enabled = data.get("enabled", False)
+        action_manager.set_auto_execute(enabled)
+        return jsonify({"status": "success", "auto_execute": action_manager.auto_execute}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@action_center_bp.route("/api/v1/action/audit/lock", methods=["POST"])
+@require_auth
+def toggle_risk_lock():
+    """Toggles the global risk-execution lock."""
+    try:
+        data = request.json or {}
+        locked = data.get("locked", False)
+        action_manager.set_risk_lock(locked)
+        return jsonify({"status": "success", "risk_lock": action_manager.risk_lock}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500

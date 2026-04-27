@@ -1,6 +1,11 @@
-
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { algoApi } from "../api/client";
+import {
+  StrategiesResponse,
+  SystemHealth,
+  TelemetryPnlResponse,
+  TelemetryPerformanceResponse,
+} from "../../../types/api";
 import { toast } from "sonner";
 
 export function useStrategies() {
@@ -111,7 +116,7 @@ export function useCancelOrder() {
 
 export function useTradingMode() {
   const queryClient = useQueryClient();
-  
+
   const query = useQuery({
     queryKey: ["tradingMode"],
     queryFn: algoApi.getMode,
@@ -126,7 +131,7 @@ export function useTradingMode() {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["funds"] });
       queryClient.invalidateQueries({ queryKey: ["riskStatus"] });
-      
+
       const isLive = data.mode === "live";
       toast.success(`Switched to ${isLive ? "LIVE" : "SANDBOX"} mode`, {
         description: isLive ? "Real capital is now at risk." : "Simulation environment active.",
@@ -144,4 +149,73 @@ export function useTradingMode() {
     setMode: mutation.mutate,
     isPending: mutation.isPending
   };
+}
+
+export function useAnalyzerStatus() {
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: ["analyzerStatus"],
+    queryFn: algoApi.getAnalyzerStatus,
+    refetchInterval: 10000,
+  });
+
+  const mutation = useMutation({
+    mutationFn: (state: boolean) => algoApi.toggleAnalyzer(state),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["analyzerStatus"], data);
+      toast.success(`Analyzer ${data.state ? "Enabled" : "Disabled"}`, {
+        description: data.state ? "Surgical AI precision active." : "Programmatic fallback active.",
+      });
+    },
+    onError: (error: Error) => {
+      toast.error(`Toggle failed: ${error.message}`);
+    }
+  });
+
+  return {
+    isEnabled: query.data?.state,
+    isLoading: query.isLoading,
+    toggle: mutation.mutate,
+    isPending: mutation.isPending
+  };
+}
+
+export const useTelemetryPnl = () => {
+  return useQuery({
+    queryKey: ["telemetry", "pnl"],
+    queryFn: async () => {
+      const { data } = await algoApi.getTelemetryPnl();
+      return data as TelemetryPnlResponse;
+    },
+    refetchInterval: 10000,
+  });
+};
+
+export const useTelemetryPerformance = () => {
+  return useQuery({
+    queryKey: ["telemetry", "performance"],
+    queryFn: async () => {
+      const { data } = await algoApi.getTelemetryPerformance();
+      return data as TelemetryPerformanceResponse;
+    },
+    refetchInterval: 30000,
+  });
+};
+
+export function useReconcilePositions() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: algoApi.reconcilePositions,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["positions"] });
+      queryClient.invalidateQueries({ queryKey: ["systemHealth"] });
+      toast.success("Positions reconciled", {
+        description: data.message || "Engine state synced with broker reality."
+      });
+    },
+    onError: (error: Error) => {
+      toast.error(`Reconciliation failed: ${error.message}`);
+    },
+  });
 }

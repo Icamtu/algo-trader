@@ -20,7 +20,7 @@ def send_telegram_message(message):
     if not TOKEN or not CHAT_ID:
         print("Telegram configuration missing. Message not sent.")
         return
-    
+
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {
         "chat_id": CHAT_ID,
@@ -49,7 +49,7 @@ def get_node_status():
         containers = client.containers.list(all=True)
         status_msg = "🔌 <b>Node Status</b>\n"
         for c in containers:
-            # Skip the monitor container itself to reduce noise if preferred, 
+            # Skip the monitor container itself to reduce noise if preferred,
             # but usually it's good to see it's running.
             status = "🟢" if c.status == 'running' else "🔴"
             status_msg += f"{status} <code>{c.name}</code>: {c.status}\n"
@@ -72,7 +72,7 @@ def handle_commands():
                     message = update.get('message', {})
                     text = message.get('text', '')
                     sender_chat_id = str(message.get('chat', {}).get('id', ''))
-                    
+
                     # Security: Only respond to the authorized Chat ID
                     if sender_chat_id == CHAT_ID:
                         if text == '/host-check':
@@ -92,7 +92,7 @@ def handle_commands():
 def monitor_events():
     client = docker.from_env()
     print(f"Monitoring Docker events on {HOST_NAME}...")
-    
+
     # Send startup notification
     send_telegram_message(f"🚀 <b>Monitoring Started</b>\n"
                          f"Host: <code>{HOST_NAME}</code>\n"
@@ -101,7 +101,7 @@ def monitor_events():
     for event in client.events(decode=True):
         status = event.get('status')
         name = event.get('Actor', {}).get('Attributes', {}).get('name', 'Unknown')
-        
+
         # We are interested in these events
         if status in ['die', 'unhealthy', 'oom']:
             emoji = "⚠️" if status == 'unhealthy' else "🔴"
@@ -111,7 +111,7 @@ def monitor_events():
                   f"Host: <code>{HOST_NAME}</code>"
             send_telegram_message(msg)
             print(f"Alert sent for {name}: {status}")
-        
+
         elif status in ['start', 'restart']:
             msg = f"🟢 <b>Container Recovered</b>\n" \
                   f"Container: <code>{name}</code>\n" \
@@ -128,7 +128,7 @@ if __name__ == "__main__":
         cmd_thread.start()
     else:
         print("Telegram command polling disabled; running in alert-only mode.")
-    
+
     while True:
         try:
             monitor_events()

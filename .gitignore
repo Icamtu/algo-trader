@@ -43,6 +43,8 @@ npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
 *.bak
+*.mgc
+*.json
 *.tmp
 *.swp
 *.sw?
@@ -66,6 +68,8 @@ files.txt
 files_to_fix.txt
 logs.txt
 *.bak
+*.mgc
+*.json
 auth_api_fixed.py
 fix_auth.py
 start_fixed.sh
@@ -74,3 +78,7 @@ pipeline_verification_report.json
 .agents_backup*/
 .venv/
 host_venv/
+**/.versions/
+graphify-out/
+*.corrupted*
+historify.duckdb*

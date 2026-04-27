@@ -3,11 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { 
-  Rocket, 
-  ShieldAlert, 
-  TrendingUp, 
-  BarChart3, 
+import {
+  Rocket,
+  ShieldAlert,
+  TrendingUp,
+  BarChart3,
   Settings2,
   Lock,
   Unlock,
@@ -24,6 +24,57 @@ export function DeploymentSettings() {
   const [targetPnl, setTargetPnl] = useState("2500");
   const [isDeploying, setIsDeploying] = useState(false);
   const [isLive, setIsLive] = useState(false);
+  const [isLoadingStatus, setIsLoadingStatus] = useState(true);
+
+  // Sync state with engine on mount
+  React.useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const response = await fetch(`${CONFIG.API_BASE_URL}/api/v1/strategies`, {
+          headers: {
+            "Authorization": `Bearer ${localStorage.getItem("aether_token") || "test-token"}`
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          // Find any active strategy
+          const activeStrat = data.strategies.find((s: any) => s.is_active);
+          if (activeStrat && !selectedStrategy) {
+            setSelectedStrategy(activeStrat.id);
+            setIsLive(true);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to sync deployment status", e);
+      } finally {
+        setIsLoadingStatus(false);
+      }
+    };
+    checkStatus();
+  }, []);
+
+  // Phase 16: Sync isLive state when selectedStrategy changes
+  React.useEffect(() => {
+    if (!selectedStrategy) return;
+
+    const verifySpecificStatus = async () => {
+        try {
+            const response = await fetch(`${CONFIG.API_BASE_URL}/api/v1/strategies`, {
+                headers: {
+                    "Authorization": `Bearer ${localStorage.getItem("aether_token") || "test-token"}`
+                }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                const current = data.strategies.find((s: any) => s.id === selectedStrategy);
+                setIsLive(current?.is_active || false);
+            }
+        } catch (e) {
+            console.error("Status verification fault", e);
+        }
+    };
+    verifySpecificStatus();
+  }, [selectedStrategy]);
 
   const handleInitiateRun = async () => {
     if (!selectedStrategy) {
@@ -33,8 +84,10 @@ export function DeploymentSettings() {
 
     setIsDeploying(true);
     try {
-      // API call to start the strategy with these params
-      const response = await fetch(`${CONFIG.API_BASE_URL}strategies/${selectedStrategy.toLowerCase().replace('.py', '')}/start`, {
+      // The ID is already normalized by the backend/registry
+      const strategyId = selectedStrategy.toLowerCase();
+
+      const response = await fetch(`${CONFIG.API_BASE_URL}/api/v1/strategies/${strategyId}/start`, {
         method: 'POST',
         headers: {
             "Authorization": `Bearer ${localStorage.getItem("aether_token") || "test-token"}`,
@@ -44,30 +97,54 @@ export function DeploymentSettings() {
             max_risk: parseFloat(maxRisk),
             capital_multiplier: parseFloat(capitalMult),
             target_pnl: parseFloat(targetPnl),
-            mode: 'live' // Force live for production run
+            mode: 'live'
         })
       });
 
       if (response.ok) {
-        toast.success("Deployment Successful", { 
+        toast.success("Deployment Successful", {
           description: `${selectedStrategy} is now active in the production environment.`,
           icon: <Unlock className="w-4 h-4 text-green-500" />
         });
         setIsLive(true);
       } else {
-        throw new Error("Failed to initiate run");
+        const err = await response.json();
+        throw new Error(err.error || "Failed to initiate run");
       }
-    } catch (e) {
-      toast.error("Deployment Failed", { description: "Engine rejected the initiation request." });
+    } catch (e: any) {
+      toast.error("Deployment Failed", { description: e.message || "Engine rejected the initiation request." });
     } finally {
       setIsDeploying(false);
     }
   };
 
   const handleStopRun = async () => {
-      // Handle stop
-      setIsLive(false);
-      toast.info("Production Stopped", { description: "Strategy halted successfully." });
+    if (!selectedStrategy) return;
+
+    setIsDeploying(true); // Re-use for loading state
+    try {
+      const strategyId = selectedStrategy.toLowerCase();
+      const response = await fetch(`${CONFIG.API_BASE_URL}/api/v1/strategies/${strategyId}/stop`, {
+        method: 'POST',
+        headers: {
+            "Authorization": `Bearer ${localStorage.getItem("aether_token") || "test-token"}`
+        }
+      });
+
+      if (response.ok) {
+        setIsLive(false);
+        toast.info("Production Stopped", {
+            description: "Strategy halted successfully.",
+            icon: <Lock className="w-4 h-4 text-orange-500" />
+        });
+      } else {
+        throw new Error("Failed to stop strategy");
+      }
+    } catch (e: any) {
+      toast.error("Halt Failed", { description: "Could not stop the strategy runner." });
+    } finally {
+      setIsDeploying(false);
+    }
   };
 
   return (
@@ -84,9 +161,9 @@ export function DeploymentSettings() {
       <CardContent className="pt-5 space-y-5">
         <div className="space-y-2">
           <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Base Strategy Engine</Label>
-          <StrategySelectionDialog 
-            onSelect={setSelectedStrategy} 
-            currentStrategy={selectedStrategy || undefined} 
+          <StrategySelectionDialog
+            onSelect={setSelectedStrategy}
+            currentStrategy={selectedStrategy || undefined}
           />
         </div>
 
@@ -96,9 +173,9 @@ export function DeploymentSettings() {
               <ShieldAlert className="w-3 h-3" /> Max Risk
             </Label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-mono">$</span>
-              <Input 
-                value={maxRisk} 
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-mono">₹</span>
+              <Input
+                value={maxRisk}
                 onChange={(e) => setMaxRisk(e.target.value)}
                 className="pl-7 bg-black/40 border-white/10 h-9 font-mono text-xs focus-visible:ring-primary/30"
               />
@@ -110,8 +187,8 @@ export function DeploymentSettings() {
             </Label>
             <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-mono">x</span>
-                <Input 
-                  value={capitalMult} 
+                <Input
+                  value={capitalMult}
                   onChange={(e) => setCapitalMult(e.target.value)}
                   className="pl-7 bg-black/40 border-white/10 h-9 font-mono text-xs focus-visible:ring-primary/30"
                 />
@@ -124,9 +201,9 @@ export function DeploymentSettings() {
             <BarChart3 className="w-3 h-3" /> Target Daily P&L Cutoff
           </Label>
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-mono">$</span>
-            <Input 
-              value={targetPnl} 
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-mono">₹</span>
+            <Input
+              value={targetPnl}
               onChange={(e) => setTargetPnl(e.target.value)}
               className="pl-7 bg-black/40 border-white/10 h-9 font-mono text-xs focus-visible:ring-primary/30"
             />
@@ -135,15 +212,15 @@ export function DeploymentSettings() {
 
         <div className="pt-2">
            {isLive ? (
-               <Button 
-                variant="destructive" 
+               <Button
+                variant="destructive"
                 className="w-full h-11 uppercase font-black tracking-widest text-[10px] shadow-lg shadow-red-500/10"
                 onClick={handleStopRun}
                >
                  <Lock className="w-4 h-4 mr-2" /> Deactivate Runner
                </Button>
            ) : (
-               <Button 
+               <Button
                 className="w-full h-11 bg-primary hover:bg-primary/90 text-white uppercase font-black tracking-widest text-[10px] shadow-lg shadow-primary/20 group-hover:scale-[1.02] transition-transform"
                 onClick={handleInitiateRun}
                 disabled={isDeploying}

@@ -23,7 +23,7 @@ def call_ollama(prompt, model="qwen3.5-claude:latest"):
     """Call the local Ollama LLM to generate code improvements."""
     base_url = os.getenv("OLLAMA_BASE_URL", "http://local_ollama:11434")
     url = f"{base_url.rstrip('/')}/api/generate"
-    
+
     # Fallback for running outside docker if local_ollama doesn't resolve
     if "local_ollama" in url and not os.environ.get("DOCKER_ENV"):
         try:
@@ -33,8 +33,9 @@ def call_ollama(prompt, model="qwen3.5-claude:latest"):
             url = "http://localhost:11434/api/generate"
 
     payload = {"model": model, "prompt": prompt, "stream": False}
+    logger.info(f"Calling Ollama ({model}) for strategy synthesis (timeout=1800s)...")
     try:
-        response = requests.post(url, json=payload, timeout=30) # Increased timeout for generation
+        response = requests.post(url, json=payload, timeout=1800) # Increased to 30 mins for CPU safety
         response.raise_for_status()
         result = response.json()
         return result.get("response", "")
@@ -71,7 +72,37 @@ def get_strategy_class_from_file(file_path):
                 return obj
     return None
 
-async def run_iteration(file_path, directive, iteration, model):
+def check_targets(perf, targets):
+    """Checks if performance metrics meet or exceed the targets."""
+    if not targets:
+        return False
+
+    for key, target_val in targets.items():
+        current_val = perf.get(key)
+        if current_val is None:
+            continue
+
+        # Extract numeric target and operator if present (e.g., "> 55")
+        if isinstance(target_val, str):
+            target_val = target_val.strip()
+            if target_val.startswith(">"):
+                try:
+                    if not current_val > float(target_val[1:].strip()): return False
+                except: pass
+            elif target_val.startswith("<"):
+                try:
+                    if not current_val < float(target_val[1:].strip()): return False
+                except: pass
+            else:
+                try:
+                    if not current_val >= float(target_val): return False
+                except: pass
+        else:
+            if not current_val >= target_val:
+                return False
+    return True
+
+async def run_iteration(file_path, directive, iteration, model="deepseek-coder:1.3b"):
     logger.info(f"--- AutoResearch Iteration {iteration} ---")
     strategy_cls = get_strategy_class_from_file(file_path)
     if not strategy_cls:
@@ -143,10 +174,11 @@ Based on the metrics and the directive, output an IMPROVED version of the above 
         return None
 
     # Save the new iteration
-    # e.g., aether_scalper.py -> aether_scalper_v1.py
+    # e.g., aether_scalper.py -> aether_scalper_autoresearch_v1.py
     base_name = os.path.basename(file_path).replace(".py", "")
     base_name = re.sub(r'_v\d+$', '', base_name) # Strip old version tag if any
-    new_filename = os.path.join(os.path.dirname(file_path), f"{base_name}_v{iteration}.py")
+    base_name = re.sub(r'_autoresearch$', '', base_name)
+    new_filename = os.path.join(os.path.dirname(file_path), f"{base_name}_autoresearch_v{iteration}.py")
 
     with open(new_filename, 'w') as f:
         f.write(new_script.strip())
@@ -154,7 +186,7 @@ Based on the metrics and the directive, output an IMPROVED version of the above 
     logger.info(f"Saved optimized strategy step to {new_filename}")
     return new_filename, perf
 
-async def run_iteration_api(code: str = None, strategy_name: str = None, symbol: str = "RELIANCE", targets: dict = None, timeframe: str = "1m", days: int = 7, model="qwen3.5-claude:latest"):
+async def run_iteration_api(code: str = None, strategy_name: str = None, symbol: str = "RELIANCE", targets: dict = None, timeframe: str = "1m", days: int = 7, model="deepseek-coder:1.3b", task_callback=None, check_cancel=None):
     import uuid
     strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'strategies'))
 
@@ -173,27 +205,59 @@ async def run_iteration_api(code: str = None, strategy_name: str = None, symbol:
     else:
         return {"error": "Provide either code or strategy_name"}
 
-    strategy_cls = get_strategy_class_from_file(file_path)
-    if not strategy_cls:
-        if code and file_path and "temp_ar_" in file_path: os.remove(file_path)
-        return {"error": "Could not find valid strategy class"}
+    total_iterations = 3
+    final_code = code
+    last_perf = {}
+    save_path = None
 
-    engine = BacktestEngine(strategy_class=strategy_cls, symbol=symbol, interval=timeframe)
-    engine.no_ai = True
+    for i in range(1, total_iterations + 1):
+        if check_cancel and check_cancel():
+            logger.info("AutoResearch task manually cancelled.")
+            break
 
-    try:
-        results = await engine.run(days=days)
-    except Exception as e:
-        if code and file_path and "temp_ar_" in file_path: os.remove(file_path)
-        return {"error": f"Backtest failed: {str(e)}"}
+        logger.info(f"--- Continuous Research Step {i}/{total_iterations} ---")
+        if task_callback:
+            task_callback({"iteration": i, "status": "backtesting", "message": f"Running backtest for iteration {i}..."})
 
-    perf = results.get("performance", {})
+        # Read the latest strategy code from file_path
+        with open(file_path, 'r') as f:
+            current_code = f.read()
 
-    # Construct LLM prompt
-    target_str = "\n".join([f"- target {k}: {v}" for k, v in (targets or {}).items()]) if targets else "Improve the strategy"
-    directive = f"Achieve the following target metrics mathematically:\\n{target_str}"
+        strategy_cls = get_strategy_class_from_file(file_path)
+        if not strategy_cls:
+            return {"error": "Could not find valid strategy class"}
 
-    prompt = f"""
+        engine = BacktestEngine(strategy_class=strategy_cls, symbol=symbol, interval=timeframe)
+        engine.no_ai = True
+
+        try:
+            results = await engine.run(days=days)
+        except Exception as e:
+            return {"error": f"Backtest failed at step {i}: {str(e)}"}
+
+        perf = results.get("performance", {})
+        last_perf = perf
+
+        # 1. CHECK IF TARGETS ARE ALREADY MET
+        if check_targets(perf, targets):
+            logger.info(f"GOAL REACHED at iteration {i}! Stopping further research.")
+            # Automatically persist to main strategies/AutoResearch folder
+            ar_folder = os.path.abspath(os.path.join(strat_dir, 'AutoResearch'))
+            os.makedirs(ar_folder, exist_ok=True)
+            final_save_path = os.path.join(ar_folder, f"{base_name}_GOAL_ACHIEVED.py")
+            with open(final_save_path, 'w') as f:
+                f.write(current_code)
+            logger.info(f"Strategy with achieved targets saved permanently to {final_save_path}")
+            break
+
+        # 2. IF NOT MET, LLM GENERATES IMPROVED VERSION
+        if task_callback:
+            task_callback({"iteration": i, "status": "synthesizing", "message": f"Synthesizing improvements for iteration {i}..."})
+
+        target_list = "\n".join([f"- target {k}: {v}" for k, v in (targets or {}).items()]) if targets else "Improve the strategy"
+        directive = f"Achieve the following target metrics mathematically:\n{target_list}"
+
+        prompt = f"""
 You are an elite quantitative developer acting as an autonomous AutoResearch agent.
 Your objective is to optimize the trading strategy given below to improve its backtest performance metrics.
 
@@ -209,7 +273,7 @@ Total Trades Executed: {results.get("total_trades", 0)}
 
 --- Current Strategy Source Code ---
 ```python
-{code}
+{current_code}
 ```
 
 --- Instructions ---
@@ -221,35 +285,50 @@ Based on the metrics and the directive, output an IMPROVED version of the above 
 - IMPORTANT for Numba: If using custom Numba logic, use `@njit(cache=True, nogil=True)`. Do NOT use `fastmath=True` as it breaks NaN handling.
 - IMPORTANT: You MUST output ONLY the new Python script wrapped in a ```python ... ``` block. No markdown explanations.
 """
-    response_text = call_ollama(prompt, model=model)
-    new_script = extract_python_code(response_text)
-    final_code = new_script.strip() if len(new_script.strip()) > 50 else code
+        response_text = call_ollama(prompt, model=model)
+        new_script = extract_python_code(response_text)
 
-    # Persistent saving for later viewing
-    research_dir = os.path.join(strat_dir, 'autoresearch_history')
-    os.makedirs(research_dir, exist_ok=True)
+        if len(new_script.strip()) <= 50:
+            logger.warning("LLM failed to improve code. Terminating loop.")
+            break
 
-    if len(new_script.strip()) > 50:
+        final_code = new_script.strip()
+
+        # 3. SAVE THIS ITERATION
         base_name = strategy_name.replace('.py', '') if strategy_name else "generated_strat"
+        base_name = re.sub(r'_autoresearch$', '', base_name)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        save_name = f"{base_name}_{timestamp}.py"
+        save_name = f"{base_name}_autoresearch_{timestamp}.py"
         save_path = os.path.join(research_dir, save_name)
+
         with open(save_path, 'w') as f:
             f.write(final_code)
+            f.flush()
+            os.fsync(f.fileno())
 
-        json_path = os.path.join(research_dir, f"{base_name}_{timestamp}.json")
+        json_path = os.path.join(research_dir, f"{base_name}_autoresearch_{timestamp}.json")
         with open(json_path, 'w') as f:
-            json.dump({"metrics": perf, "symbol": symbol, "timeframe": timeframe, "targets": targets}, f)
+            # Strip heavy curves which contain NaNs that break browser JSON.parse()
+            clean_metrics = {k: v for k, v in perf.items() if k not in ('equity_curve', 'benchmark_curve', 'returns')}
+            json.dump({"metrics": clean_metrics, "symbol": symbol, "timeframe": timeframe, "targets": targets}, f)
+            f.flush()
+            os.fsync(f.fileno())
 
-    if code and file_path and "temp_ar_" in file_path:
+        if task_callback:
+            task_callback({"iteration": i, "status": "saved", "message": f"Iteration {i} saved successfully.", "last_metrics": last_perf})
+
+        # Update file_path for next loop iteration
+        file_path = save_path
+
+    # Cleanup temp file if needed
+    if code and "temp_ar_" in file_path:
         try: os.remove(file_path)
-        except OSError: # nosec B110
-            pass
+        except: pass
 
     return {
-        "metrics": perf,
+        "metrics": last_perf,
         "new_code": final_code,
-        "saved_path": save_path if len(new_script.strip()) > 50 else None
+        "saved_path": save_path
     }
 
 async def main():

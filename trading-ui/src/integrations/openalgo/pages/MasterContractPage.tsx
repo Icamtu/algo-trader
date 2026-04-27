@@ -31,7 +31,7 @@ export const MasterContractPage: React.FC = () => {
   const primaryColorClass = isAD ? "text-amber-500" : "text-teal-500";
   const accentBgClass = isAD ? "bg-amber-500" : "bg-teal-500";
   const accentBorderClass = isAD ? "border-amber-500/20" : "border-teal-500/20";
-  
+
   const [status, setStatus] = useState<MasterContractStatus | null>(null);
   const [cacheHealth, setCacheHealth] = useState<CacheHealth | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -109,17 +109,17 @@ export const MasterContractPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          <Button 
-            variant="secondary" 
-            onClick={() => handleDownload(true)} 
+          <Button
+            variant="secondary"
+            onClick={() => handleDownload(true)}
             disabled={isSyncing}
             className="h-10 font-mono text-[11px] font-black px-4 shadow-[0_0_15px_rgba(255,176,0,0.1)]"
           >
-            <RefreshCw className={cn("h-3.5 w-3.5 mr-2", isSyncing && "animate-spin")} /> 
+            <RefreshCw className={cn("h-3.5 w-3.5 mr-2", isSyncing && "animate-spin")} />
             RE_SYNC_CONTRACTS
           </Button>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={handleReload}
             disabled={isSyncing}
             className={cn("bg-background border-white/[0.05] text-[9px] font-mono uppercase tracking-widest h-10 rounded-none transition-all", isAD ? "hover:border-primary/50" : "hover:border-teal-500/50")}
@@ -127,9 +127,9 @@ export const MasterContractPage: React.FC = () => {
             <RefreshCw className={cn("w-3 h-3 mr-2", isSyncing && "animate-spin", primaryColorClass)} />
             Reload_Memory_Buffer
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => handleDownload(true)}
             disabled={isSyncing}
             className={cn("border-border/20 text-[9px] font-mono uppercase tracking-widest h-10 rounded-none shadow-lg transition-all", isAD ? "bg-primary text-black hover:bg-white shadow-primary/10" : "bg-teal-500 text-black hover:bg-white shadow-teal-500/10")}
@@ -138,7 +138,7 @@ export const MasterContractPage: React.FC = () => {
             Force_Broker_Sync
           </Button>
         </div>
-        
+
         {/* Background Decoration */}
         <div className="absolute top-0 right-0 w-64 h-full industrial-grid opacity-10 pointer-events-none" />
       </div>
@@ -155,8 +155,8 @@ export const MasterContractPage: React.FC = () => {
                   <div className="flex flex-col items-center">
                     <div className={cn(
                       "w-20 h-20 border flex items-center justify-center mb-4 transition-all duration-1000",
-                      status?.is_ready 
-                        ? (isAD ? "border-primary bg-primary/5 shadow-[0_0_30px_rgba(255,176,0,0.05)]" : "border-teal-500 bg-teal-500/5 shadow-[0_0_30px_rgba(20,184,166,0.05)]") 
+                      status?.is_ready
+                        ? (isAD ? "border-primary bg-primary/5 shadow-[0_0_30px_rgba(255,176,0,0.05)]" : "border-teal-500 bg-teal-500/5 shadow-[0_0_30px_rgba(20,184,166,0.05)]")
                         : "border-rose-500/20 bg-rose-500/5 shadow-[0_0_30px_rgba(244,63,94,0.05)]"
                     )}>
                        {status?.status === 'downloading' ? (
@@ -172,7 +172,7 @@ export const MasterContractPage: React.FC = () => {
                    </div>
                     <div className="text-[8px] font-mono text-muted-foreground uppercase tracking-[0.4em] opacity-40 italic">Current_Kernel_State</div>
                 </div>
- 
+
                 <div className="space-y-4 pt-6 border-t border-white/[0.03]">
                     <div className="flex justify-between items-center text-[10px] font-mono uppercase tracking-widest">
                        <span className="text-muted-foreground/40 italic">Node_Origin</span>
@@ -196,7 +196,7 @@ export const MasterContractPage: React.FC = () => {
               <div className={cn("micro-label mb-4 flex items-center gap-2", isAD ? "text-primary/40" : "text-teal-500/40")}>
                  <Activity className="w-3 h-3" /> Memory_Cache_Health_v4
               </div>
-             
+
              <div className="flex items-end justify-between">
                 <div>
                    <div className={cn("text-3xl font-black font-mono mb-1", primaryColorClass)}>{cacheHealth?.health_score || 0}%</div>
@@ -213,7 +213,7 @@ export const MasterContractPage: React.FC = () => {
 
          {/* Exchange Grid */}
          <div className="md:col-span-8">
-           <AetherPanel className="h-full border-white/[0.03] bg-background min-h-[500px]">
+           <AetherPanel className="h-full border-white/[0.03] bg-background min-h-[400px] md:min-h-[500px]">
              <div className="flex items-center justify-between mb-10">
                 <div className="micro-label flex items-center gap-2 opacity-40">
                    <BarChart3 className={cn("w-3 h-3", primaryColorClass)} /> Exchange_Distribution_Matrix
@@ -230,7 +230,7 @@ export const MasterContractPage: React.FC = () => {
                            <div className={cn("text-xs font-black font-mono group-hover:scale-110 transition-transform", primaryColorClass)}>{count.toLocaleString()}</div>
                         </div>
                         <div className="mt-2 text-[7px] font-mono text-muted-foreground/20 uppercase tracking-[0.2em] relative z-10 italic">Contract_Objects_Indexed</div>
-                       
+
                        {/* Industrial Background Bar */}
                        <div className={cn("absolute inset-0 origin-left transition-transform duration-1000 opacity-5", accentBgClass)} style={{ transform: `scaleX(${Math.min(count / 10000, 1)})` }} />
                     </div>

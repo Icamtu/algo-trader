@@ -6,6 +6,7 @@ from data.market_data import Tick
 from execution.order_manager import OrderManager
 from services.market_data_service import MarketDataService
 from services.analytics_engine import AnalyticsEngine
+from data.historify_db import get_indicator_state, get_ohlcv_data
 
 
 logger = logging.getLogger(__name__)
@@ -133,7 +134,7 @@ class IntradayStrategy(BaseStrategy):
         return "NEUTRAL"
 
     async def on_tick(self, tick: Tick):
-        # Update history
+        # Update history (Maintain sliding window)
         self.price_history[tick.symbol].append(tick.price)
         if len(self.price_history[tick.symbol]) > 100:
             self.price_history[tick.symbol].pop(0)
@@ -215,6 +216,14 @@ class IntradayStrategy(BaseStrategy):
             sl_dist = vol * 2.0
             risk_amount = getattr(self.order_manager.risk_manager, "risk_per_trade_inr", 500.0)
 
+            # Regime-Aware Scaling
+            if self.regime_status == "BULLISH" and signal == "BUY":
+                risk_amount *= 1.2 # Aggressive on trend
+            elif self.regime_status == "BEARISH" and signal == "BUY":
+                risk_amount *= 0.5 # Defensive against trend
+            elif self.regime_status == "NEUTRAL":
+                risk_amount *= 0.8 # Conservative in chop
+
             # Check for Re-Entry (Risk Halving)
             is_reentry = False
             if tick.symbol in self.symbol_stats and self.symbol_stats[tick.symbol]["reentries"] > 0:
@@ -230,7 +239,7 @@ class IntradayStrategy(BaseStrategy):
             )
             qty = size_plan.quantity
 
-            logger.info(f"[{self.name}] Signal {signal} detected. Dynamic Qty: {qty} (Risk: ₹{risk_amount}, SL_Dist: {sl_dist:.2f})")
+            logger.info(f"[{self.name}] Signal {signal} | Regime: {self.regime_status} | Dynamic Qty: {qty} (Risk: ₹{risk_amount:.2f})")
 
             # AI Conviction Check
             reasoning, conviction = await self.analyze_signal(
@@ -243,12 +252,29 @@ class IntradayStrategy(BaseStrategy):
 
             if conviction < 0.70:
                 logger.warning(f"[{self.name}] Trade BLOCKED - Conviction {conviction:.2f} below threshold (0.70)")
+                # Phase 15.3: Institutional Signal Audit
+                await self.log_signal(
+                    symbol=tick.symbol,
+                    signal_type="SIGNAL_BLOCKED",
+                    price=tick.price,
+                    indicators={"rsi": rsi, "volatility": vol, "score": score},
+                    ai_reasoning=f"Low conviction: {conviction:.2f} < 0.70. Context: {self.cached_context}",
+                    conviction=conviction
+                )
                 return
 
             if signal == "BUY" and current_position == 0:
                 # Re-Entry Condition
                 if is_reentry and conviction < 0.85:
                     logger.warning(f"[{self.name}] Re-Entry REJECTED - Need 0.85+ conviction for second attempt.")
+                    await self.log_signal(
+                        symbol=tick.symbol,
+                        signal_type="REENTRY_REJECTED",
+                        price=tick.price,
+                        indicators={"rsi": rsi, "volatility": vol, "score": score},
+                        ai_reasoning=f"Insufficent re-entry conviction: {conviction:.2f} < 0.85",
+                        conviction=conviction
+                    )
                     return
 
                 await self.buy(tick.symbol, qty, ai_reasoning=reasoning, conviction=conviction)
@@ -269,6 +295,15 @@ class IntradayStrategy(BaseStrategy):
                 # 3. Smart Reversal (Stop & Reverse)
                 if conviction >= 0.90:
                     logger.info(f"[{self.name}] EXTREME CONVICTION REVERSAL: Flipping to SHORT from LONG.")
+                    # Audit the pivot signal
+                    await self.log_signal(
+                        symbol=tick.symbol,
+                        signal_type="SIGNAL_FLIP_REVERSAL",
+                        price=tick.price,
+                        indicators={"rsi": rsi, "volatility": vol, "score": score},
+                        ai_reasoning=f"Extreme Conviction Reversal (0.90+). Flipping Long to Short. Reasoning: {reasoning}",
+                        conviction=conviction
+                    )
                     # Close current position entirely
                     await self.sell(tick.symbol, current_position, ai_reasoning="Smart Reversal (Flip)", conviction=conviction)
                     # Open new SHORT position immediately (using halved risk for pivot if it feels like a flip)
@@ -295,6 +330,16 @@ class IntradayStrategy(BaseStrategy):
 
     async def on_start(self):
         logger.info("Starting '%s' for symbols %s", self.name, self.symbols)
+        # Perform state warmup from DuckDB Historify
+        for symbol in self.symbols + [self.market_anchor]:
+            logger.info(f"[{self.name}] Warming up history for {symbol}...")
+            # Fetch last 100 1-minute candles or ticks
+            hist = get_ohlcv_data(symbol, "NSE", "1m", limit=100)
+            if hist:
+                self.price_history[symbol] = [h["close"] for h in hist]
+                logger.info(f"[{self.name}] Loaded {len(self.price_history[symbol])} historical prices for {symbol}")
+            else:
+                logger.warning(f"[{self.name}] No historical data found for {symbol} warmup.")
 
     async def on_stop(self):
         await super().on_stop()

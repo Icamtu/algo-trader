@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { motion, AnimatePresence } from 'framer-motion';
-import { GlobalHeader } from "@/components/trading/GlobalHeader";
-import { MarketNavbar } from "@/components/trading/MarketNavbar";
 import { HITLSignalSidebar } from "@/components/trading/HITLSignalSidebar";
 import { AuditQueuePanel } from "@/components/trading/AuditQueuePanel";
 import { AnalyticsPanel } from "@/components/trading/AnalyticsPanel";
@@ -10,12 +8,12 @@ import { LiveBlotter } from "@/components/trading/LiveBlotter";
 import { DeploymentSettings } from "@/components/trading/DeploymentSettings";
 import { AetherAIReasoningPanel } from "@/components/trading/AetherAIReasoningPanel";
 import { NeuralScanControl } from "@/components/trading/NeuralScanControl";
-import { 
-  Activity, 
-  TrendingUp, 
-  ShieldCheck, 
-  Percent, 
-  BarChart3, 
+import {
+  Activity,
+  TrendingUp,
+  ShieldCheck,
+  Percent,
+  BarChart3,
   Target,
   Zap,
   ShieldAlert,
@@ -26,12 +24,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { CONFIG } from "@/lib/config";
 
 const MetricCard = ({ title, value, subtext, icon: Icon, trend }: any) => (
   <Card className="bg-slate-950/40 backdrop-blur-md border-white/5 hover:border-primary/20 transition-all group relative overflow-hidden">
     {/* Animated background hint */}
     <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-    
+
     <CardContent className="p-4 relative z-10">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] uppercase font-black tracking-[0.2em] text-muted-foreground/60 group-hover:text-primary transition-colors">
@@ -53,10 +52,10 @@ const MetricCard = ({ title, value, subtext, icon: Icon, trend }: any) => (
               {subtext}
             </span>
             <div className="flex-1 h-[2px] bg-white/5 rounded-full overflow-hidden">
-                <motion.div 
+                <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: trend === 'up' ? "70%" : "30%" }}
-                    className={cn("h-full", trend === 'up' ? "bg-green-500" : "bg-red-500")} 
+                    className={cn("h-full", trend === 'up' ? "bg-green-500" : "bg-red-500")}
                 />
             </div>
         </div>
@@ -83,11 +82,11 @@ const StrategyMonitoring = () => {
           action: {
             label: "APPROVE",
             onClick: () => {
-              fetch(`${import.meta.env.VITE_API_BASE_URL || "http://localhost:18788"}/api/v1/hitl/approve`, {
+              fetch(`${CONFIG.API_BASE_URL}/api/v1/hitl/approve`, {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Content-Type': 'application/json',
-                    'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || ""
+                    'apikey': CONFIG.API_KEY
                 },
                 body: JSON.stringify({ id: newSignal.id })
               }).then(res => res.json())
@@ -108,24 +107,24 @@ const StrategyMonitoring = () => {
   const handleNeuralScan = async (symbols: string, timeframe: string) => {
     setIsScanning(true);
     setSelectedSignal(null); // Clear selection to show scan result
-    
+
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || "http://localhost:18788"}/api/v1/aether/analyze`, {
+      const response = await fetch(`${CONFIG.API_BASE_URL}/api/v1/aether/analyze`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || ""
+          'apikey': CONFIG.API_KEY
         },
         body: JSON.stringify({ symbols, timeframe })
       });
-      
+
       const result = await response.json();
       if (result.status === 'success') {
         const rawData = result.data;
         const analysisArray = Array.isArray(rawData) ? rawData : [rawData];
-        
+
         setScanResults(analysisArray);
-        
+
         if (analysisArray.length > 1) {
           toast.success(`Batch Scan Complete`, {
             description: `Analyzed ${analysisArray.length} symbols. See Reasoning Panel for details.`
@@ -147,27 +146,25 @@ const StrategyMonitoring = () => {
   };
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background industrial-grid selection:bg-primary/30 relative">
+    <div className="h-full flex flex-col overflow-hidden bg-background relative selection:bg-primary/30">
       <div className="noise-overlay" />
       <div className="scanline" />
-      <GlobalHeader />
-      <MarketNavbar activeTab="/monitoring" />
 
       <div className="flex-1 flex min-h-0 relative z-10 w-full">
         {/* Left: HITL Signal Desk */}
         <div className="w-80 border-r border-white/5">
-          <HITLSignalSidebar 
-            selectedSignalId={selectedSignal?.id} 
+          <HITLSignalSidebar
+            selectedSignalId={selectedSignal?.id}
             onSelectSignal={(sig) => {
                 setSelectedSignal(sig);
                 setScanResults([]); // Clear scan when manual signal selected
-            }} 
+            }}
           />
         </div>
 
         {/* Center: Main Audit Matrix & Metrics */}
         <div className="flex-1 flex flex-col min-w-0 p-4 space-y-4 overflow-y-auto custom-scrollbar bg-black/5">
-          
+
           {/* Header Strip */}
           <div className="flex items-center justify-between px-1">
              <div className="flex items-center gap-3">
@@ -189,33 +186,33 @@ const StrategyMonitoring = () => {
 
           {/* Top Metric Bar */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <MetricCard 
-              title="Global Exposure" 
-              value="₹ 45.2L" 
-              subtext="+12.4% vs Avg" 
-              icon={Target} 
-              trend="up" 
+            <MetricCard
+              title="Global Exposure"
+              value="₹ 45.2L"
+              subtext="+12.4% vs Avg"
+              icon={Target}
+              trend="up"
             />
-            <MetricCard 
-              title="Neural Sharpe" 
-              value="2.84" 
-              subtext="Robust" 
-              icon={Cpu} 
-              trend="up" 
+            <MetricCard
+              title="Neural Sharpe"
+              value="2.84"
+              subtext="Robust"
+              icon={Cpu}
+              trend="up"
             />
-            <MetricCard 
-              title="Value at Risk" 
-              value="₹ 18,402" 
-              subtext="95% Conf" 
-              icon={ShieldCheck} 
-              trend="down" 
+            <MetricCard
+              title="Value at Risk"
+              value="₹ 18,402"
+              subtext="95% Conf"
+              icon={ShieldCheck}
+              trend="down"
             />
-            <MetricCard 
-              title="Calmar Ratio" 
-              value="4.12" 
-              subtext="Institutional" 
-              icon={BarChart3} 
-              trend="up" 
+            <MetricCard
+              title="Calmar Ratio"
+              value="4.12"
+              subtext="Institutional"
+              icon={BarChart3}
+              trend="up"
             />
           </div>
 
@@ -242,9 +239,9 @@ const StrategyMonitoring = () => {
                 <DeploymentSettings />
                 <NeuralScanControl onScan={handleNeuralScan} isLoading={isScanning} />
             </div>
-            
+
             <div className="flex-1 min-h-[400px] p-4 pt-0">
-                <AetherAIReasoningPanel 
+                <AetherAIReasoningPanel
                     isLoading={isScanning}
                     data={selectedSignal ? [{
                         logic_core: selectedSignal.ai_reasoning,
@@ -257,7 +254,7 @@ const StrategyMonitoring = () => {
                         ],
                         conviction: selectedSignal.conviction,
                         symbol: selectedSignal.symbol
-                    }] : scanResults} 
+                    }] : scanResults}
                 />
             </div>
           </div>

@@ -3,6 +3,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from utils.charges import ZerodhaCalculator
 
 from core.strategy_registry import build_strategy_snapshots
 
@@ -19,6 +20,7 @@ class BacktestTrade:
     exit_price: float
     quantity: int
     pnl: float
+    charges: float = 0.0
     mae: float = 0.0 # Maximum Adverse Excursion (%)
     mfe: float = 0.0 # Maximum Favorable Excursion (%)
 
@@ -109,7 +111,9 @@ class BacktestRunner:
                 }
                 cash -= price * quantity
             elif signal == "SELL" and open_position is not None:
-                trade = self._close_trade(open_position, timestamp, price)
+                # Add symbol to open_position for charge inference
+                open_position["symbol"] = symbol
+                trade = self._close_trade(open_position, timestamp, price, strategy_key)
                 cash += price * quantity
                 trades.append(trade)
                 open_position = None
@@ -125,12 +129,16 @@ class BacktestRunner:
         if open_position is not None:
             last_candle = candles[-1]
             last_price = float(last_candle["close"])
-            trades.append(self._close_trade(open_position, str(last_candle["timestamp"]), last_price))
+            open_position["symbol"] = symbol
+            trades.append(self._close_trade(open_position, str(last_candle["timestamp"]), last_price, strategy_key))
             cash += last_price * quantity
             equity_curve[-1] = cash
 
         gross_pnl = sum(trade.pnl for trade in trades)
-        wins = sum(1 for trade in trades if trade.pnl > 0)
+        total_charges = sum(trade.charges for trade in trades)
+        net_pnl = gross_pnl - total_charges
+
+        wins = sum(1 for trade in trades if (trade.pnl - trade.charges) > 0)
         win_rate = (wins / len(trades)) * 100 if trades else 0.0
 
         gross_profit = sum(trade.pnl for trade in trades if trade.pnl > 0)
@@ -168,7 +176,7 @@ class BacktestRunner:
             total_trades=len(trades),
             win_rate=round(win_rate, 2),
             gross_pnl=round(gross_pnl, 2),
-            net_pnl=round(gross_pnl, 2),
+            net_pnl=round(net_pnl, 2),
             max_drawdown=round(max_drawdown, 2),
             average_hold_minutes=round(average_hold_minutes, 2),
             sharpe_ratio=round(sharpe_ratio, 2),
@@ -237,8 +245,20 @@ class BacktestRunner:
 
         raise ValueError(f"Unsupported strategy key: {strategy_key}")
 
-    def _close_trade(self, position: Dict[str, Any], exit_time: str, exit_price: float) -> BacktestTrade:
-        pnl = (exit_price - float(position["entry_price"])) * int(position["quantity"])
+    def _close_trade(self, position: Dict[str, Any], exit_time: str, exit_price: float, strategy_key: str = "intraday") -> BacktestTrade:
+        entry_price = float(position["entry_price"])
+        quantity = int(position["quantity"])
+        gross_pnl = (exit_price - entry_price) * quantity
+
+        # Calculate Zerodha charges
+        asset_type = ZerodhaCalculator.infer_asset_type(position.get("symbol", "EQUITY"), strategy_key)
+        charge_data = ZerodhaCalculator.calculate_charges(
+            buy_price=entry_price,
+            sell_price=exit_price,
+            quantity=quantity,
+            asset_type=asset_type
+        )
+        total_charges = charge_data["total_charges"]
 
         # Calculate MAE/MFE as percentages relative to entry
         entry_price = float(position["entry_price"])
@@ -251,8 +271,9 @@ class BacktestRunner:
             exit_time=exit_time,
             entry_price=entry_price,
             exit_price=float(exit_price),
-            quantity=int(position["quantity"]),
-            pnl=round(pnl, 2),
+            quantity=quantity,
+            pnl=round(gross_pnl, 2),
+            charges=round(total_charges, 2),
             mae=round(mae_pct, 2),
             mfe=round(mfe_pct, 2),
         )

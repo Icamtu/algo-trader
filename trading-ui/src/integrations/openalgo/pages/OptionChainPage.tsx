@@ -6,7 +6,7 @@ import { useOptionChainPreferences } from '@/hooks/useOptionChainPreferences'
 import { tradingService } from '@/services/tradingService'
 import type { BarDataSource, BarStyle, ColumnKey, OptionStrike } from '@/integrations/openalgo/types/option-chain'
 import { COLUMN_DEFINITIONS } from '@/integrations/openalgo/types/option-chain'
-import { BarSettingsDropdown, ColumnConfigDropdown, ColumnReorderPanel } from '../components/option-chain'
+import { BarSettingsDropdown, ColumnConfigDropdown, ColumnReorderPanel, VirtualizedOptionChain } from '../components/option-chain'
 import { NewOrderModal } from '@/components/trading/NewOrderModal'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -27,14 +27,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { useSupportedExchanges } from '@/hooks/useSupportedExchanges'
 import { useAppModeStore } from '@/stores/appModeStore'
@@ -73,128 +65,6 @@ function convertExpiryForAPI(expiry: string): string {
   return expiry.replace(/-/g, '').toUpperCase()
 }
 
-const OptionChainRow = React.memo(function OptionChainRow({
-  strike,
-  previousStrike,
-  maxBarValue,
-  visibleCeColumns,
-  visiblePeColumns,
-  barDataSource,
-  barStyle,
-  optionExchange,
-  onPlaceOrder,
-  isAD,
-}: {
-  strike: OptionStrike
-  previousStrike: OptionStrike | undefined
-  maxBarValue: number
-  visibleCeColumns: ColumnKey[]
-  visiblePeColumns: ColumnKey[]
-  barDataSource: BarDataSource
-  barStyle: BarStyle
-  optionExchange: string
-  onPlaceOrder: (symbol: string, side: 'BUY' | 'SELL') => void
-  isAD: boolean
-}) {
-  const primaryColor = isAD ? "text-amber-500" : "text-teal-500"
-  const buyColor = isAD ? "bg-emerald-600" : "bg-teal-600"
-  const sellColor = isAD ? "bg-rose-600" : "bg-rose-700"
-  const ce = strike.ce
-  const pe = strike.pe
-  const label = ce?.label ?? pe?.label ?? ''
-  const isATM = label === 'ATM'
-  const isCeOTM = label.startsWith('OTM')
-  const isPeOTM = label.startsWith('ITM')
-
-  const ceLtpChanged = previousStrike?.ce?.ltp !== undefined && previousStrike.ce.ltp !== ce?.ltp
-  const peLtpChanged = previousStrike?.pe?.ltp !== undefined && previousStrike.pe.ltp !== pe?.ltp
-
-  const ceFlashClass = ceLtpChanged ? (ce && previousStrike?.ce && ce.ltp > previousStrike.ce.ltp ? (isAD ? 'text-emerald-400 font-bold' : 'text-teal-400 font-bold') : 'text-rose-500 font-bold') : ''
-  const peFlashClass = peLtpChanged ? (pe && previousStrike?.pe && pe.ltp > previousStrike.pe.ltp ? (isAD ? 'text-emerald-400 font-bold' : 'text-teal-400 font-bold') : 'text-rose-500 font-bold') : ''
-
-  const ceSpread = ce && ce.bid > 0 && ce.ask > 0 ? ce.ask - ce.bid : 0
-  const peSpread = pe && pe.bid > 0 && pe.ask > 0 ? pe.ask - pe.bid : 0
-
-  const ceBarValue = barDataSource === 'oi' ? ce?.oi : ce?.volume
-  const peBarValue = barDataSource === 'oi' ? pe?.oi : pe?.volume
-  const ceBarPercent = ceBarValue ? Math.min((ceBarValue / maxBarValue) * 100, 100) : 0
-  const peBarPercent = peBarValue ? Math.min((peBarValue / maxBarValue) * 100, 100) : 0
-
-  const ceBarClass = barStyle === 'gradient' ? cn('bg-gradient-to-r from-transparent', isAD ? 'to-amber-500/20' : 'to-teal-500/20') : (isAD ? 'bg-amber-500/10' : 'bg-teal-500/10')
-  const peBarClass = barStyle === 'gradient' ? cn('bg-gradient-to-l from-transparent', isAD ? 'to-rose-500/20' : 'to-rose-500/20') : 'bg-rose-500/10'
-
-  const numClass = 'font-mono tabular-nums text-[11px] tracking-tight'
-
-  return (
-    <TableRow className="hover:bg-muted/10 group h-10 border-b border-border/40">
-      <TableCell className={cn('p-0 relative', isCeOTM && !isATM && (isAD ? 'bg-amber-500/5' : 'bg-teal-500/5'))}>
-        <div className={cn('absolute left-0 top-0 bottom-0 pointer-events-none z-0 transition-all duration-300', ceBarClass)} style={{ width: `${ceBarPercent}%` }} />
-        {ce && (
-          <div className="absolute right-1 top-1/2 -translate-y-1/2 z-20 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button onClick={() => onPlaceOrder(ce.symbol, 'BUY')} className={cn("px-2 py-0.5 text-[9px] font-black rounded text-white shadow-lg", isAD ? "bg-emerald-600 shadow-emerald-900/40" : "bg-teal-600 shadow-teal-900/40")}>B</button>
-            <button onClick={() => onPlaceOrder(ce.symbol, 'SELL')} className={cn("px-2 py-0.5 text-[9px] font-black rounded text-white shadow-lg", isAD ? "bg-amber-600 shadow-amber-900/40" : "bg-rose-600 shadow-rose-900/40")}>S</button>
-          </div>
-        )}
-        <div className="relative z-10 flex">
-          {visibleCeColumns.map(key => (
-            <div key={key} className="flex-1 px-2 py-2 text-right">
-              {key === 'ce_oi' && <span className={numClass}>{formatInLakhs(ce?.oi)}</span>}
-              {key === 'ce_volume' && <span className={numClass}>{formatInLakhs(ce?.volume)}</span>}
-              {key === 'ce_ltp' && <span className={cn(numClass, ceFlashClass)}>{formatPrice(ce?.ltp)}</span>}
-              {/* Add other columns as needed matching the keys */}
-              {key === 'ce_spread' && <span className={numClass}>{formatPrice(ceSpread)}</span>}
-              {['ce_delta', 'ce_gamma', 'ce_theta', 'ce_vega', 'ce_iv'].includes(key) && (
-                 <span className={cn(numClass, isAD ? 'text-amber-400' : 'text-teal-400')}>
-                   {formatPrice(ce ? (ce as any)[key.replace('ce_', '')] : 0)}
-                 </span>
-              )}
-              {['ce_bid', 'ce_ask', 'ce_bid_qty', 'ce_ask_qty'].includes(key) && (
-                 <span className={cn(numClass, key.includes('bid') ? 'text-rose-400' : 'text-teal')}>
-                   {formatPrice(ce ? (ce as any)[key.replace('ce_', '')] : 0)}
-                 </span>
-              )}
-            </div>
-          ))}
-        </div>
-      </TableCell>
-
-      <TableCell className={cn('text-center font-black px-2 py-2 text-[11px] font-mono w-24 border-x border-border/60', isATM ? (isAD ? 'bg-primary/20 text-primary shadow-[inset_0_0_10px_rgba(255,176,0,0.2)]' : 'bg-teal-500/20 text-teal-500 shadow-[inset_0_0_10px_rgba(20,184,166,0.2)]') : 'bg-foreground/5 text-muted-foreground')}>
-        {strike.strike}
-      </TableCell>
-
-      <TableCell className={cn('p-0 relative', isPeOTM && !isATM && 'bg-rose-500/5')}>
-        <div className={cn('absolute right-0 top-0 bottom-0 pointer-events-none z-0 transition-all duration-300', peBarClass)} style={{ width: `${peBarPercent}%` }} />
-        {pe && (
-          <div className="absolute left-1 top-1/2 -translate-y-1/2 z-20 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button onClick={() => onPlaceOrder(pe.symbol, 'BUY')} className={cn("px-2 py-0.5 text-[9px] font-black rounded text-white shadow-lg", isAD ? "bg-emerald-600 shadow-emerald-900/40" : "bg-teal-600 shadow-teal-900/40")}>B</button>
-            <button onClick={() => onPlaceOrder(pe.symbol, 'SELL')} className={cn("px-2 py-0.5 text-[9px] font-black rounded text-white shadow-lg", isAD ? "bg-amber-600 shadow-amber-900/40" : "bg-rose-600 shadow-rose-900/40")}>S</button>
-          </div>
-        )}
-        <div className="relative z-10 flex">
-          {visiblePeColumns.map(key => (
-            <div key={key} className="flex-1 px-2 py-2 text-left">
-              {key === 'pe_ltp' && <span className={cn(numClass, peFlashClass)}>{formatPrice(pe?.ltp)}</span>}
-              {key === 'pe_oi' && <span className={numClass}>{formatInLakhs(pe?.oi)}</span>}
-              {key === 'pe_volume' && <span className={numClass}>{formatInLakhs(pe?.volume)}</span>}
-              {/* Add other columns */}
-              {key === 'pe_spread' && <span className={numClass}>{formatPrice(peSpread)}</span>}
-              {['pe_delta', 'pe_gamma', 'pe_theta', 'pe_vega', 'pe_iv'].includes(key) && (
-                 <span className={cn(numClass, isAD ? 'text-amber-400' : 'text-teal-400')}>
-                   {formatPrice(pe ? (pe as any)[key.replace('pe_', '')] : 0)}
-                 </span>
-              )}
-              {['pe_bid', 'pe_ask', 'pe_bid_qty', 'pe_ask_qty'].includes(key) && (
-                 <span className={cn(numClass, key.includes('bid') ? 'text-rose-400' : 'text-teal')}>
-                   {formatPrice(pe ? (pe as any)[key.replace('pe_', '')] : 0)}
-                 </span>
-              )}
-            </div>
-          ))}
-        </div>
-      </TableCell>
-    </TableRow>
-  )
-})
 
 export default function OptionChainPage() {
   const { toast } = useToast()
@@ -213,8 +83,8 @@ export default function OptionChainPage() {
   const { visibleColumns, columnOrder, strikeCount, selectedUnderlying, barDataSource, barStyle } = preferences
 
   const toggleColumn = (key: ColumnKey) => {
-    const newColumns = visibleColumns.includes(key) 
-      ? visibleColumns.filter(c => c !== key) 
+    const newColumns = visibleColumns.includes(key)
+      ? visibleColumns.filter(c => c !== key)
       : [...visibleColumns, key]
     updatePreferences({ visibleColumns: newColumns })
   }
@@ -225,7 +95,7 @@ export default function OptionChainPage() {
   const [selectedExpiry, setSelectedExpiry] = useState('')
   const [expiries, setExpiries] = useState<string[]>([])
   const previousDataRef = useRef<Map<number, OptionStrike>>(new Map())
-  
+
   const [orderModal, setOrderModal] = useState<{ open: boolean, symbol: string, side: 'BUY' | 'SELL' }>({
     open: false,
     symbol: '',
@@ -336,12 +206,15 @@ export default function OptionChainPage() {
             <TrendingUp className={cn("h-6 w-6", primaryColorClass)} />
           </div>
           <div>
-            <h1 className={cn("text-2xl font-black font-mono tracking-[0.2em] uppercase", primaryColorClass)}>Option_Chain_Kernel</h1>
+            <h1 className={cn("text-2xl font-black font-mono tracking-[0.2em] uppercase", primaryColorClass)}>
+              Tactical_Strike_Matrix
+            </h1>
             <div className="flex items-center gap-2 mt-1">
               <div className={cn('w-1.5 h-1.5 rounded-full animate-pulse', isConnected ? (isAD ? 'bg-amber-500 shadow-[0_0_5px_rgba(255,176,0,0.5)]' : 'bg-teal-500 shadow-[0_0_5px_rgba(20,184,166,0.5)]') : 'bg-rose-500')} />
               <span className="text-[10px] font-mono font-black text-muted-foreground/60 tracking-widest uppercase italic">
                 {isConnected ? 'STREAM_LINKED' : 'STREAM_OFFLINE'} // NODE::{selectedUnderlying}
               </span>
+              <div className="greeble-dash opacity-20" />
             </div>
           </div>
         </div>
@@ -401,14 +274,14 @@ export default function OptionChainPage() {
             </SelectContent>
           </Select>
 
-          <BarSettingsDropdown 
+          <BarSettingsDropdown
             barDataSource={barDataSource} barStyle={barStyle}
             onBarDataSourceChange={v => updatePreferences({ barDataSource: v })}
             onBarStyleChange={v => updatePreferences({ barStyle: v })}
           />
           <ColumnConfigDropdown visibleColumns={visibleColumns} onToggleColumn={toggleColumn} onResetToDefaults={() => updatePreferences({ visibleColumns: COLUMN_DEFINITIONS.filter(c => c.defaultVisible).map(c => c.key) })} />
           <ColumnReorderPanel columnOrder={columnOrder} visibleColumns={visibleColumns} onReorderColumns={v => updatePreferences({ columnOrder: v })} />
-          
+
           <Button onClick={() => refetch()} variant="secondary" className="h-9 font-mono text-[11px] font-black px-4 ml-2 shadow-[0_0_15px_rgba(255,176,0,0.1)]">
             <RefreshCw className={cn('h-3.5 w-3.5 mr-2', isLoading && 'animate-spin')} /> RE_SYNC
           </Button>
@@ -426,13 +299,13 @@ export default function OptionChainPage() {
                  {data.underlying_ltp >= data.underlying_prev_close ? '+' : ''}{(data.underlying_ltp - data.underlying_prev_close).toFixed(2)} [{( (data.underlying_ltp - data.underlying_prev_close) / data.underlying_prev_close * 100).toFixed(2)}%]
                </div>
             </AetherPanel>
- 
+
             <AetherPanel className={cn("p-4 border-2", isAD ? "border-primary/20" : "border-teal-500/20")}>
                <div className={cn("text-[10px] font-black font-mono uppercase tracking-widest opacity-40 mb-1", primaryColorClass)}>EQUILIBRIUM_STRIKE</div>
                <div className="text-2xl font-black font-mono tracking-tighter">{data.atm_strike}</div>
                <div className="text-[9px] font-mono font-bold text-muted-foreground/40 mt-1 uppercase tracking-widest">EXPIRY::{selectedExpiry}</div>
             </AetherPanel>
- 
+
             <AetherPanel className={cn("p-4 border-2", isAD ? "border-primary/20" : "border-teal-500/20")}>
                <div className={cn("text-[10px] font-black font-mono uppercase tracking-widest opacity-40 mb-1", primaryColorClass)}>PCR_SENTIMENT</div>
                <div className={cn('text-2xl font-black font-mono tracking-tighter', totals.pcr > 1.2 ? 'text-emerald-500' : totals.pcr < 0.8 ? 'text-rose-500' : primaryColorClass)}>
@@ -440,7 +313,7 @@ export default function OptionChainPage() {
                </div>
                <div className="text-[9px] font-mono font-bold text-muted-foreground/40 mt-1 uppercase tracking-widest">VOL_PUT_CALL_RATIO</div>
             </AetherPanel>
- 
+
             <AetherPanel className={cn("p-4 border-2", isAD ? "border-primary/20" : "border-teal-500/20")}>
                <div className="flex justify-between items-center mb-1">
                  <div className={cn("text-[10px] font-black font-mono uppercase tracking-widest opacity-40", primaryColorClass)}>DEPTH_SCAN</div>
@@ -458,58 +331,30 @@ export default function OptionChainPage() {
           </div>
 
           {/* Grid Panel */}
-          <AetherPanel className="p-0 overflow-hidden border-2 border-border/40 bg-card/10 backdrop-blur-md relative">
+          <AetherPanel
+            showGreebles
+            scanning={isConnected}
+            className="p-0 overflow-hidden border-2 border-border/40 bg-card/10 backdrop-blur-md relative h-[600px]"
+          >
             <div className="scanline pointer-events-none opacity-5" />
-            <div className="overflow-x-auto">
-              <Table className="w-full">
-                <TableHeader>
-                  <TableRow className="bg-card/40 border-b-2 border-border/60 hover:bg-transparent h-12">
-                    <TableHead className={cn("text-center font-black text-[10px] uppercase tracking-[0.4em] border-r border-border/60", primaryColorClass)}>Call_Side_Intelligence</TableHead>
-                    <TableHead className={cn("w-24 text-center font-black text-[10px] uppercase tracking-[0.2em]", isAD ? "bg-primary/10 text-primary" : "bg-teal-500/10 text-teal-500")}>Strike</TableHead>
-                    <TableHead className="text-center font-black text-[10px] uppercase tracking-[0.4em] text-rose-500 border-l border-border/60">Put_Side_Intelligence</TableHead>
-                  </TableRow>
-                  <TableRow className="bg-background/20 hover:bg-transparent h-8 border-b border-border/40">
-                    <TableHead className="p-0 border-r border-border/60">
-                      <div className="flex">
-                        {visibleCeColumns.map(key => (
-                          <div key={key} className="flex-1 px-2 py-1 text-[9px] font-black text-muted-foreground/40 text-right uppercase tracking-widest italic">{COLUMN_DEFINITIONS.find(c => c.key === key)?.label}</div>
-                        ))}
-                      </div>
-                    </TableHead>
-                    <TableHead />
-                    <TableHead className="p-0 border-l border-border/60">
-                      <div className="flex">
-                        {visiblePeColumns.map(key => (
-                          <div key={key} className="flex-1 px-2 py-1 text-[9px] font-black text-muted-foreground/40 text-left uppercase tracking-widest italic">{COLUMN_DEFINITIONS.find(c => c.key === key)?.label}</div>
-                        ))}
-                      </div>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.chain.map((row, idx) => (
-                    <OptionChainRow 
-                      key={row.strike}
-                      strike={row}
-                      previousStrike={previousDataRef.current.get(row.strike)}
-                      maxBarValue={maxBarValue}
-                      visibleCeColumns={visibleCeColumns}
-                      visiblePeColumns={visiblePeColumns}
-                      barDataSource={barDataSource}
-                      barStyle={barStyle}
-                      optionExchange={selectedExchange}
-                      onPlaceOrder={(sym, side) => setOrderModal({ open: true, symbol: sym, side })}
-                      isAD={isAD}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <VirtualizedOptionChain
+              chain={data.chain}
+              previousChain={previousDataRef.current}
+              visibleCeColumns={visibleCeColumns}
+              visiblePeColumns={visiblePeColumns}
+              maxBarValue={maxBarValue}
+              barDataSource={barDataSource}
+              barStyle={barStyle}
+              onPlaceOrder={(sym, side) => setOrderModal({ open: true, symbol: sym, side })}
+              isAD={isAD}
+            />
           </AetherPanel>
-          
+
+
           <div className="flex justify-between items-center px-2">
-            <div className="flex gap-4">
+            <div className="flex gap-4 items-center">
               <span className="text-[9px] font-mono text-muted-foreground/30 font-black uppercase tracking-widest">MODE::HYBRID_STREAM</span>
+              <div className="greeble-dash opacity-10" />
               <span className="text-[9px] font-mono text-muted-foreground/30 font-black uppercase tracking-widest">SYMBOLS::{data.chain.length * 2 + 1}</span>
             </div>
             <div className="text-[9px] font-mono text-primary/40 font-black uppercase tracking-widest">
@@ -519,9 +364,9 @@ export default function OptionChainPage() {
         </>
       )}
 
-      <NewOrderModal 
-        isOpen={orderModal.open} 
-        onClose={() => setOrderModal(prev => ({ ...prev, open: false }))} 
+      <NewOrderModal
+        isOpen={orderModal.open}
+        onClose={() => setOrderModal(prev => ({ ...prev, open: false }))}
         prefilledSymbol={orderModal.symbol}
       />
     </div>

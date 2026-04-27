@@ -2,12 +2,12 @@ import React from "react";
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { GlobalHeader } from "./GlobalHeader";
 import { MarketNavbar } from "./MarketNavbar";
-import { motion } from "framer-motion";
-import { 
-  ClipboardList, 
-  Zap, 
-  LayoutGrid, 
-  ShieldCheck, 
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  ClipboardList,
+  Zap,
+  LayoutGrid,
+  ShieldCheck,
   History,
   LayoutDashboard
 } from "lucide-react";
@@ -33,14 +33,9 @@ export function OpenAlgoLayout() {
   const indicatorBg = isAD ? "bg-primary" : "bg-teal";
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background industrial-grid relative">
-      <div className="noise-overlay" />
-      <div className="scanline opacity-10" />
-      <GlobalHeader />
-      <MarketNavbar activeTab="/openalgo" />
-      
+    <div className="h-full flex flex-col overflow-hidden relative">
       {/* Sub-Navbar for OpenAlgo Feature Set */}
-      <div className="h-8 flex items-center bg-black/40 border-b border-border/10 px-4 z-30">
+      <div className="h-9 flex items-center bg-black/40 border-b border-white/5 px-4 z-30 backdrop-blur-md">
         <div className="flex h-full">
           {subTabs.map((tab) => {
             const isActive = location.pathname === tab.to;
@@ -48,16 +43,16 @@ export function OpenAlgoLayout() {
               <Link
                 key={tab.to}
                 to={tab.to}
-                className={`flex items-center gap-2 px-4 h-full text-[9px] font-mono font-black uppercase tracking-widest transition-all relative border-r border-border/5 ${
+                className={`flex items-center gap-2 px-4 h-full text-[9px] font-mono font-black uppercase tracking-widest transition-all relative border-r border-border/5 pro-max-glow ${
                   isActive ? cn(accentColor, accentBg) : "text-muted-foreground/40 hover:text-foreground"
                 }`}
               >
                 <tab.icon className={`w-3 h-3 ${isActive ? accentColor : "text-muted-foreground/20"}`} />
                 {tab.label}
                 {isActive && (
-                  <motion.div 
+                  <motion.div
                     layoutId="sub-nav-active"
-                    className={cn("absolute bottom-0 left-0 right-0 h-[1px]", indicatorBg)} 
+                    className={cn("absolute bottom-0 left-0 right-0 h-[2px] shadow-[0_0_10px_rgba(34,197,94,0.5)]", indicatorBg)}
                   />
                 )}
               </Link>
@@ -71,7 +66,18 @@ export function OpenAlgoLayout() {
       </div>
 
       <div className="flex-1 overflow-hidden relative">
-        <Outlet />
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
+            className="h-full w-full"
+          >
+            <Outlet />
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );

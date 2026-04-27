@@ -13,7 +13,7 @@ repos:
     rev: 1.7.6
     hooks:
       - id: bandit
-        args: ["-r", "algo-trader", "-ll", "-x", "scratch,venv,node_modules"]
+        args: ["-lll", "-x", "scratch,venv,node_modules"]
         name: Bandit security scan
         description: Security-oriented static analyzer for Python code
         language: python

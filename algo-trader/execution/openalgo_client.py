@@ -11,6 +11,7 @@ the complete OpenAlgo feature set:
 
 import logging
 import os
+import asyncio
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -22,7 +23,7 @@ from execution.openalgo_credentials import (
 
 logger = logging.getLogger(__name__)
 
-_TIMEOUT = 8  # seconds for all API calls
+_TIMEOUT = 60  # seconds for all API calls
 
 
 class OpenAlgoClient:
@@ -182,7 +183,6 @@ class OpenAlgoClient:
 
         return requests.request(**kwargs)
 
-
     def _retry_invalid_api_key_once(
         self,
         method: str,
@@ -230,6 +230,15 @@ class OpenAlgoClient:
 
         return result
 
+    async def _request_async(
+        self,
+        method: str,
+        endpoint: str,
+        payload: Optional[Dict] = None,
+    ) -> Dict[str, Any]:
+        """Asynchronous version of _request using thread pooling to avoid blocking the event loop."""
+        return await asyncio.to_thread(self._request, method, endpoint, payload)
+
     def _execute_request(
         self,
         method: str,
@@ -244,7 +253,7 @@ class OpenAlgoClient:
             content_type = response.headers.get("Content-Type", "")
             if "html" in content_type.lower():
                 logger.error(
-                    "OpenAlgo returned HTML instead of JSON [%s %s] — likely a 404. "
+                    "OpenAlgo returned HTML instead of JSON [%s %s] \u2014 likely a 404. "
                     "Check that the endpoint exists on your OpenAlgo version.",
                     method,
                     endpoint,
@@ -263,6 +272,12 @@ class OpenAlgoClient:
 
         except requests.exceptions.HTTPError as e:
             if e.response is not None:
+                try:
+                    error_body = e.response.json()
+                    logger.error(f"OpenAlgo API Error Body [{e.response.status_code}]: {error_body}")
+                except:
+                    logger.error(f"OpenAlgo API Error Body [{e.response.status_code}]: {e.response.text[:200]}")
+
                 retry_response = self._retry_invalid_api_key_once(
                     method,
                     endpoint,
@@ -275,7 +290,7 @@ class OpenAlgoClient:
                         content_type = retry_response.headers.get("Content-Type", "")
                         if "html" in content_type.lower():
                             logger.error(
-                                "OpenAlgo returned HTML instead of JSON [%s %s] — likely a 404. "
+                                "OpenAlgo returned HTML instead of JSON [%s %s] \u2014 likely a 404. "
                                 "Check that the endpoint exists on your OpenAlgo version.",
                                 method,
                                 endpoint,
@@ -351,7 +366,7 @@ class OpenAlgoClient:
                 "exchange": exchange,
             }
         )
-        logger.info("PlaceOrder → %s %s qty=%s @ %s [%s]", action, symbol, quantity, order_type, exchange)
+        logger.info("PlaceOrder \u2192 %s %s qty=%s @ %s [%s]", action, symbol, quantity, order_type, exchange)
         return self._request("POST", "/api/v1/placeorder", payload)
 
     def place_smart_order(
@@ -367,7 +382,7 @@ class OpenAlgoClient:
         strategy: str = "Algo-Trader",
     ) -> Dict[str, Any]:
         """
-        Place a smart order — OpenAlgo computes the net qty needed based on
+        Place a smart order \u2014 OpenAlgo computes the net qty needed based on
         the current open position so strategies don't need to track state.
         """
         payload = self._with_key(
@@ -384,7 +399,7 @@ class OpenAlgoClient:
             }
         )
         logger.info(
-            "SmartOrder → %s %s qty=%s pos_size=%s [%s]",
+            "SmartOrder \u2192 %s %s qty=%s pos_size=%s [%s]",
             action, symbol, quantity, position_size, exchange,
         )
         return self._request("POST", "/api/v1/placesmartorder", payload)
@@ -407,7 +422,7 @@ class OpenAlgoClient:
             o["action"] = o.get("action", "BUY").upper()
             enriched.append(o)
 
-        logger.info("BasketOrder → %d orders", len(enriched))
+        logger.info("BasketOrder \u2192 %d orders", len(enriched))
         return self._request("POST", "/api/v1/basketorder", {"orders": enriched})
 
     def modify_order(
@@ -436,13 +451,13 @@ class OpenAlgoClient:
                 "strategy": strategy,
             }
         )
-        logger.info("ModifyOrder → %s qty=%s price=%s", order_id, quantity, price)
+        logger.info("ModifyOrder \u2192 %s qty=%s price=%s", order_id, quantity, price)
         return self._request("POST", "/api/v1/modifyorder", payload)
 
     def cancel_order(self, order_id: str, strategy: str = "Algo-Trader") -> Dict[str, Any]:
         """Cancel a single open order."""
         payload = self._with_key({"orderid": order_id, "strategy": strategy})
-        logger.info("CancelOrder → %s", order_id)
+        logger.info("CancelOrder \u2192 %s", order_id)
         return self._request("POST", "/api/v1/cancelorder", payload)
 
     def cancel_all_orders(self, strategy: str = "Algo-Trader") -> Dict[str, Any]:
@@ -489,48 +504,33 @@ class OpenAlgoClient:
         payload = self._with_key()
         return self._request("POST", "/api/v1/funds", payload)
 
-    def get_positions(self) -> Dict[str, Any]:
-        """Get current open positions from the broker."""
-        # Standard OpenAlgo requires these keys even if they are 'all'
-        payload = self._with_key({
-            "strategy": "all",
-            "symbol": "all",
-            "exchange": "all",
-            "product": "all"
-        })
+    def get_positions(self, product: str = "MIS", exchange: str = "all", strategy: str = "all", symbol: str = "all") -> Dict[str, Any]:
+        """Get current open positions from the broker book."""
+        payload = self._with_key()
+        # Try positionbook first, then fallback to openposition if needed by older/different versions
+        return self._request("POST", "/api/v1/positionbook", payload)
+
+    def get_open_positions(self, product: str = "MIS", exchange: str = "all", strategy: str = "all", symbol: str = "all") -> Dict[str, Any]:
+        """Alias for get_positions specifically using the /openposition endpoint if preferred."""
+        payload = self._with_key()
         return self._request("POST", "/api/v1/openposition", payload)
 
 
-    def get_holdings(self) -> Dict[str, Any]:
-        """Get long-term holdings (CNC/NRML positions)."""
-        payload = self._with_key({
-            "strategy": "all",
-            "symbol": "all",
-            "exchange": "all",
-            "product": "all"
-        })
+    def get_holdings(self, exchange: str = "all", symbol: str = "all") -> Dict[str, Any]:
+        """Get long-term holdings (CNC/NRML positions). Winters."""
+        payload = self._with_key()
         return self._request("POST", "/api/v1/holdings", payload)
 
 
-    def get_orders(self) -> Dict[str, Any]:
+    def get_orders(self, product: str = "all", exchange: str = "all", strategy: str = "all", symbol: str = "all") -> Dict[str, Any]:
         """Get the full order book for today."""
-        payload = self._with_key({
-            "strategy": "all",
-            "symbol": "all",
-            "exchange": "all",
-            "product": "all"
-        })
+        payload = self._with_key()
         return self._request("POST", "/api/v1/orderbook", payload)
 
 
-    def get_trades(self) -> Dict[str, Any]:
+    def get_trades(self, product: str = "all", exchange: str = "all", strategy: str = "all", symbol: str = "all") -> Dict[str, Any]:
         """Get executed trade book for today."""
-        payload = self._with_key({
-            "strategy": "all",
-            "symbol": "all",
-            "exchange": "all",
-            "product": "all"
-        })
+        payload = self._with_key()
         return self._request("POST", "/api/v1/tradebook", payload)
 
 
@@ -554,16 +554,37 @@ class OpenAlgoClient:
         )
         return self._request("POST", "/api/v1/history", payload)
 
+    async def get_history_async(
+        self,
+        symbol: str,
+        exchange: str = "NSE",
+        interval: str = "1",
+        start_date: str = "",
+        end_date: str = "",
+    ) -> Dict[str, Any]:
+        """Fetch historical OHLCV data asynchronously."""
+        payload = self._with_key(
+            {
+                "symbol": symbol,
+                "exchange": exchange,
+                "interval": interval,
+                "start_date": start_date,
+                "end_date": end_date,
+            }
+        )
+        return await self._request_async("POST", "/api/v1/history", payload)
+
     def toggle_analyzer(self, state: bool) -> Dict[str, Any]:
         """Toggle the OpenAlgo analyzer mode (Paper Trading)."""
         payload = self._with_key({"state": state})
-        logger.info("ToggleAnalyzer → %s", state)
+        logger.info("ToggleAnalyzer \u2192 %s", state)
         return self._request("POST", "/api/v1/analyzertoggle", payload)
 
     def get_analyzer_status(self) -> Dict[str, Any]:
         """Get the current status of the OpenAlgo analyzer."""
         payload = self._with_key()
         return self._request("GET", "/api/v1/analyzerstatus", payload)
+
 
 
 # ------------------------------------------------------------------

@@ -1,0 +1,42 @@
+# algo-trader/config/sectors.yaml
+# Tiered Sector Registry for AetherDesk Prime
+
+tiers:
+  tier_1:
+    description: "Always-on; Drives index momentum"
+    sectors:
+      - name: "FINANCIALS"
+        index: "BANKNIFTY"
+        symbols: ["SBIN", "HDFCBANK", "ICICIBANK", "KOTAKBANK", "AXISBANK"]
+      - name: "IT"
+        index: "NIFTYIT"
+        symbols: ["TCS", "INFY", "WIPRO", "HCLTECH", "TECHM"]
+      - name: "ENERGY"
+        index: "NIFTYENERGY"
+        symbols: ["RELIANCE", "ONGC", "NTPC", "POWERGRID", "BPCL"]
+
+  tier_2:
+    description: "Conditional; Rotated in based on regime"
+    sectors:
+      - name: "AUTO"
+        index: "NIFTYAUTO"
+        symbols: ["MARUTI", "TATAMOTORS", "M&M", "BAJAJ-AUTO"]
+      - name: "PHARMA"
+        index: "NIFTYPHARMA"
+        symbols: ["SUNPHARMA", "CIPLA", "DRREDDY", "DIVISLAB"]
+      - name: "FMCG"
+        index: "NIFTYFMCG"
+        symbols: ["HINDUNILVR", "ITC", "NESTLEIND", "BRITANNIA"]
+
+  tier_3:
+    description: "Experimental; Macro color only"
+    sectors:
+      - name: "REALTY"
+        index: "NIFTYREALTY"
+        symbols: ["DLF", "GODREJPROP"]
+      - name: "METAL"
+        index: "NIFTYMETAL"
+        symbols: ["TATASTEEL", "JINDALSTEL"]
+      - name: "MEDIA"
+        index: "NIFTYMEDIA"
+        symbols: ["ZEEL", "SUNTV"]

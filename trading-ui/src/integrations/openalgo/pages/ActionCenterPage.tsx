@@ -1,754 +1,1086 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { PlayCircle, ShieldCheck, Activity, Check, X, Trash2, RefreshCw, Info, ArrowUp, ArrowDown, ChevronDown, ChevronUp, AlertTriangle, Terminal, Settings, Shield, ShieldAlert, ZapOff, ShieldCheck as ShieldIcon } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import {
+  Play, Pause, X, Trash2, CheckCircle2, AlertCircle, Info, RefreshCw,
+  Terminal, Globe, ShieldCheck, Zap, Activity, Filter, Search, ChevronRight,
+  CheckSquare, Square as SquareIcon, AlertTriangle, Layers, ZapOff, PlayCircle,
+  PauseCircle, Cpu, Fingerprint, Lock, Command, Database, BarChart3, Clock
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { AetherPanel } from '@/components/ui/AetherPanel';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { tradingService } from '@/services/tradingService';
-import { cn } from '@/lib/utils';
-import { Link } from 'react-router-dom';
-import { algoApi } from '@/features/openalgo/api/client';
-import { type StrategyMetrics } from '@/types/api';
-import { useAppModeStore } from '@/stores/appModeStore';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import { tradingService } from '@/services/tradingService';
+import { VirtualizedDataTable } from '../components/VirtualizedDataTable';
+import { Switch } from '@/components/ui/switch';
+import { useAppModeStore } from '@/stores/appModeStore';
 
-interface PendingOrder {
-  id: number;
-  strategy: string;
-  api_type: string;
-  symbol: string;
-  exchange: string;
-  action: 'BUY' | 'SELL';
-  quantity: number;
-  price: number;
-  price_type: string;
-  product_type: string;
-  status: 'pending' | 'approved' | 'rejected';
-  timestamp: string;
-  created_at_ist?: string;
-  raw_order_data: string | Record<string, any>;
-  action_type?: 'ORDER' | 'DEPLOY_STRATEGY';
-  rejection_reason?: string;
-  ai_reasoning?: string;
-  conviction?: number;
-}
+// ---------------------------------------------------------------------------
+// 🛰️ COMPONENT: ACTION CONFIRMATION DIALOG
+// ---------------------------------------------------------------------------
+const ActionConfirmationDialog = ({
+  isOpen,
+  onOpenChange,
+  title,
+  description,
+  onConfirm,
+  type = 'default',
+  metadata = {}
+}: any) => {
+  if (!isOpen) return null;
 
-export const ActionCenterPage: React.FC = () => {
-  const [orders, setOrders] = useState<PendingOrder[]>([]);
-  const [stats, setStats] = useState<any>({
-    total_pending: 0,
-    total_approved: 0,
-    total_rejected: 0,
-    total_buy_orders: 0,
-    total_sell_orders: 0,
-  });
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState('pending');
-  const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
-  const [riskMatrix, setRiskMatrix] = useState<Record<string, StrategyMetrics>>({});
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
-  const [editingSafeguard, setEditingSafeguard] = useState<string | null>(null);
-  const [safeguardConfig, setSafeguardConfig] = useState<{
-    max_drawdown_pct: number;
-    max_loss_inr: number;
-    is_armed: boolean;
-  }>({ max_drawdown_pct: 10, max_loss_inr: 5000, is_armed: true });
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 sm:p-12">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="absolute inset-0 bg-black/90 backdrop-blur-2xl"
+        onClick={() => onOpenChange(false)}
+      />
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.95, opacity: 0, y: 20 }}
+        className="w-full max-w-xl relative z-10"
+      >
+        <AetherPanel className={cn(
+          "bg-[#050505] p-10 shadow-[0_50px_150px_rgba(0,0,0,0.8)] relative group overflow-hidden",
+          type === 'danger' ? "border-destructive/40" : "border-primary/40"
+        )}>
+          {/* Decorative Corner */}
+          <div className={cn("absolute top-0 left-0 w-2 h-2", type === 'danger' ? "bg-rose-500" : "bg-primary")} />
+          <div className={cn("absolute bottom-0 right-0 w-2 h-2", type === 'danger' ? "bg-rose-500" : "bg-primary")} />
+
+          <div className="flex items-center gap-6 mb-10">
+            <div className={cn(
+              "p-4 border",
+              type === 'danger' ? "bg-rose-500/10 border-rose-500/40 text-rose-500" : "bg-primary/10 border-primary/40 text-primary"
+            )}>
+              {type === 'danger' ? <AlertTriangle className="w-8 h-8" /> : <ShieldCheck className="w-8 h-8" />}
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-white tracking-widest uppercase">{title}</h2>
+              <span className="text-[10px] font-black opacity-40 tracking-[0.4em] uppercase">SYSTEM_INTERCEPT_V4.2</span>
+            </div>
+          </div>
+
+          <p className="text-sm font-mono text-muted-foreground/60 mb-10 leading-relaxed uppercase tracking-wider">
+            {description}
+          </p>
+
+          {Object.keys(metadata).length > 0 && (
+            <div className="mb-10 grid grid-cols-2 gap-4">
+               {Object.entries(metadata).map(([key, val]: any) => (
+                 <div key={key} className="p-4 bg-white/[0.02] border border-white/5">
+                    <div className="text-[8px] font-black text-muted-foreground/30 uppercase tracking-widest mb-1">{key}</div>
+                    <div className="text-[11px] font-mono text-white/80 font-black truncate">{val}</div>
+                 </div>
+               ))}
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row gap-5">
+            <Button
+               onClick={() => { onConfirm(); onOpenChange(false); }}
+               className={cn(
+                 "flex-1 h-14 font-black uppercase text-xs tracking-[0.4em] rounded-none transition-all",
+                 type === 'danger' ? "bg-rose-600 hover:bg-rose-500 text-white" : "bg-primary text-black hover:bg-white"
+               )}
+            >
+              AUTHORISE_EXECUTION
+            </Button>
+            <Button
+               variant="outline"
+               onClick={() => onOpenChange(false)}
+               className="flex-1 h-14 border-white/10 font-black uppercase text-xs tracking-[0.4em] rounded-none hover:bg-white/5 text-white/40 hover:text-white"
+            >
+              ABORT_PROCEDURE
+            </Button>
+          </div>
+        </AetherPanel>
+      </motion.div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// 🛰️ COMPONENT: REJECTION DIALOG
+// ---------------------------------------------------------------------------
+const RejectionDialog = ({ isOpen, onOpenChange, onConfirm, batchCount = 1 }: any) => {
+  const [reason, setReason] = useState("");
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 sm:p-12">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="absolute inset-0 bg-black/90 backdrop-blur-2xl"
+        onClick={() => onOpenChange(false)}
+      />
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        className="w-full max-w-xl relative z-10"
+      >
+        <AetherPanel className="bg-[#050505] p-10 border-rose-500/40 shadow-[0_50px_150px_rgba(255,0,0,0.15)] rounded-none">
+          <div className="flex items-center gap-6 mb-10">
+            <div className="p-4 bg-rose-500/10 border border-rose-500/40 text-rose-500">
+               <ZapOff className="w-8 h-8" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-white tracking-widest uppercase">Signal_Purge_Override</h2>
+              <span className="text-[10px] font-black text-rose-500/60 tracking-[0.4em] uppercase">TARGETS_BUFFERED::{batchCount}</span>
+            </div>
+          </div>
+
+          <div className="space-y-6 pt-4">
+             <div className="space-y-3">
+                <label className="text-[10px] font-black text-muted-foreground/30 uppercase tracking-[0.3em]">REJECTION_REASON_MANIFEST</label>
+                <div className="relative group">
+                  <Input
+                    placeholder="Enter diagnostic justification..."
+                    className="bg-black/40 border-white/5 h-16 rounded-none font-mono text-white tracking-widest focus:border-rose-500 transition-all uppercase px-6"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                  />
+                  <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-rose-500 group-focus-within:w-full transition-all duration-500" />
+                </div>
+             </div>
+
+             <div className="grid grid-cols-2 gap-4">
+                {["RISK_BREACH", "SKEW_ERROR", "PROTOCOL_MISS", "MTU_FAULT"].map(tag => (
+                  <Button
+                    key={tag}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setReason(tag)}
+                    className="h-12 border-white/5 font-black text-[9px] tracking-widest uppercase rounded-none opacity-40 hover:opacity-100 hover:border-rose-500/40"
+                  >
+                    {tag}
+                  </Button>
+                ))}
+             </div>
+          </div>
+
+          <div className="flex gap-5 mt-12">
+            <Button
+               disabled={!reason}
+               onClick={() => { onConfirm(reason); onOpenChange(false); setReason(""); }}
+               className="flex-1 h-14 bg-rose-600 text-white font-black uppercase text-xs tracking-[0.4em] rounded-none hover:bg-rose-500 transition-all"
+            >
+              CONFIRM_PURGE
+            </Button>
+            <Button
+               variant="outline"
+               onClick={() => onOpenChange(false)}
+               className="flex-1 h-14 border-white/10 font-black uppercase text-xs tracking-[0.4em] rounded-none text-white/40"
+            >
+              RESET_STATE
+            </Button>
+          </div>
+        </AetherPanel>
+      </motion.div>
+    </div>
+  );
+};
+
+// 🛰️ MAIN PAGE: ACTION CENTER
+export const ActionCenterPage = () => {
   const { mode } = useAppModeStore();
   const { toast } = useToast();
   const isAD = mode === 'AD';
+
+  const accentColor = isAD ? "amber" : "teal";
   const primaryColorClass = isAD ? "text-amber-500" : "text-teal-500";
   const accentBorderClass = isAD ? "border-amber-500/20" : "border-teal-500/20";
-  const accentBgClass = isAD ? "bg-amber-500" : "bg-teal-500";
-  const accentBgSoftClass = isAD ? "bg-amber-500/5" : "bg-teal-500/5";
-  const accentBorderHoverClass = isAD ? "hover:border-amber-500/50" : "hover:border-teal-500/50";
+  const accentBgClass = isAD ? "bg-amber-500/5" : "bg-teal-500/5";
 
-  const fetchData = useCallback(async (tabName: string) => {
-    try {
-      if (tabName === 'strategies') {
-        const res = await algoApi.getRiskMatrix();
-        if (res.status === 'success') {
-          setRiskMatrix(res.matrix);
-        }
-      } else {
-        const res = await tradingService.getActionCenterData(tabName);
-        if (res.status === 'success') {
-          setOrders(res.data.orders || []);
-          setStats(res.data.statistics);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load action center data', error);
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, []);
+  const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
+  const [orders, setOrders] = useState<any[]>([]);
+  const [strategies, setStrategies] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Safeguard & Confirmation States
+  const [editingSafeguard, setEditingSafeguard] = useState<string | null>(null);
+  const [safeguardConfig, setSafeguardConfig] = useState({ is_armed: false, max_drawdown_pct: 1.0, max_loss_inr: 1000.0 });
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: "", description: "", onAction: () => {}, type: 'default', metadata: {} });
+  const [rejectModal, setRejectModal] = useState({ isOpen: false, ids: [] as string[] });
 
   useEffect(() => {
-    fetchData(activeTab);
-    const interval = setInterval(() => fetchData(activeTab), 10000);
-    return () => clearInterval(interval);
-  }, [activeTab, fetchData]);
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-  const handleApprove = async (id: number) => {
+  const fetchData = useCallback(async (tabTarget = activeTab) => {
+    try {
+      setIsLoading(true);
+      const [orderRes, stratRes] = await Promise.all([
+        tradingService.getActionCenterOrders(tabTarget === 'pending'),
+        tradingService.getAllStrategiesStatus()
+      ]);
+      setOrders(orderRes);
+      setStrategies(Object.entries(stratRes).map(([name, status]) => ({ name, ...(status as any) })));
+    } catch (error) {
+      console.error('Failed to sync Action Center:', error);
+      toast({ variant: "destructive", title: "FAULT::SYNC_ERROR", description: "Terminal failed to synchronize with head-unit." });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activeTab, toast]);
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 10000); // 10s auto-refresh
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
+  const filteredOrders = useMemo(() => {
+    return orders.filter(o =>
+      o.strategy_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      o.action_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      o.id.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [orders, searchQuery]);
+
+  // Order Actions
+  const handleApprove = async (id: string) => {
+    setIsActionLoading(id);
     try {
       await tradingService.approveActionCenterOrder(id);
-      toast({ title: "SIGNAL::PROTOCOL_APPROVED", description: `Order ${id} has been routed to execution bridge.` });
-      fetchData(activeTab);
+      toast({ title: "SIGNAL::ELEVATED", description: "Kernel successfully executed signal buffer." });
+      fetchData();
     } catch (error) {
-      console.error('Approval failed', error);
-      toast({ variant: "destructive", title: "FAULT::ENGINE_REJECT", description: "Terminal failed to relay approval signal." });
-    }
-  };
-
-  const handleReject = async (id: number, reason?: string) => {
-    try {
-      await tradingService.rejectActionCenterOrder(id, reason);
-      toast({ title: "SIGNAL::PROTOCOL_KILLED", description: `Order ${id} has been purged from the queue.${reason ? ` Reason: ${reason}` : ''}` });
-      fetchData(activeTab);
-    } catch (error) {
-      console.error('Rejection failed', error);
-      toast({ variant: "destructive", title: "FAULT::PURGE_FAILED", description: "Terminal failed to purge volatile signal." });
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    try {
-      await tradingService.deleteActionCenterOrder(id);
-      fetchData(activeTab);
-    } catch (error) {
-      console.error('Deletion failed', error);
-    }
-  };
-
-  const handleApproveAll = async () => {
-    if (!confirm('SYSTEM_ELEVATION_WARNING: APPROVE_ALL_QUEUED_ORDERS? ALL_ORDERS_WILL_BE_ROUTED_TO_BROKER.')) return;
-    try {
-      await tradingService.approveAllActionCenterOrders();
-      toast({ title: "SIGNAL::BATCH_FIRE_INITIATED", description: "All queued signals have been elevated to bridge." });
-      setOrders(prev => prev.map(o => o.status === 'pending' ? { ...o, status: 'approved' } : o));
-      setSelectedIds(new Set());
-      fetchData(activeTab);
-    } catch (error) {
-      console.error('Batch approval failed', error);
-      toast({ variant: "destructive", title: "FAULT::BATCH_COLLAPSE", description: "Critical fault during mass elevation." });
+      toast({ variant: "destructive", title: "FAULT::BRIDGE_ERROR", description: "Failed to elevate signal to bridge." });
+    } finally {
+      setIsActionLoading(null);
     }
   };
 
   const handleApproveSelected = async () => {
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) return;
+    const count = selectedIds.size;
+    setIsActionLoading("batch");
     try {
-      await tradingService.approveSelectedActionCenterOrders(ids);
-      toast({ title: "SIGNAL::VOLATILE_BATCH_ELEVATED", description: `${ids.length} signals routed to bridge.` });
+      await tradingService.approveSelectedActionCenterOrders(Array.from(selectedIds));
+      toast({ title: "SIGNAL::BATCH_ELEVATED", description: `${count} signals advanced to bridge execution.` });
       setSelectedIds(new Set());
-      fetchData(activeTab);
+      fetchData();
     } catch (error) {
-      console.error('Bulk approval failed', error);
-      toast({ variant: "destructive", title: "FAULT::BATCH_ROUTING", description: "Failed to relay selected batch." });
+      toast({ variant: "destructive", title: "FAULT::BATCH_FAULT", description: "Protocol failed to bridge selected signals." });
+    } finally {
+      setIsActionLoading(null);
     }
   };
 
-  const handleRejectSelected = async () => {
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) return;
-    const reason = prompt("Enter REJECTION_REASON for batch:");
-    if (reason === null) return;
+  const handleReject = (id: string) => setRejectModal({ isOpen: true, ids: [id] });
+  const handleRejectSelected = () => setRejectModal({ isOpen: true, ids: Array.from(selectedIds) });
+
+  // Strategy Actions
+  const handleToggleStrategy = async (name: string, isHalted: boolean) => {
+    setIsActionLoading(name);
     try {
-      await tradingService.rejectSelectedActionCenterOrders(ids, reason);
-      toast({ title: "SIGNAL::BATCH_PURGED", description: `${ids.length} signals removed from buffer.` });
-      setSelectedIds(new Set());
-      fetchData(activeTab);
+      if (isHalted) await tradingService.unhaltStrategy(name);
+      else await tradingService.haltStrategy(name);
+      toast({ title: `SIGNAL::STATE_${isHalted ? 'UNHALTED' : 'HALTED'}`, description: `Strategy ${name} transition successful.` });
+      fetchData();
     } catch (error) {
-      console.error('Bulk rejection failed', error);
-      toast({ variant: "destructive", title: "FAULT::BATCH_PURGE", description: "Failed to purge selected batch." });
+      toast({ variant: "destructive", title: "FAULT::LOCK_TRANSITION", description: `Strategy lock failed.` });
+    } finally {
+      setIsActionLoading(null);
     }
   };
 
-  const handleToggleSelectAll = () => {
-    if (selectedIds.size === orders.filter(o => o.status === 'pending').length) {
-      setSelectedIds(new Set());
-    } else {
-      const pendingIds = orders.filter(o => o.status === 'pending').map(o => o.id);
-      setSelectedIds(new Set(pendingIds));
-    }
+  const handleInitializeStrategy = (name: string) => {
+     setConfirmModal({
+       isOpen: true,
+       title: "CORE_BOOT_SEQUENCE",
+       description: `INITIALISATION_OF_STRATEGY: [${name.toUpperCase()}]. VERIFY_BROKER_LOGINS_AND_MARGINS_BEFORE_ARMING.`,
+       type: 'default',
+       metadata: { "INSTANCE": name, "TIMESTAMP": new Date().toISOString() },
+       onAction: async () => {
+         setIsActionLoading(name);
+         try {
+           await tradingService.initializeStrategy(name);
+           toast({ title: "SIGNAL::BOOT_SUCCESS", description: "Strategy kernel initialised." });
+           fetchData();
+         } catch (error) {
+           toast({ variant: "destructive", title: "FAULT::K_ERROR", description: "Failed to boot strategy kernel." });
+         } finally {
+           setIsActionLoading(null);
+         }
+       }
+     });
   };
 
-  const handleToggleSelectOrder = (id: number) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+  const handleLiquidateStrategy = (name: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "PURGE_LIQUIDATION_PROTOCOL",
+      description: `CRITICAL: LIQUIDATING_ALL_POSITIONS_FOR_${name.toUpperCase()}. THIS_ACTION_IS_IRREVERSIBLE_AND_TERMINATES_ALL_ACTIVE_HEDGES.`,
+      type: 'danger',
+      metadata: { "STRATEGY": name, "RISK_LEVEL": "EXTREME" },
+      onAction: async () => {
+        setIsActionLoading(name);
+        try {
+          await tradingService.liquidateStrategy(name);
+          toast({ variant: "destructive", title: "SIGNAL::LIQUIDATION_ACKNOWLEDGE", description: "All positions purged. Strategy reset." });
+          fetchData();
+        } catch (error) {
+          toast({ variant: "destructive", title: "FAULT::PURGE_ERROR", description: "Terminal failed to liquidate positions." });
+        } finally {
+          setIsActionLoading(null);
+        }
+      }
     });
   };
 
-  const handleStartStrategy = async (id: string) => {
-    setIsActionLoading(id);
-    try {
-      await algoApi.startStrategy(id);
-      toast({ title: "UNIT_STATUS::OPERATIONAL", description: `Strategy ${id} kernel is now active.` });
-      fetchData(activeTab);
-    } catch (e) {
-      console.error("Start failed", e);
-      toast({ variant: "destructive", title: "FAULT::UNIT_COLD_START", description: "Failed to initialize strategy instance." });
-    } finally {
-      setIsActionLoading(null);
-    }
-  };
-
-  const handleStopStrategy = async (id: string) => {
-    setIsActionLoading(id);
-    try {
-      await algoApi.stopStrategy(id);
-      fetchData(activeTab);
-    } catch (e) {
-      console.error("Stop failed", e);
-    } finally {
-      setIsActionLoading(null);
-    }
-  };
-
-  const handleLiquidateStrategy = async (id: string) => {
-    if (!confirm(`CRITICAL_ACTION_WARNING: LIQUIDATE_STRATEGY_${id}? ALL_POSITIONS_WILL_BE_EXITED_AT_MARKET.`)) return;
-    setIsActionLoading(id);
-    try {
-      await algoApi.liquidateStrategy(id);
-      toast({ title: "PROTOCOL::PANIC_LIQUIDATE", description: `Emergency exit signal broadcast for ${id}.` });
-      fetchData(activeTab);
-    } catch (e) {
-      console.error("Liquidation failed", e);
-      toast({ variant: "destructive", title: "FAULT::LIQUIDATION_HALT", description: "Critical error during emergency exit." });
-    } finally {
-      setIsActionLoading(null);
-    }
-  };
-
-  const openSafeguardConfig = (name: string, metrics: StrategyMetrics) => {
+  // Safeguard Actions
+  const openSafeguardEditor = async (name: string) => {
     setEditingSafeguard(name);
-    setSafeguardConfig({
-      max_drawdown_pct: metrics.safeguard?.max_drawdown_pct || 15,
-      max_loss_inr: metrics.safeguard?.max_loss_inr || 10000,
-      is_armed: metrics.safeguard?.is_armed ?? true
-    });
+    try {
+      const config = await tradingService.getStrategySafeguards(name);
+      setSafeguardConfig(config);
+    } catch (error) {
+      toast({ variant: "destructive", title: "FAULT::METADATA_MISS", description: "Failed to load guardrail parameters." });
+    }
   };
 
   const saveSafeguardConfig = async () => {
     if (!editingSafeguard) return;
     try {
-      await algoApi.updateStrategySafeguards(editingSafeguard, {
-        ...safeguardConfig,
-        clear_breach: true // Clear breach if re-arming or updating
-      });
+      await tradingService.updateStrategySafeguards(editingSafeguard, safeguardConfig);
+      toast({ title: "SIGNAL::COMMIT_ACK", description: "Guardrail matrix updated in kernel memory." });
       setEditingSafeguard(null);
-      fetchData(activeTab);
-    } catch (e) {
-      console.error("Safeguard update failed", e);
-      toast({ variant: "destructive", title: "FAULT::GUARD_WRITE", description: "Failed to persist safeguard configuration." });
+      fetchData();
+    } catch (error) {
+      toast({ variant: "destructive", title: "FAULT::MEMORY_SYNC", description: "Failed to commit guardrail changes." });
     }
   };
 
-  const toggleExpand = (id: number) => {
-    setExpandedOrders(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const toggleSelect = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
   };
 
-  if (isLoading) {
-    return (
-      <div className="h-full flex items-center justify-center opacity-20">
-        <PlayCircle className={cn("w-10 h-10 animate-pulse", primaryColorClass)} />
-      </div>
-    );
-  }
+  const toggleAll = () => {
+    if (selectedIds.size === filteredOrders.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filteredOrders.map(o => o.id)));
+  };
+
+  const toggleExpand = (id: string) => {
+    const next = new Set(expandedOrders);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setExpandedOrders(next);
+  };
+
+  // Industrial Value Helper
+  const IndustrialValue = ({ value, label, trend }: any) => (
+    <div className="flex flex-col gap-1.5 group select-none">
+       <div className="flex items-center gap-2">
+         <span className="text-[10px] font-black font-mono text-muted-foreground/30 uppercase tracking-[0.2em] group-hover:text-muted-foreground/60 transition-colors uppercase">{label}</span>
+       </div>
+       <div className="flex items-baseline gap-2">
+         <span className={cn("text-2xl font-black font-mono tracking-tighter tabular-nums", primaryColorClass)}>
+            {value}
+         </span>
+         {trend && (
+           <span className={cn("text-[8px] font-black font-mono px-1.5 py-0.5 border uppercase", trend > 0 ? "text-primary border-primary/20 bg-primary/5" : "text-rose-500 border-rose-500/20 bg-rose-500/5")}>
+             {trend > 0 ? "+" : ""}{trend}%
+           </span>
+         )}
+       </div>
+    </div>
+  );
+
+  // Table Columns
+  const columns = [
+    {
+      header: <div onClick={toggleAll} className="cursor-pointer p-2 hover:bg-white/5 transition-all">{selectedIds.size === filteredOrders.length ? <CheckSquare className="w-4 h-4 text-primary" /> : <SquareIcon className="w-4 h-4 text-muted-foreground/30" />}</div>,
+      accessor: "select",
+      width: 60,
+      cell: (order: any) => (
+        <div onClick={() => toggleSelect(order.id)} className="cursor-pointer p-2 group">
+          {selectedIds.has(order.id) ? (
+            <CheckSquare className="w-4 h-4 text-primary" />
+          ) : (
+            <SquareIcon className="w-4 h-4 text-muted-foreground/20 group-hover:text-muted-foreground/50" />
+          )}
+        </div>
+      )
+    },
+    {
+      header: "SIGNAL_TIMESTAMP",
+      accessor: "timestamp",
+      width: 180,
+      cell: (order: any) => (
+        <div className="flex flex-col">
+           <span className="text-[11px] font-mono font-black text-white/80 tabular-nums">
+             {new Date(order.created_at).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+           </span>
+           <span className="text-[8px] font-mono text-muted-foreground/30 uppercase tracking-widest">{new Date(order.created_at).toLocaleDateString()}</span>
+        </div>
+      )
+    },
+    {
+      header: "PROTOCOL_TYPE",
+      accessor: "action_type",
+      width: 220,
+      cell: (order: any) => (
+        <div className="flex items-center gap-4">
+           {order.action_type === 'DEPLOY_STRATEGY' ? <Layers className="w-4 h-4 text-blue-400" /> : <Zap className="w-4 h-4 text-primary" />}
+           <div className="flex flex-col">
+             <span className={cn("text-[10px] font-black uppercase tracking-widest", order.action_type === 'DEPLOY_STRATEGY' ? "text-blue-400" : "text-primary")}>
+               {order.action_type.replace(/_/g, ' ')}
+             </span>
+             <span className="text-[8px] font-mono text-muted-foreground/30 uppercase tracking-widest italic">{order.strategy_name}</span>
+           </div>
+        </div>
+      )
+    },
+    {
+      header: "EXPOSURE_VAL",
+      accessor: "value",
+      width: 150,
+      cell: (order: any) => (
+        <span className="text-[11px] font-mono font-black text-white px-3 py-1 bg-white/5 border border-white/10 tabular-nums">
+          {order.action_type === 'DEPLOY_STRATEGY' ? 'N/A' : `₹${order.exposure_val || '0.00'}`}
+        </span>
+      )
+    },
+    {
+       header: "STATUS_VECTOR",
+       accessor: "status",
+       width: 160,
+       cell: (order: any) => {
+         const isPending = order.status === 'PENDING';
+         const isRejected = order.status === 'REJECTED';
+         const isApproved = order.status === 'APPROVED';
+
+         return (
+            <div className="flex items-center gap-3">
+               <div className={cn(
+                 "w-2 h-2 rounded-full",
+                 isPending ? "bg-amber-500 animate-pulse" : isRejected ? "bg-rose-500" : "bg-primary"
+               )} />
+               <span className={cn(
+                 "text-[9px] font-black uppercase tracking-widest",
+                 isPending ? "text-amber-500" : isRejected ? "text-rose-500" : "text-primary"
+               )}>
+                 {order.status}
+               </span>
+            </div>
+         );
+       }
+    },
+    {
+      header: (viewMode === 'table' ? "AUTH_CORE" : ""),
+      accessor: "actions",
+      width: 150,
+      cell: (order: any) => (
+        <div className="flex items-center justify-end gap-3 pr-4">
+           {order.status === 'PENDING' && (
+             <>
+                <Button
+                  size="sm"
+                  onClick={() => handleApprove(order.id)}
+                  disabled={isActionLoading === order.id}
+                  className="h-8 group bg-primary/10 border border-primary/40 hover:bg-primary text-primary hover:text-black font-black text-[9px] uppercase tracking-widest rounded-none px-4 transition-all"
+                >
+                   {isActionLoading === order.id ? <RefreshCw className="w-3 h-3 animate-spin mr-2" /> : <Play className="w-3 h-3 mr-2 group-hover:scale-125 transition-transform" />}
+                   AUTHORISE
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => handleReject(order.id)}
+                  className="h-8 w-8 text-rose-500/40 hover:text-rose-500 hover:bg-rose-500/10 transition-all rounded-none"
+                >
+                   <X className="w-4 h-4" />
+                </Button>
+             </>
+           )}
+           <Button
+             size="icon"
+             variant="ghost"
+             onClick={() => toggleExpand(order.id)}
+             className={cn("h-8 w-8 text-white/10 hover:text-white transition-all rounded-none", expandedOrders.has(order.id) && "bg-white/5 rotate-90")}
+           >
+              <ChevronRight className="w-4 h-4" />
+           </Button>
+        </div>
+      )
+    }
+  ];
 
   return (
-    <div className="h-full flex flex-col p-6 space-y-6 bg-background overflow-hidden font-mono">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className={cn("bg-card/20 p-2 border rounded-sm shadow-xl", accentBorderClass)}>
-            <PlayCircle className={cn("h-6 w-6", primaryColorClass)} />
+    <div className="h-full flex flex-col bg-black text-white font-mono overflow-hidden relative">
+      {/* Background Hyper-Glows */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(0,184,166,0.03),transparent)] pointer-events-none" />
+      <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 pointer-events-none mix-blend-overlay" />
+
+      {/* 🔴 HEADER: MISSION CONTROL */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between p-8 gap-10 relative z-20 shrink-0">
+        <div className="flex items-start gap-8">
+          <div className="relative group">
+            <div className={cn("absolute -inset-2 blur-xl transition-all", isAD ? "bg-amber-500/10 group-hover:bg-amber-500/30" : "bg-teal-500/10 group-hover:bg-teal-500/30")} />
+            <div className={cn("relative bg-black border p-6 flex items-center justify-center transition-all duration-700 industrial-corners", accentBorderClass)}>
+              <div className="absolute top-0 right-0 p-1">
+                <div className={cn("w-1 h-1", isAD ? "bg-amber-500" : "bg-teal-500")} />
+              </div>
+              <Command className={cn("h-10 w-10 animate-pulse", primaryColorClass)} />
+            </div>
           </div>
-          <div>
-            <h1 className={cn("text-2xl font-black font-mono tracking-[0.2em] uppercase", primaryColorClass)}>Action_Center_Kernel</h1>
-            <div className="flex items-center gap-2 mt-1">
-              <ShieldCheck className={cn("w-3 h-3 animate-pulse", isAD ? "text-emerald-500" : "text-teal-500")} />
-              <span className="text-[10px] font-mono font-black text-muted-foreground/60 tracking-widest uppercase italic font-bold">EXECUTION_BRIDGE // MODE::{isAD ? 'INDUSTRIAL_AMBER' : 'OPENALGO_TEAL'}</span>
+          <div className="space-y-4">
+            <div className="flex items-center gap-5">
+              <h1 className="text-4xl font-black tracking-tighter uppercase whitespace-nowrap">
+                Main_Ordinance_Controller
+              </h1>
+              <div className={cn("flex items-center gap-3 border px-4 py-1.5 industrial-corners", isAD ? "bg-amber-500/10 border-amber-500/40" : "bg-teal-500/10 border-teal-500/40")}>
+                <div className={cn("w-2 h-2 rounded-full animate-pulse", isAD ? "bg-amber-500" : "bg-teal-500")} />
+                <span className={cn("text-[10px] font-black tracking-[0.3em]", primaryColorClass)}>LIVE_TELEMETRY</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-5 opacity-40">
+               <div className="flex items-center gap-2">
+                 <Globe className="w-3.5 h-3.5" />
+                 <span className="text-[10px] font-black tracking-[0.2em] uppercase">TERMINAL_097</span>
+                 <div className="greeble-dash" />
+               </div>
+               <div className="w-px h-3 bg-white/20" />
+               <div className="flex items-center gap-2">
+                 <ShieldCheck className="w-3.5 h-3.5" />
+                 <span className="text-[10px] font-black tracking-[0.2em] uppercase">GATEWAY_ENFORCED</span>
+               </div>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {activeTab === 'pending' && orders.length > 0 && (
-            <Button 
-                variant="outline"
-                onClick={handleApproveAll}
-                className={cn("h-10 font-mono text-[11px] font-black px-4 border-rose-500/20 text-rose-500 hover:bg-rose-500 hover:text-white")}
-            >
-                <ZapOff className="h-3.5 w-3.5 mr-2" />
-                KILL_ALL_PENDING
-            </Button>
-          )}
-          <Button 
-            variant="secondary" 
-            onClick={() => fetchData(activeTab)} 
-            disabled={isRefreshing}
-            className="h-10 font-mono text-[11px] font-black px-4 shadow-[0_0_15px_rgba(255,176,0,0.1)]"
-          >
-            {isRefreshing ? <RefreshCw className="h-3.5 w-3.5 mr-2 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-2" />} 
-            RE_SYNC_SIGNALS
-          </Button>
+        <div className="flex items-center gap-16 border-l border-white/5 pl-16 hidden lg:flex">
+          <IndustrialValue label="Pending_Signals" value={orders.filter(o => o.status === 'PENDING').length} trend={+12} />
+          <IndustrialValue label="Kernel_Auths" value={orders.filter(o => o.status === 'APPROVED').length} />
+          <div className="flex flex-col items-end gap-1">
+            <span className="text-3xl font-black tracking-tighter tabular-nums leading-none">
+              {currentTime.toLocaleTimeString([], { hour12: false })}
+            </span>
+            <span className="text-[9px] font-black text-muted-foreground/30 uppercase tracking-[0.4em]">Protocol_Runtime</span>
+          </div>
         </div>
       </div>
 
-       {/* Protocol Status Cards */}
-       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          {[
-            { label: "Queued", value: stats.total_pending, color: primaryColorClass, pulse: stats.total_pending > 0 },
-            { label: "Buying", value: stats.total_buy_orders, color: "text-emerald-500" },
-            { label: "Selling", value: stats.total_sell_orders, color: "text-rose-500" },
-            { label: "Approved", value: stats.total_approved, color: isAD ? "text-amber-500/40" : "text-teal-500/40" },
-            { label: "Rejected", value: stats.total_rejected, color: "text-muted-foreground/40" },
-          ].map((stat, i) => (
-            <AetherPanel key={i} className="border-border/10 bg-background/20 group">
-               <div className="text-[8px] font-mono font-black text-muted-foreground/20 uppercase tracking-[0.2em] mb-2">{stat.label}</div>
-               <div className={cn("text-2xl font-black font-mono tracking-tighter", stat.color, stat.pulse && "animate-pulse")}>{stat.value}</div>
-            </AetherPanel>
-          ))}
-       </div>
+      <Tabs value={activeTab} onValueChange={(v: any) => { setActiveTab(v); fetchData(v); }} className="flex-1 flex flex-col min-h-0 relative z-10 px-8 pb-8">
+        {/* 🟠 CONTROL STRIP */}
+        <div className="flex flex-col md:flex-row items-center gap-8 mb-8 bg-white/[0.02] border border-white/5 p-4 relative overflow-hidden shrink-0">
+          <div className="absolute top-0 left-0 w-1 h-full bg-primary/40" />
 
-       {/* Operation Log */}
-       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="bg-background/20 border border-border/10 h-10 p-1 rounded-none">
-              <TabsTrigger value="pending" className={cn("rounded-none text-[10px] font-black uppercase px-6 data-[state=active]:text-black", isAD ? "data-[state=active]:bg-amber-500" : "data-[state=active]:bg-teal-500")}>Pending</TabsTrigger>
-              <TabsTrigger value="strategies" className={cn("rounded-none text-[10px] font-black uppercase px-6 data-[state=active]:text-black", isAD ? "data-[state=active]:bg-amber-500" : "data-[state=active]:bg-teal-500")}>Strategy_Field</TabsTrigger>
-              <TabsTrigger value="approved" className={cn("rounded-none text-[10px] font-black uppercase px-6 data-[state=active]:text-black", isAD ? "data-[state=active]:bg-amber-500" : "data-[state=active]:bg-teal-500")}>Audit_Approved</TabsTrigger>
-              <TabsTrigger value="rejected" className="rounded-none text-[10px] font-black uppercase px-6 data-[state=active]:bg-rose-500 data-[state=active]:text-white">Audit_Rejected</TabsTrigger>
+          <TabsList className="bg-black/40 border border-white/10 h-14 p-1 rounded-none gap-1">
+            <TabsTrigger
+              value="pending"
+              className="data-[state=active]:bg-primary data-[state=active]:text-black text-[10px] font-black uppercase tracking-[0.2em] px-10 h-full rounded-none transition-all"
+            >
+              Signal_Queue
+            </TabsTrigger>
+            <TabsTrigger
+              value="history"
+              className="data-[state=active]:bg-primary data-[state=active]:text-black text-[10px] font-black uppercase tracking-[0.2em] px-10 h-full rounded-none transition-all"
+            >
+              Audit_Log
+            </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="strategies">
-             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-               {Object.entries(riskMatrix).map(([name, metrics]) => {
-                 const m = metrics as StrategyMetrics;
-                 return (
-                 <AetherPanel key={name} className={cn(
-                   "p-6 relative group border transition-all duration-500 overflow-hidden",
-                   m.is_halted ? "border-rose-500/50 bg-rose-500/5 shadow-[0_0_30px_rgba(244,63,94,0.05)]" : cn("border-border/10 bg-background/40", accentBorderHoverClass)
-                 )}>
-                    {m.is_halted && (
-                      <div className="absolute top-0 right-0 p-1.5 bg-rose-500 text-white text-[8px] font-black uppercase tracking-[0.2em] z-20 animate-pulse">
-                         SAFEGUARD_BREACH_HALTED
-                      </div>
-                    )}
-                    
-                    <div className="flex justify-between items-start mb-6">
-                       <div className="space-y-1">
-                          <div className="text-[12px] font-black font-mono text-foreground uppercase tracking-[0.2em] flex items-center gap-2">
-                            {name}
-                            {m.safeguard?.is_armed && !m.is_halted && <Shield className={cn("w-3.5 h-3.5 animate-pulse", primaryColorClass)} />}
-                            {m.is_halted && <ShieldAlert className="w-3.5 h-3.5 text-rose-500 animate-bounce" />}
-                          </div>
-                          <div className="flex items-center gap-2">
-                             <div className={cn("w-1.5 h-1.5 rounded-full", m.is_active && !m.is_halted ? (isAD ? "bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.5)]" : "bg-teal-500 animate-pulse shadow-[0_0_8px_rgba(20,184,166,0.5)]") : "bg-muted-foreground/30")} />
-                             <span className="text-[8px] font-mono font-bold text-muted-foreground/40 uppercase tracking-widest">
-                               {m.is_halted ? "PROTOCOL_TERMINATED" : m.is_active ? "UNIT_OPERATIONAL" : "UNIT_IDLE"}
-                             </span>
-                          </div>
-                       </div>
-                       <div className="flex flex-col items-end gap-2">
-                          <Badge variant="outline" className={cn("text-[9px] font-mono px-3 py-1", isAD ? "border-amber-500/20 text-amber-500 bg-amber-500/5" : "border-teal-500/20 text-teal-500 bg-teal-500/5")}>
-                             {m.total_trades} TXNS
-                          </Badge>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-muted-foreground/40 hover:text-foreground hover:bg-foreground/5 border border-transparent hover:border-border/10"
-                            onClick={() => openSafeguardConfig(name, m)}
-                          >
-                             <Settings className="w-4 h-4" />
-                          </Button>
-                       </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-6 mb-8 border-y border-border/10 py-4 bg-background/40">
-                       <div className="space-y-1 pl-2">
-                          <div className="text-[7px] font-mono font-black text-muted-foreground/30 uppercase tracking-widest">Sharpe_Ratio</div>
-                          <div className={cn("text-sm font-black font-mono", primaryColorClass)}>{m.sharpe.toFixed(2)}</div>
-                       </div>
-                       <div className="space-y-1">
-                          <div className="text-[7px] font-mono font-black text-muted-foreground/30 uppercase tracking-widest">Max_Drawdown</div>
-                          <div className={cn("text-sm font-black font-mono", m.max_drawdown >= (m.safeguard?.max_drawdown_pct || 15) ? "text-rose-500 animate-pulse" : "text-rose-500/60")}>
-                            {m.max_drawdown.toFixed(1)}%
-                          </div>
-                       </div>
-                       <div className="space-y-1 pr-2">
-                          <div className="text-[7px] font-mono font-black text-muted-foreground/30 uppercase tracking-widest">Unit_PnL_IST</div>
-                          <div className={cn("text-sm font-black font-mono", m.net_pnl >= 0 ? primaryColorClass : "text-rose-500")}>
-                             ₹{m.net_pnl.toFixed(0)}
-                          </div>
-                       </div>
-                    </div>
-
-                    <div className="flex gap-2">
-                       {m.is_active && !m.is_halted ? (
-                         <Button 
-                           onClick={() => handleStopStrategy(name)}
-                           disabled={isActionLoading === name}
-                           className={cn("flex-1 h-10 text-black font-mono text-[9px] font-black uppercase tracking-widest hover:bg-white", accentBgClass)}
-                         >
-                            <X className="w-3.5 h-3.5 mr-2" /> Stop_Unit
-                         </Button>
-                       ) : (
-                         <Button 
-                           onClick={() => handleStartStrategy(name)}
-                           disabled={isActionLoading === name || m.is_halted}
-                           className={cn(
-                             "flex-1 h-10 font-mono text-[9px] font-black uppercase tracking-widest",
-                             m.is_halted ? "bg-muted text-muted-foreground cursor-not-allowed" : (isAD ? "bg-amber-500 text-black hover:bg-white" : "bg-teal-500 text-black hover:bg-white")
-                           )}
-                         >
-                            <PlayCircle className="w-3.5 h-3.5 mr-2" /> {m.is_halted ? "HALTED_BY_GUARD" : "Start_Unit"}
-                         </Button>
-                       )}
-                       <Button 
-                         onClick={() => handleLiquidateStrategy(name)}
-                         disabled={isActionLoading === name}
-                         variant="ghost" 
-                         className="flex-1 h-10 border border-rose-500/30 text-rose-500 font-mono text-[9px] font-black uppercase tracking-widest hover:bg-rose-500 hover:text-white"
-                       >
-                          <X className="w-3.5 h-3.5 mr-2" /> Panic_Clear
-                       </Button>
-                    </div>
-                 </AetherPanel>
-                 );
-               })}
-             </div>
-          </TabsContent>
-          <TabsContent value={activeTab}>
-             <AetherPanel className="p-0 border-border/10 overflow-hidden">
-                <div className="overflow-x-auto">
-                   <table className="w-full text-left font-mono text-[10px]">
-                      <thead>
-                         <tr className="border-b border-border/10 bg-background/40 uppercase tracking-tighter text-muted-foreground">
-                            <th className="p-4 w-12">
-                               {activeTab === 'pending' && (
-                                 <input 
-                                   type="checkbox" 
-                                   className="rounded-none border-border/20 bg-background/20 checked:bg-primary accent-primary" 
-                                   checked={selectedIds.size > 0 && selectedIds.size === orders.filter(o => o.status === 'pending').length}
-                                   onChange={handleToggleSelectAll}
-                                 />
-                               )}
-                            </th>
-                            <th className="p-4 font-black">Strategy</th>
-                            <th className="p-4 font-black">Contract</th>
-                            <th className="p-4 font-black">Operation</th>
-                            <th className="p-4 font-black text-right">Qty</th>
-                            <th className="p-4 font-black text-right">Price</th>
-                            <th className="p-4 font-black">Sync_Time</th>
-                            <th className="p-4 font-black text-right">Actions</th>
-                         </tr>
-                      </thead>
-                      <tbody>
-                         {orders.map((order, i) => (
-                           <React.Fragment key={order.id}>
-                             <tr className={cn("border-b border-border/10 transition-colors group", accentBgSoftClass, selectedIds.has(order.id) && "bg-primary/5")}>
-                                <td className="p-4">
-                                   {order.status === 'pending' && (
-                                     <input 
-                                       type="checkbox" 
-                                       className="rounded-none border-border/20 bg-background/20 checked:bg-primary accent-primary" 
-                                       checked={selectedIds.has(order.id)}
-                                       onChange={() => handleToggleSelectOrder(order.id)}
-                                     />
-                                   )}
-                                </td>
-                                <td className="p-4">
-                                   <div className={cn("font-black", primaryColorClass)}>{order.strategy}</div>
-                                   <div className="text-[8px] text-muted-foreground/40 mt-0.5">{order.api_type}</div>
-                                </td>
-                                <td className="p-4">
-                                   <div className="font-black">{order.symbol}</div>
-                                   <div className="text-[8px] text-muted-foreground/40 mt-0.5 uppercase tracking-tighter">{order.exchange} // {order.product_type}</div>
-                                </td>
-                                <td className="p-4">
-                                   {order.action_type === 'DEPLOY_STRATEGY' ? (
-                                     <Badge className={cn("text-[8px] font-black uppercase tracking-widest h-5 bg-blue-500 text-white")}>
-                                        <Terminal className="w-3 h-3 mr-1" />
-                                        DEPLOY
-                                     </Badge>
-                                   ) : (
-                                     <Badge className={cn("text-[8px] font-black uppercase tracking-widest h-5 text-black", order.action === 'BUY' ? accentBgClass : "bg-rose-500 text-white")}>
-                                        {order.action === 'BUY' ? <ArrowUp className="w-3 h-3 mr-1" /> : <ArrowDown className="w-3 h-3 mr-1" />}
-                                        {order.action}
-                                     </Badge>
-                                   )}
-                                </td>
-                                <td className="p-4 text-right">{order.action_type === 'DEPLOY_STRATEGY' ? '-' : order.quantity}</td>
-                                <td className="p-4 text-right">
-                                   {order.action_type === 'DEPLOY_STRATEGY' ? (
-                                     <div className="text-[8px] font-mono text-muted-foreground italic">SCRIPT_BLOB</div>
-                                   ) : (
-                                     <>
-                                       <div>{order.price || 'MKT'}</div>
-                                       <div className="text-[8px] text-muted-foreground/40 uppercase">{order.price_type}</div>
-                                     </>
-                                   )}
-                                </td>
-                                <td className="p-4 text-muted-foreground/60">{order.timestamp || order.created_at_ist}</td>
-                                <td className="p-4 text-right">
-                                   <div className="flex justify-end gap-2">
-                                      <Button variant="ghost" size="sm" onClick={() => toggleExpand(order.id)} className="h-8 border border-border/10 opacity-20 hover:opacity-100 italic font-mono text-[8px]">
-                                         {expandedOrders.has(order.id) ? "SHRINK_V" : "GROW_V"}
-                                      </Button>
-                                      {order.status === 'pending' ? (
-                                        <>
-                                          <Button size="sm" onClick={() => handleApprove(order.id)} className={cn("font-mono text-[9px] font-black uppercase h-8 px-4 text-black shadow-lg", isAD ? "bg-amber-500 hover:bg-amber-600" : "bg-teal-500 hover:bg-teal-400")}>
-                                            <Check className="h-3 w-3 mr-1" /> Approve
-                                          </Button>
-                                          <Button 
-                                            size="sm" 
-                                            onClick={() => {
-                                              const res = prompt("Enter REJECTION_REASON (Optional):");
-                                              if (res !== null) handleReject(order.id, res);
-                                            }} 
-                                            className="h-8 px-4 bg-rose-500 text-white hover:bg-white hover:text-rose-500 transition-all"
-                                          >
-                                             <X className="w-4 h-4" />
-                                          </Button>
-                                        </>
-                                      ) : (
-                                        <Button size="sm" variant="ghost" onClick={() => handleDelete(order.id)} className="h-8 px-4 border border-border/10 text-rose-500 opacity-40 hover:opacity-100">
-                                           <Trash2 className="w-4 h-4" />
-                                        </Button>
-                                      )}
-                                   </div>
-                                </td>
-                             </tr>
-                             {expandedOrders.has(order.id) && (
-                                 <tr className={cn("border-b border-border/10 animate-in slide-in-from-top-2", accentBgSoftClass)}>
-                                    <td colSpan={8} className="p-6">
-                                       <div className="grid grid-cols-1 gap-6">
-                                          {order.action_type === 'DEPLOY_STRATEGY' ? (
-                                            <div className="col-span-full space-y-4">
-                                               <div className="p-4 bg-black/60 border border-blue-500/20 rounded-sm">
-                                                  <div className="flex items-center justify-between mb-2">
-                                                     <div className="text-[8px] font-black font-mono text-blue-400 uppercase tracking-widest">DEPLOYMENT_BLOB_PREVIEW</div>
-                                                     <div className="text-[8px] font-mono text-muted-foreground/40">{JSON.parse(typeof order.raw_order_data === 'string' ? order.raw_order_data : '{}').filename}</div>
-                                                  </div>
-                                                  <pre className="text-[9px] font-mono text-muted-foreground/80 leading-relaxed overflow-x-auto max-h-[300px] whitespace-pre-wrap scrollbar-thin scrollbar-thumb-blue-500/20">
-                                                     {JSON.parse(typeof order.raw_order_data === 'string' ? order.raw_order_data : '{}').code}
-                                                  </pre>
-                                               </div>
-                                               <div className="text-[9px] font-mono text-muted-foreground/40 italic flex items-center gap-2">
-                                                  <Info className="w-3 h-3" />
-                                                  Submitting approval will write this component to the strategies kernel and restart the monitoring engine.
-                                               </div>
-                                            </div>
-                                          ) : (
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                                              {Object.entries(typeof order.raw_order_data === 'string' ? JSON.parse(order.raw_order_data) : order.raw_order_data).map(([key, value]) => (
-                                                <div key={key} className="space-y-1">
-                                                  <div className={cn("text-[7px] font-black font-mono uppercase tracking-widest opacity-40")}>{key}</div>
-                                                  <div className="text-[10px] font-mono break-all font-black text-muted-foreground italic">
-                                                      {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                                                  </div>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          )}
-                                        </div>
-                                        {order.rejection_reason && (
-                                          <div className="mt-6 p-4 border border-rose-500/20 bg-rose-500/5 rounded-sm">
-                                             <div className="text-[7px] font-black font-mono uppercase tracking-widest text-rose-500/60 mb-1">REJECTION_REASON_LOG</div>
-                                             <div className="text-[11px] font-mono font-bold text-rose-500 uppercase tracking-tighter italic">
-                                                {order.rejection_reason}
-                                             </div>
-                                          </div>
-                                        )}
-                                   </td>
-                                </tr>
-                             )}
-                           </React.Fragment>
-                         ))}
-                         {orders.length === 0 && (
-                           <tr>
-                              <td colSpan={8} className="p-20 text-center flex flex-col items-center gap-4 opacity-20">
-                                 <ShieldCheck className="w-8 h-8" />
-                                 <p className="text-[10px] font-mono uppercase tracking-[0.4em]">NO_ORDERS_QUEUED_IN_BUFFER</p>
-                                 <Button variant="ghost" asChild className="text-[8px] underline">
-                                    <Link to="/openalgo/connectivity">CHECK_PROTOCOL_SETTINGS</Link>
-                                 </Button>
-                              </td>
-                           </tr>
-                         )}
-                      </tbody>
-                   </table>
-                </div>
-             </AetherPanel>
-          </TabsContent>
-       </Tabs>
-
-       <div className="mt-8 p-6 border border-border/10 bg-background/40 flex items-center gap-6">
-          <Terminal className="w-5 h-5 text-muted-foreground/20" />
-          <div className="flex-1 text-[9px] font-mono text-muted-foreground/60 uppercase tracking-widest leading-relaxed italic opacity-40">
-             HYPERVISOR_NOTES: ALL_PENDING_OPERATIONS_REMAIN_IN_VOLATILE_STATE_UNTIL_HUMAN_INTERVENTION. 
-             ENSURE_CONNECTIVITY_MODULE_IS_ARMED_FOR_BROKER_HANDOFF.
+          <div className="flex-1 relative group w-full max-w-xl">
+             <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/30 group-focus-within:text-primary transition-colors" />
+             <Input
+               placeholder="IDENTIFY_STRATEGY_OR_PROTOCOL_ID..."
+               className="h-14 bg-black/40 border-white/5 pl-14 font-mono text-xs tracking-widest text-white placeholder:text-muted-foreground/10 focus:border-primary/50 transition-all rounded-none uppercase"
+               value={searchQuery}
+               onChange={(e) => setSearchQuery(e.target.value)}
+             />
           </div>
-       </div>
 
-       {/* Batch Action Bar */}
-       {selectedIds.size > 0 && (
-         <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-5">
-           <div className={cn(
-             "px-6 py-4 flex items-center gap-8 backdrop-blur-xl border-t-2 shadow-2xl rounded-sm",
-             isAD ? "bg-amber-500/10 border-amber-500/40" : "bg-teal-500/10 border-teal-500/40"
-           )}>
-             <div className="flex flex-col">
-               <span className={cn("text-[10px] font-black uppercase tracking-widest", primaryColorClass)}>
-                 BATCH_PROTOCOL_OVERRIDE
-               </span>
-               <span className="text-[12px] font-mono font-black text-white">
-                 {selectedIds.size} SIGNALS_CAPTURED
-               </span>
-             </div>
-
-             <div className="h-8 w-px bg-white/10" />
-
-             <div className="flex items-center gap-4">
-               <Button 
-                 onClick={handleApproveSelected}
-                 className={cn("h-11 px-8 text-[11px] font-black uppercase tracking-widest transition-all text-black", accentBgClass, "hover:bg-white hover:scale-105")}
-               >
-                 <ShieldCheck className="w-4 h-4 mr-2" />
-                 ELEVATE_TO_BRIDGE
-               </Button>
-               <Button 
-                 onClick={handleRejectSelected}
-                 variant="ghost"
-                 className="h-11 px-8 text-[11px] font-black uppercase tracking-widest border border-rose-500/30 text-rose-500 hover:bg-rose-500 hover:text-white transition-all shadow-xl"
-               >
-                 <Trash2 className="w-4 h-4 mr-2" />
-                 PURGE_SIGNALS
-               </Button>
-               <Button 
+          <div className="flex items-center gap-4 shrink-0">
+            <div className="flex bg-black/40 border border-white/10 p-1">
+               <Button
                 variant="ghost"
-                onClick={() => setSelectedIds(new Set())}
-                className="h-10 text-[9px] font-mono text-muted-foreground uppercase hover:text-white scale-75"
+                size="icon"
+                onClick={() => setViewMode('grid')}
+                className={cn("h-10 w-10 rounded-none transition-all", viewMode === 'grid' ? "bg-primary text-black" : "text-white/20 hover:text-white")}
                >
-                 CANCEL_SELECTION
+                 <Layers className="w-4 h-4" />
                </Button>
-             </div>
-           </div>
-         </div>
-       )}
+               <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setViewMode('table')}
+                className={cn("h-10 w-10 rounded-none transition-all", viewMode === 'table' ? "bg-primary text-black" : "text-white/20 hover:text-white")}
+               >
+                 <BarChart3 className="w-4 h-4 rotate-90" />
+               </Button>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => fetchData()}
+              disabled={isLoading}
+              className="h-12 w-12 p-0 border-white/10 rounded-none hover:bg-white/5 text-white/40 hover:text-primary"
+            >
+              <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
+            </Button>
+          </div>
+        </div>
 
-       {/* Safeguard Config Modal */}
-       {editingSafeguard && (
-         <div className="fixed inset-0 bg-background/80 backdrop-blur-md z-50 flex items-center justify-center p-6">
-           <AetherPanel className={cn("max-w-md w-full border transition-all duration-500", isAD ? "border-primary/30 shadow-[0_0_50px_rgba(255,176,0,0.1)]" : "border-teal-500/30 shadow-[0_0_50px_rgba(20,184,166,0.1)]")}>
-              <div className="flex items-center justify-between mb-8">
-                 <div className="flex items-center gap-3">
-                    <ShieldCheck className={cn("w-5 h-5", primaryColorClass)} />
-                    <h2 className={cn("text-xl font-black font-mono uppercase tracking-widest", primaryColorClass)}>GUARD_CONFIG_{editingSafeguard}</h2>
-                 </div>
-                 <Button variant="ghost" size="icon" onClick={() => setEditingSafeguard(null)} className="opacity-40 hover:opacity-100">
-                    <X className="w-5 h-5" />
-                 </Button>
-              </div>
-
-              <div className="space-y-6">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between pl-1">
-                      <label className="text-[9px] font-mono font-black text-muted-foreground/60 uppercase tracking-widest leading-none">Institutional Kill-Switch</label>
-                      <Badge variant="outline" className={cn("text-[8px] border-white/5 opacity-50 font-mono", safeguardConfig.is_armed ? primaryColorClass : "text-muted-foreground")}>
-                        {safeguardConfig.is_armed ? "ACTIVE_GUARD" : "BYPASSED"}
-                      </Badge>
-                    </div>
-                    
-                    <div 
+        {/* 🟡 DYNAMIC CONTENT HUB */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <AnimatePresence mode="wait">
+            {viewMode === 'grid' ? (
+              <motion.div
+                key="grid"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                className="h-full overflow-y-auto pr-4 custom-scrollbar"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-8 pb-10">
+                  {strategies.map((m, i) => (
+                    <AetherPanel
+                      key={m.name}
+                      showGreebles
+                      scanning={!m.is_halted && m.is_initialized}
                       className={cn(
-                        "p-5 border flex items-center justify-between transition-all duration-500",
-                        safeguardConfig.is_armed 
-                          ? (isAD ? "bg-amber-500/5 border-amber-500/30" : "bg-teal-500/5 border-teal-500/30") 
-                          : "bg-background border-border/10 opacity-60"
+                        "relative flex flex-col p-10 group transition-all duration-700 overflow-hidden border-2",
+                        m.is_initialized
+                          ? (m.is_halted ? "border-rose-500/20 bg-rose-500/[0.02]" : accentBorderClass + " " + accentBgClass)
+                          : "border-white/5 bg-black/40 opacity-60 hover:opacity-100"
                       )}
                     >
-                       <div className="flex items-center gap-4">
-                          <div className={cn(
-                            "p-2 rounded-none border transition-colors",
-                            safeguardConfig.is_armed ? (isAD ? "bg-amber-500/20 border-amber-500 text-amber-500" : "bg-teal-500/20 border-teal-500 text-teal-500") : "bg-muted/10 border-border text-muted-foreground/40"
-                          )}>
-                             {safeguardConfig.is_armed ? <ShieldIcon className="w-5 h-5 animate-pulse" /> : <ZapOff className="w-5 h-5" />}
-                          </div>
-                          <div>
-                            <div className={cn("text-[11px] font-mono font-black uppercase tracking-widest", safeguardConfig.is_armed ? "text-foreground" : "text-muted-foreground/40")}>
-                               {safeguardConfig.is_armed ? "ARMED_AND_WATCHING" : "DISARMED_PROTOCOL"}
+                      {/* Interactive Scaffolding */}
+                      <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:opacity-10 transition-opacity">
+                         <Database className="w-32 h-32" />
+                      </div>
+
+                      {/* Name & Status Header */}
+                      <div className="flex items-start justify-between mb-10 relative z-10">
+                         <div className="space-y-3">
+                            <div className="flex items-center gap-3">
+                               <div className={cn("w-2 h-2 rounded-full", m.is_initialized ? (m.is_halted ? "bg-rose-500" : "bg-primary animate-pulse") : "bg-white/10")} />
+                               <span className="text-[10px] font-black uppercase tracking-[0.4em] text-muted-foreground/40 italic">MODULE_INIT</span>
                             </div>
-                            <div className="text-[8px] font-mono text-muted-foreground/30 uppercase mt-0.5">Vector_Breach_Detection_Active</div>
+                            <h3 className="text-2xl font-black text-white hover:text-primary transition-colors cursor-default uppercase">{m.name}</h3>
+                         </div>
+                         <Button
+                           variant="ghost"
+                           size="icon"
+                           onClick={() => openSafeguardEditor(m.name)}
+                           className="h-10 w-10 border border-white/5 text-muted-foreground/40 hover:text-primary hover:border-primary/40 rounded-none transition-all"
+                         >
+                           <ShieldCheck className="w-5 h-5" />
+                         </Button>
+                      </div>
+
+                      {/* Diagnostic Bits */}
+                      <div className="grid grid-cols-2 gap-8 mb-10 relative z-10">
+                         <div className="space-y-1">
+                            <span className="text-[8px] font-black text-muted-foreground/30 uppercase tracking-[0.3em]">STATE_LOCK</span>
+                            <div className={cn("text-xs font-black uppercase tracking-widest", m.is_halted ? "text-rose-500" : "text-primary")}>
+                              {m.is_initialized ? (m.is_halted ? "HALTED_MANUAL" : "OPERATIONAL") : "OFFLINE"}
+                            </div>
+                         </div>
+                         <div className="space-y-1">
+                            <span className="text-[8px] font-black text-muted-foreground/30 uppercase tracking-[0.3em]">GATEWAY_PORT</span>
+                            <div className="text-xs font-black text-white/40 uppercase tracking-widest tabular-nums">0XFF-{1000 + i}</div>
+                         </div>
+                      </div>
+
+                      {/* Interaction Matrix */}
+                      <div className="mt-auto flex gap-4 relative z-10">
+                        {m.is_initialized ? (
+                          <Button
+                            onClick={() => handleToggleStrategy(m.name, m.is_halted)}
+                            disabled={isActionLoading === m.name}
+                            className={cn(
+                              "flex-1 h-14 font-black uppercase text-xs tracking-[0.4em] rounded-none transition-all shadow-xl relative overflow-hidden group/btn",
+                              m.is_halted
+                                ? "bg-primary text-black hover:bg-white"
+                                : "bg-white/5 border border-rose-500/40 text-rose-500 hover:bg-rose-500 hover:text-white"
+                            )}
+                          >
+                             <div className="absolute inset-0 bg-white/20 transform skew-x-12 -translate-x-full group-hover/btn:translate-x-full transition-transform duration-700" />
+                             {m.is_halted ? (
+                               <><PlayCircle className="w-4 h-4 mr-3" /> RESUME_KERNEL</>
+                             ) : (
+                               <><PauseCircle className="w-4 h-4 mr-3" /> HALT_KERNEL</>
+                             )}
+                          </Button>
+                        ) : (
+                          <Button
+                            onClick={() => handleInitializeStrategy(m.name)}
+                            disabled={isActionLoading === m.name || m.is_halted}
+                            className={cn(
+                              "flex-1 h-14 font-black uppercase text-xs tracking-[0.4em] rounded-none transition-all shadow-xl bg-primary text-black hover:bg-white"
+                            )}
+                          >
+                             <PlayCircle className="w-4 h-4 mr-3" /> {m.is_halted ? "KERNEL_HALTED" : "BOOT_PROTOCOL"}
+                          </Button>
+                        )}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                onClick={() => handleLiquidateStrategy(m.name)}
+                                disabled={isActionLoading === m.name}
+                                variant="ghost"
+                                className="w-14 h-14 p-0 border border-rose-500/20 text-rose-500 hover:bg-rose-500 hover:text-white transition-all rounded-none shrink-0"
+                              >
+                                 <X className="w-6 h-6" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent className="bg-rose-950 border-rose-500 text-rose-500 font-mono text-[9px] uppercase tracking-widest rounded-none p-4">
+                               CRITICAL_OVERRIDE_LIQUIDATE_STRATEGY
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+
+                       {/* Interactive Decoration */}
+                       <div className="mt-8 pt-8 border-t border-white/5 flex justify-between items-center opacity-10 group-hover:opacity-30 transition-opacity">
+                          <div className="flex gap-1">
+                             <div className="greeble-dash" />
+                             {Array.from({ length: 8 }).map((_, i) => (
+                               <div key={i} className={cn("w-1.5 h-1.5", (i % 4 === 0) ? "bg-primary" : "bg-white/20")} />
+                             ))}
+                          </div>
+                          <span className="text-[8px] font-mono uppercase tracking-[0.5em] italic">SYNOPSIS_VERIFIED</span>
+                       </div>
+                    </AetherPanel>
+                  ))}
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="table"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="h-full bg-black/40 border border-white/5"
+              >
+                  <VirtualizedDataTable
+                    data={filteredOrders}
+                    columns={columns}
+                    rowHeight={80}
+                    headerHeight={60}
+                    className="h-full text-white/80"
+                    renderExpandedRow={(order) => (
+                      <div className="p-16 bg-[#030303] border-t border-white/5 relative overflow-hidden">
+                          <div className="absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,rgba(0,184,166,0.05),transparent)] pointer-events-none" />
+                          <div className="grid grid-cols-1 gap-12 relative z-10">
+                              {order.action_type === 'DEPLOY_STRATEGY' ? (
+                              <div className="col-span-full space-y-8">
+                                  <div className="flex items-center justify-between border-b border-white/10 pb-6">
+                                     <div className="flex items-center gap-6">
+                                       <div className="p-4 bg-blue-500/10 border border-blue-500/40 text-blue-400">
+                                          <Database className="w-8 h-8" />
+                                       </div>
+                                       <div className="flex flex-col">
+                                         <span className="text-xl font-black text-white tracking-[0.2em] uppercase">DEPLOYMENT_BLOB_SYNTAX</span>
+                                         <span className="text-[10px] font-mono text-blue-400/40 italic uppercase tracking-widest">SHA-256_INTEGRITY_CHECK_PASS</span>
+                                       </div>
+                                     </div>
+                                     <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/40 rounded-none h-8 px-6 uppercase font-mono text-[10px] tracking-widest">
+                                        {JSON.parse(typeof order.raw_order_data === 'string' ? order.raw_order_data : '{}').filename}
+                                     </Badge>
+                                  </div>
+                                  <div className="bg-black border border-white/10 p-10 rounded-none max-h-[600px] overflow-y-auto custom-scrollbar group/code relative">
+                                    <div className="absolute top-4 right-4 text-[8px] font-black text-white/5 uppercase tracking-[0.5em]">KERNEL_DUMP_V43</div>
+                                    <pre className="text-[13px] font-mono text-blue-400/60 leading-relaxed whitespace-pre-wrap selection:bg-blue-500/20">
+                                        {JSON.parse(typeof order.raw_order_data === 'string' ? order.raw_order_data : '{}').code}
+                                    </pre>
+                                  </div>
+                              </div>
+                              ) : (
+                              <>
+                                 <div className="flex items-center gap-6 mb-4">
+                                    <div className="w-10 h-px bg-primary" />
+                                    <span className="text-[11px] font-black uppercase tracking-[0.5em] text-primary shadow-[0_0_10px_rgba(0,245,255,0.2)]">Protocol_Metadata_Stream</span>
+                                 </div>
+                                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-10">
+                                     {Object.entries(typeof order.raw_order_data === 'string' ? JSON.parse(order.raw_order_data) : order.raw_order_data).map(([key, value]) => (
+                                     <div key={key} className="space-y-3 group border-l border-white/5 pl-8 py-2 hover:border-primary transition-all duration-500">
+                                         <div className="text-[9px] font-black font-mono uppercase tracking-[0.3em] text-muted-foreground/30 group-hover:text-primary/60 transition-colors italic">{key}</div>
+                                         <div className="text-sm font-mono font-black text-white/50 group-hover:text-white transition-all break-all tracking-tight">
+                                             {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                         </div>
+                                     </div>
+                                     ))}
+                                 </div>
+                              </>
+                              )}
+                          </div>
+                      </div>
+                    )}
+                    isRowExpanded={(order) => expandedOrders.has(order.id)}
+                  />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Modal Injections */}
+        <ActionConfirmationDialog
+          isOpen={confirmModal.isOpen}
+          onOpenChange={(open) => setConfirmModal(prev => ({ ...prev, isOpen: open }))}
+          title={confirmModal.title}
+          description={confirmModal.description}
+          type={confirmModal.type}
+          metadata={confirmModal.metadata}
+          onConfirm={confirmModal.onAction}
+        />
+
+        <RejectionDialog
+          isOpen={rejectModal.isOpen}
+          onOpenChange={(open) => setRejectModal(prev => ({ ...prev, isOpen: open }))}
+          batchCount={rejectModal.ids.length}
+          onConfirm={async (reason) => {
+            try {
+              if (rejectModal.ids.length === 1) {
+                await tradingService.rejectActionCenterOrder(rejectModal.ids[0], reason);
+              } else {
+                await tradingService.rejectSelectedActionCenterOrders(rejectModal.ids, reason);
+                setSelectedIds(new Set());
+              }
+              toast({ title: "SIGNAL::PURGE_COMPLETE", description: "Signal(s) successfully removed from queue." });
+              fetchData(activeTab);
+            } catch (error) {
+              toast({ variant: "destructive", title: "FAULT::PURGE_ERROR", description: "Failed to purge signals." });
+            }
+          }}
+        />
+      </Tabs>
+
+      {/* 🟢 FOOTER: KERNEL STATUS STRIP */}
+      <div className="h-14 border-t border-white/5 bg-[#050505] flex items-center gap-10 px-8 relative z-30 shrink-0">
+          <div className="flex items-center gap-4">
+             <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+             <span className="text-[10px] font-black uppercase tracking-[0.5em] text-primary/40">KERNEL_ACTIVE</span>
+          </div>
+          <div className="flex-1 flex items-center gap-4 overflow-hidden">
+             <Terminal className="w-3.5 h-3.5 text-white/10" />
+             <div className="text-[9px] font-mono text-muted-foreground/20 uppercase tracking-[0.3em] italic truncate animate-in fade-in slide-in-from-left duration-1000">
+                AUDIT_THREAD_001 :: Handshake_V4 :: Integrity_Sync_Completed :: Secure_Vector_Active :: Latency: 1ms :: Waiting_Human_Protocol_Gate...
+             </div>
+          </div>
+          <div className="flex items-center gap-8 pl-10 border-l border-white/5">
+              <div className="flex items-center gap-3">
+                 <ShieldCheck className="w-3.5 h-3.5 text-primary/20" />
+                 <span className="text-[9px] font-black text-white/10 uppercase tracking-widest">ENCRYPTED_SSL_AES-256</span>
+              </div>
+              <span className="text-[9px] font-black text-white/5 tracking-[0.5em] uppercase">BUILD_041824</span>
+          </div>
+      </div>
+
+      {/* 🟣 BATCH OVERRIDE: COMMAND HUB */}
+      <AnimatePresence>
+        {selectedIds.size > 0 && (
+          <motion.div
+            initial={{ y: 150, x: '-50%', opacity: 0, scale: 0.9 }}
+            animate={{ y: 0, x: '-50%', opacity: 1, scale: 1 }}
+            exit={{ y: 150, x: '-50%', opacity: 0, scale: 0.9 }}
+            className="fixed bottom-20 left-1/2 z-50 w-full max-w-5xl px-8"
+          >
+            <div className="bg-black/80 backdrop-blur-3xl border-2 border-primary/60 p-10 shadow-[0_50px_100px_rgba(0,245,255,0.3)] relative overflow-hidden group">
+              {/* Scanline Effect */}
+              <div className="absolute inset-x-0 top-0 h-px bg-primary shadow-[0_0_20px_rgba(0,245,255,1)] animate-scanline pointer-events-none" />
+
+              <div className="flex flex-col lg:flex-row items-center justify-between gap-12 relative z-10">
+                <div className="flex items-center gap-8">
+                  <div className="p-5 bg-primary/20 border-2 border-primary/40 shadow-[0_0_30px_rgba(0,245,255,0.1)]">
+                     <ShieldCheck className="w-10 h-10 text-primary animate-pulse" />
+                  </div>
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-black uppercase tracking-[0.5em] text-primary/60">Batch_Override_Kernel</h4>
+                    <p className="text-4xl font-black text-white tracking-tighter tabular-nums flex items-baseline gap-4">
+                      {selectedIds.size} <span className="text-xl opacity-20 tracking-normal uppercase">Signals_Intercepted</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-5 w-full lg:w-auto">
+                  <Button
+                    onClick={handleApproveSelected}
+                    className="flex-1 lg:flex-none h-16 px-16 bg-primary text-black font-black uppercase text-sm tracking-[0.4em] rounded-none hover:bg-white transition-all transform hover:scale-105 active:scale-95 shadow-[0_0_40px_rgba(0,245,255,0.4)]"
+                  >
+                    AUTHORISE_ALL
+                  </Button>
+                  <Button
+                    onClick={handleRejectSelected}
+                    variant="outline"
+                    className="flex-1 lg:flex-none h-16 px-12 border-rose-500/60 text-rose-500 hover:bg-rose-500 hover:text-white font-black uppercase text-sm tracking-[0.4em] rounded-none transition-all shadow-xl"
+                  >
+                    PURGE_QUEUE
+                  </Button>
+                  <div className="w-px h-10 bg-white/10" />
+                  <Button
+                   variant="ghost"
+                   onClick={() => setSelectedIds(new Set())}
+                   className="h-16 w-16 p-0 opacity-20 hover:opacity-100 hover:bg-white/5 border-l border-white/5 transition-all text-white"
+                  >
+                    <X className="w-8 h-8" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ⚪ MODAL: GUARDRAIL CONFIGURATION HUB */}
+      <AnimatePresence>
+        {editingSafeguard && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-12">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/95 backdrop-blur-3xl"
+              onClick={() => setEditingSafeguard(null)}
+            />
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, rotateY: 15 }}
+              animate={{ scale: 1, opacity: 1, rotateY: 0 }}
+              exit={{ scale: 0.9, opacity: 0, rotateY: 15 }}
+              className="w-full max-w-2xl relative z-10"
+            >
+              <AetherPanel className="border-primary/40 bg-[#050505] p-16 shadow-[0_100px_200px_rgba(0,245,255,0.1)] relative overflow-hidden">
+                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-40" />
+
+                 <div className="absolute top-0 right-0 p-8">
+                   <Button variant="ghost" size="icon" onClick={() => setEditingSafeguard(null)} className="opacity-20 hover:opacity-100 transition-all hover:rotate-90 duration-500">
+                      <X className="w-8 h-8 text-white" />
+                   </Button>
+                 </div>
+
+                 <div className="flex items-center gap-8 mb-16">
+                   <div className="relative">
+                      <div className="absolute -inset-2 bg-primary/20 blur-lg animate-pulse" />
+                      <div className="relative p-6 bg-primary/10 border-2 border-primary/40 text-primary">
+                        <ShieldCheck className="w-10 h-10" />
+                      </div>
+                   </div>
+                   <div>
+                      <h2 className="text-3xl font-black text-white uppercase tracking-tighter">Guard_Matrix_Sync</h2>
+                      <div className="flex items-center gap-3 mt-2">
+                         <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                         <span className="text-[11px] font-black text-primary/60 tracking-[0.5em] uppercase">MODULE::{editingSafeguard}</span>
+                      </div>
+                   </div>
+                 </div>
+
+                 <div className="space-y-12">
+                    <div className="space-y-6">
+                      <div className="flex items-center justify-between px-2">
+                        <div className="flex items-center gap-4">
+                           <Fingerprint className="w-4 h-4 text-white/20" />
+                           <label className="text-[11px] font-black text-muted-foreground/40 uppercase tracking-[0.4em]">Operational_State</label>
+                        </div>
+                        <Badge variant="outline" className={cn("text-[10px] border-primary/20 bg-primary/5 uppercase font-black px-6 py-1 tracking-widest", safeguardConfig.is_armed ? "text-primary shadow-[0_0_15px_rgba(0,245,255,0.1)]" : "text-rose-500 opacity-40")}>
+                          {safeguardConfig.is_armed ? "ENFORCEMENT_READY" : "BYPASSED_BY_OPERATOR"}
+                        </Badge>
+                      </div>
+
+                      <div className={cn(
+                        "group p-10 border-2 flex items-center justify-between transition-all duration-700 relative overflow-hidden",
+                        safeguardConfig.is_armed ? "bg-primary/[0.02] border-primary/40 shadow-[inner_0_0_80px_rgba(0,245,255,0.05)]" : "bg-black border-white/5 opacity-40 grayscale"
+                      )}>
+                         <div className="flex items-center gap-10">
+                            <div className={cn(
+                               "w-20 h-20 border-2 flex items-center justify-center transition-all duration-700",
+                               safeguardConfig.is_armed ? "border-primary bg-primary/20 text-primary shadow-[0_0_30px_rgba(0,245,255,0.5)]" : "border-white/10 text-white/10"
+                            )}>
+                               {safeguardConfig.is_armed ? <Lock className="w-10 h-10 animate-pulse" /> : <ZapOff className="w-10 h-10" />}
+                            </div>
+                            <div>
+                               <div className="text-2xl font-black text-white uppercase tracking-tighter mb-1 select-none">
+                                  {safeguardConfig.is_armed ? "SECURE_LOOP_ACTIVE" : "PROTECTION_GAP_DETECTED"}
+                               </div>
+                               <div className="text-[10px] font-mono text-muted-foreground/30 uppercase tracking-[0.4em] italic mt-2">KERNEL_INTERCEPTION_SPEED: <span className="text-white/60">0.05ms</span></div>
+                            </div>
+                         </div>
+
+                         <div className="flex items-center gap-6">
+                           <Switch
+                             checked={safeguardConfig.is_armed}
+                             onCheckedChange={(checked) => setSafeguardConfig(prev => ({ ...prev, is_armed: checked }))}
+                             className="data-[state=checked]:bg-primary h-8 w-14"
+                           />
+                         </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-16 border-t border-white/5 pt-12">
+                       <div className="space-y-4 group">
+                          <div className="flex items-center gap-3">
+                             <BarChart3 className="w-3.5 h-3.5 text-white/20 group-hover:text-primary transition-colors" />
+                             <label className="text-[10px] font-black text-muted-foreground/40 uppercase tracking-[0.4em]">Threshold_Drawdown (%)</label>
+                          </div>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={safeguardConfig.max_drawdown_pct}
+                              onChange={(e) => setSafeguardConfig(prev => ({ ...prev, max_drawdown_pct: parseFloat(e.target.value) }))}
+                              className="w-full bg-black border-b-4 border-white/5 p-6 pl-0 text-5xl font-black text-white transition-all focus:border-primary outline-none tabular-nums tracking-tighter hover:bg-white/[0.01]"
+                            />
+                            <span className="absolute right-0 bottom-6 text-xl font-black text-white/20 opacity-0 group-focus-within:opacity-100 transition-opacity">%_PCT</span>
                           </div>
                        </div>
-                       
-                        <div className="flex items-center gap-3">
-                          <span className={cn(
-                            "text-[8px] font-mono font-black transition-colors",
-                            !safeguardConfig.is_armed ? "text-rose-500" : "text-muted-foreground/20"
-                          )}>BYPASS</span>
-                          <Switch 
-                            checked={safeguardConfig.is_armed}
-                            onCheckedChange={(checked) => setSafeguardConfig(prev => ({ ...prev, is_armed: checked }))}
-                          />
-                          <span className={cn(
-                            "text-[8px] font-mono font-black transition-colors",
-                            safeguardConfig.is_armed ? (isAD ? "text-amber-500" : "text-teal-500") : "text-muted-foreground/20"
-                          )}>ARMED</span>
-                        </div>
+                       <div className="space-y-4 group">
+                          <div className="flex items-center gap-3">
+                             <Database className="w-3.5 h-3.5 text-white/20 group-hover:text-primary transition-colors" />
+                             <label className="text-[10px] font-black text-muted-foreground/40 uppercase tracking-[0.4em]">Floor_Capital_Loss (INR)</label>
+                          </div>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              value={safeguardConfig.max_loss_inr}
+                              onChange={(e) => setSafeguardConfig(prev => ({ ...prev, max_loss_inr: parseFloat(e.target.value) }))}
+                              className="w-full bg-black border-b-4 border-white/5 p-6 pl-0 text-5xl font-black text-white transition-all focus:border-primary outline-none tabular-nums tracking-tighter hover:bg-white/[0.01]"
+                            />
+                            <span className="absolute right-0 bottom-6 text-xl font-black text-white/20 opacity-0 group-focus-within:opacity-100 transition-opacity">₹_INR</span>
+                          </div>
+                       </div>
                     </div>
-                  </div>
 
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                       <label className="text-[8px] font-mono font-bold text-muted-foreground/60 uppercase tracking-widest">Max Drawdown (%)</label>
-                       <input 
-                         type="number"
-                         value={safeguardConfig.max_drawdown_pct}
-                         onChange={(e) => setSafeguardConfig(prev => ({ ...prev, max_drawdown_pct: parseFloat(e.target.value) }))}
-                         className="w-full bg-black/40 border border-white/10 p-3 font-mono text-sm text-white focus:border-primary/50 outline-none"
-                       />
-                    </div>
-                    <div className="space-y-2">
-                       <label className="text-[8px] font-mono font-bold text-muted-foreground/60 uppercase tracking-widest">Max Loss (INR)</label>
-                       <input 
-                         type="number"
-                         value={safeguardConfig.max_loss_inr}
-                         onChange={(e) => setSafeguardConfig(prev => ({ ...prev, max_loss_inr: parseFloat(e.target.value) }))}
-                         className="w-full bg-black/40 border border-white/10 p-3 font-mono text-sm text-white focus:border-primary/50 outline-none"
-                       />
+                    <div className="pt-16 flex flex-col gap-8">
+                       <Button
+                         className="h-20 bg-primary text-black font-black uppercase text-sm tracking-[0.8em] rounded-none hover:bg-white transition-all active:scale-[0.98] shadow-[0_20px_60px_rgba(0,245,255,0.2)]"
+                         onClick={saveSafeguardConfig}
+                       >
+                          COMMIT_PARAMETERS_TO_FLASH
+                       </Button>
+                       <p className="text-[10px] font-black text-muted-foreground/20 uppercase tracking-[0.5em] text-center italic leading-relaxed">
+                          NOTICE: PARAMETER_COMMIT_REQUIRED_FOR_IMMEDIATE_ENFORCEMENT. ALL_ACTIVE_OR_STAGED_SIGNALS_WILL_ABIDE_BY_THESE_VECTORS.
+                       </p>
                     </div>
                  </div>
-
-                 <div className="pt-6 flex gap-3">
-                    <Button 
-                      className={cn("flex-1 h-12 text-black font-mono font-black uppercase tracking-widest hover:bg-white", accentBgClass)}
-                      onClick={saveSafeguardConfig}
-                    >
-                       COMMIT_PROTOCOL_UPDATES
-                    </Button>
-                 </div>
-                 
-                 <div className="text-[8px] font-mono text-muted-foreground/40 uppercase leading-relaxed text-center">
-                    BREACH_DETECTION_CYCLES_RUN_EVERY_30S. UPDATING_GUARD_LIMITS_WILL_AUTOMATICALLY_RESOLUTION_ACTIVE_HALTS_UNTIL_NEXT_PROTOCOL_BREACH.
-                 </div>
-              </div>
-           </AetherPanel>
-         </div>
-       )}
+              </AetherPanel>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

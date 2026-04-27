@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
 
 const Profile = () => {
   const { user } = useAuth();
-  
+
   const stats = [
     { label: "Login_Vector", value: user?.app_metadata?.provider || "Supabase_Auth" },
     { label: "Account_Age", value: new Date(user?.created_at || "").toLocaleDateString() },
@@ -28,7 +28,7 @@ const Profile = () => {
             <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                <Fingerprint className="w-32 h-32 text-primary" />
             </div>
-            
+
             <div className="flex items-center gap-8 relative z-10">
                <div className="w-24 h-24 bg-primary flex items-center justify-center font-mono text-4xl font-black text-black">
                  {user?.email?.[0].toUpperCase()}

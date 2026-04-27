@@ -18,50 +18,70 @@ import { supabase } from "@/integrations/supabase/client";
 
 export function useWebSocket(symbols: string[] = []) {
   const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [latency, setLatency] = useState<number>(0);
   const lastPingTS = useRef<number>(0);
   const ws = useRef<WebSocket | null>(null);
-  const reconnectTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const subscribedSymbols = useRef<string[]>([]);
   const isIntentionalClose = useRef(false);
 
-  const connect = useCallback(async () => {
-    if (ws.current?.readyState === WebSocket.OPEN || ws.current?.readyState === WebSocket.CONNECTING) return;
+    const connect = useCallback(async () => {
+        if (ws.current?.readyState === WebSocket.OPEN || ws.current?.readyState === WebSocket.CONNECTING) return;
 
-    isIntentionalClose.current = false;
-    
-    // Fetch auth token for secure websocket connection
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token || "";
-    const wsUrlWithAuth = token ? `${WS_URL}?token=${token}` : WS_URL;
-    
-    ws.current = new WebSocket(wsUrlWithAuth);
+        isIntentionalClose.current = false;
 
-    ws.current.onopen = () => {
-      setIsConnected(true);
-      // Subscribe to symbols
-      if (symbols.length > 0) {
-        ws.current?.send(JSON.stringify({
-          action: "subscribe",
-          symbols: symbols.map(s => ({ symbol: s, exchange: "NSE" }))
-        }));
-        subscribedSymbols.current = [...symbols];
-      }
-      
-      // Send initial ping
-      lastPingTS.current = Date.now();
-      ws.current?.send(JSON.stringify({ type: "ping", timestamp: lastPingTS.current }));
-    };
+        // Fetch auth token
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token || "";
 
-    ws.current.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
+        // Connect WITHOUT token in query param as we follow the message-based auth protocol
+        ws.current = new WebSocket(WS_URL);
+
+        ws.current.onopen = () => {
+            console.info("WS Connected, sending auth packet...");
+            // Protocol: Send auth message FIRST
+            ws.current?.send(JSON.stringify({
+                type: "auth",
+                token: token
+            }));
+        };
+
+        ws.current.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+
+                // Handle Handshake Success
+                if (data.type === "auth_success") {
+                    console.info("WS Auth Successful");
+                    setIsAuthenticated(true);
+
+                    // Now safe to subscribe
+                    if (symbols.length > 0) {
+                        ws.current?.send(JSON.stringify({
+                            action: "subscribe",
+                            symbols: symbols.map(s => ({ symbol: s, exchange: "NSE" }))
+                        }));
+                        subscribedSymbols.current = [...symbols];
+                    }
+
+                    // Initial ping
+                    lastPingTS.current = Date.now();
+                    ws.current?.send(JSON.stringify({ type: "ping", timestamp: lastPingTS.current }));
+                    return;
+                }
+
+        // Handle Sector Updates (Phase 12)
+        if (data.type === "sector_update" && data.payload) {
+             setLastMessage(data);
+             return;
+        }
+
         setLastMessage(data);
 
-        // Handle Pong
-        if (data.type === "pong") {
+                // Handle Pong
+                if (data.type === "pong") {
           const rtt = Date.now() - (data.client_ts || lastPingTS.current);
           setLatency(rtt);
           return;
@@ -80,7 +100,7 @@ export function useWebSocket(symbols: string[] = []) {
           setPrices(prev => ({ ...prev, ...newPrices }));
           return;
         }
-        
+
         // Normalize keys (handle both native and legacy/compact formats)
         const symbol = data.symbol || data.s;
         const ltp = data.ltp !== undefined ? data.ltp : data.lp;
@@ -95,7 +115,7 @@ export function useWebSocket(symbols: string[] = []) {
     };
 
     ws.current.onclose = () => {
-      setIsConnected(false);
+      setIsAuthenticated(false);
       ws.current = null;
       if (!isIntentionalClose.current) {
         reconnectTimeout.current = setTimeout(connect, 3000);
@@ -133,10 +153,10 @@ export function useWebSocket(symbols: string[] = []) {
 
   // Manage subscriptions independently of connection
   useEffect(() => {
-    if (!isConnected || !ws.current || ws.current.readyState !== WebSocket.OPEN) return;
-    
+    if (!isAuthenticated || !ws.current || ws.current.readyState !== WebSocket.OPEN) return;
+
     const current = subscribedSymbols.current;
-    
+
     // Unsubscribe old
     if (current.length > 0) {
       ws.current.send(JSON.stringify({
@@ -144,7 +164,7 @@ export function useWebSocket(symbols: string[] = []) {
         symbols: current.map(s => ({ symbol: s, exchange: "NSE" }))
       }));
     }
-    
+
     // Subscribe new
     if (symbols.length > 0) {
       ws.current.send(JSON.stringify({
@@ -152,20 +172,19 @@ export function useWebSocket(symbols: string[] = []) {
         symbols: symbols.map(s => ({ symbol: s, exchange: "NSE" }))
       }));
     }
-    
+
     subscribedSymbols.current = [...symbols];
-  }, [symbols, isConnected]);
+  }, [symbols, isAuthenticated]);
 
   // Periodic Heatbeat/Latency Check
   useEffect(() => {
-    if (!isConnected) return;
+    if (!isAuthenticated) return;
     const interval = setInterval(() => {
         lastPingTS.current = Date.now();
         sendMessage({ type: "ping", timestamp: lastPingTS.current });
     }, 5000);
     return () => clearInterval(interval);
-  }, [isConnected, sendMessage]);
+  }, [isAuthenticated, sendMessage]);
 
-  return { lastMessage, isConnected, prices, latency, sendMessage };
+  return { lastMessage, isConnected: isAuthenticated, prices, latency, sendMessage };
 }
-

@@ -9,9 +9,9 @@ interface CommandBarProps {
 }
 
 const COMMAND_SUGGESTIONS = [
-  { cmd: "/BUY", desc: "Open long position", example: "/BUY NIFTY 50" },
-  { cmd: "/SELL", desc: "Open short position", example: "/SELL NIFTY 50" },
-  { cmd: "/CHAIN", desc: "View option chain", example: "/CHAIN NIFTY" },
+  { cmd: "/BUY", desc: "Open long position", example: "/BUY NIFTY_50" },
+  { cmd: "/SELL", desc: "Open short position", example: "/SELL NIFTY_50" },
+  { cmd: "/CHAIN", desc: "View option chain", example: "/CHAIN NIFTY_50" },
   { cmd: "/EXIT", desc: "Close specific position", example: "/EXIT SBIN" },
   { cmd: "/PANIC", desc: "EMERGENCY: Close All", example: "/PANIC NOW" },
 ];
@@ -26,7 +26,7 @@ export function CommandBar({ onCommandExecuted }: CommandBarProps) {
 
   useEffect(() => {
     if (input.startsWith("/")) {
-      const filtered = COMMAND_SUGGESTIONS.filter(s => 
+      const filtered = COMMAND_SUGGESTIONS.filter(s =>
         s.cmd.toLowerCase().startsWith(input.split(" ")[0].toLowerCase())
       );
       setSuggestions(filtered);
@@ -95,8 +95,8 @@ export function CommandBar({ onCommandExecuted }: CommandBarProps) {
     <div className="relative group w-full max-w-2xl mx-auto">
       <div className={`
         flex items-center gap-3 px-4 py-3 rounded-2xl border transition-all duration-300
-        ${isFocused 
-          ? "bg-muted/80 border-primary shadow-[0_0_20px_rgba(var(--primary),0.15)] backdrop-blur-xl" 
+        ${isFocused
+          ? "bg-muted/80 border-primary shadow-[0_0_20px_rgba(var(--primary),0.15)] backdrop-blur-xl"
           : "bg-muted/40 border-border/50 hover:border-border backdrop-blur-md"}
       `}>
         <Terminal className={`w-5 h-5 ${isFocused ? "text-primary animate-pulse" : "text-muted-foreground"}`} />

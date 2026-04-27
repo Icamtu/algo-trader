@@ -3,7 +3,7 @@
 To prevent accidental secret leaks, we have implemented a multi-layered detection system. This guide explains how to activate the **Local Shield** on your development machine.
 
 ## 🛡️ Step 1: Activate Local Protection
-We use `pre-commit` to scan your code every time you run `git commit`. 
+We use `pre-commit` to scan your code every time you run `git commit`.
 
 1.  **Install the hooks**:
     Run this in the root of the project to link the security hooks to your git workflow:

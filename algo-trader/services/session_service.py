@@ -49,14 +49,17 @@ class SessionService:
             # OpenAlgoClient methods are synchronous!
             result = self.order_manager.client.get_funds()
 
-            # OpenAlgo/Shoonya success usually returns a dict with 'stat': 'Ok'
-            # or a list/dict of funds. If it returns an error field or 403, it's invalid.
-            if isinstance(result, dict) and result.get("status") == "error":
-                msg = result.get("message", "Unknown API Error")
-                if "invalid" in msg.lower() or "expired" in msg.lower() or "403" in msg:
-                    logger.warning(f"Broker session invalid: {msg}")
+            # Shoonya/OpenAlgo success usually returns a dict with 'stat': 'Ok'
+            # If it returns an error field, 403, or 'NOT_OK', it's invalid.
+            if isinstance(result, dict):
+                msg = result.get("message", "").lower()
+                status = result.get("status", "").upper()
+                stat = result.get("stat", "").upper()
+
+                if status == "ERROR" or stat == "NOT_OK" or "invalid" in msg or "expired" in msg or "403" in msg:
+                    logger.warning(f"Broker session invalid. Status: {status}, Stat: {stat}, Msg: {msg}")
                     self.is_healthy = False
-                    self.last_error = msg
+                    self.last_error = msg or f"Stat: {stat}"
                     return False
 
             self.is_healthy = True
@@ -110,11 +113,12 @@ class SessionService:
 
                 # 3. Refresh Client Credentials
                 if self.order_manager and self.order_manager.client:
-                    # Notify client to reload from DB
-                    # _refresh_api_key_from_db is internal but we can use it via public proxy if needed
-                    # or just wait for the next auto-retry in OpenAlgoClient._request
                     logger.info("Notifying OpenAlgoClient to reload credentials...")
                     self.order_manager.client._refresh_api_key_from_db()
+
+                    # 4. Trigger Reconciliation to sync engine with broker reality
+                    logger.info("Triggering post-reauth synchronization...")
+                    asyncio.create_task(self.order_manager.sync_with_broker())
 
                 return True
             else:
@@ -138,6 +142,14 @@ class SessionService:
             "reauth_in_progress": self.reauth_in_progress,
             "auto_relogin_enabled": self.auto_relogin
         }
+
+    async def validate_session(self) -> bool:
+        """Alias for check_health used by the API layer."""
+        return await self.check_health()
+
+    async def get_session_state(self) -> dict:
+        """Returns the current session state for the dashboard."""
+        return self.get_status()
 
 # Singleton instance
 _session_service: Optional[SessionService] = None

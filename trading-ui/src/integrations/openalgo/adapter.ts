@@ -55,9 +55,9 @@ export class OpenAlgoAdapter {
     const params = new URLSearchParams();
     params.append('page', page.toString());
     if (searchQuery) params.append('search', searchQuery);
-    
+
     // Redirect to the unified telemetry endpoint
-    const response = await webClient.get(`/api/v1/system/telemetry?${params.toString()}`);
+    const response = await webClient.get(`/api/v1/telemetry?${params.toString()}`);
     return response.data;
   }
 
@@ -129,7 +129,7 @@ export class OpenAlgoAdapter {
     const params = new URLSearchParams();
     if (startDate) params.append('start_date', startDate);
     if (endDate) params.append('end_date', endDate);
-    
+
     const response = await webClient.get(`/analyzer/api/data?${params.toString()}`);
     return response.data;
   }
@@ -154,6 +154,11 @@ export class OpenAlgoAdapter {
 
   async deleteActionCenterOrder(id: number) {
     const response = await webClient.delete(`/action-center/delete/${id}`);
+    return response.data;
+  }
+
+  async retryActionCenterOrder(id: number) {
+    const response = await webClient.post('/api/v1/actioncenter/retry', { id });
     return response.data;
   }
 
@@ -260,27 +265,77 @@ export class OpenAlgoAdapter {
 
   // Historify
   async getHistorifyWatchlist() {
-    const response = await webClient.get('/historify/api/watchlist');
+    const response = await webClient.get('/api/v1/historify/watchlist');
     return response.data;
   }
 
-  async getHistorifyCatalog() {
-    const response = await webClient.get('/historify/api/catalog');
+  async getHistorifyCatalog(interval: string = '5m') {
+    const response = await webClient.get('/api/v1/historify/catalog', { params: { interval } });
+    return response.data;
+  }
+
+  async deleteCatalogEntry(symbol: string, exchange: string = 'NSE', interval: string = '5m') {
+    const response = await webClient.delete('/api/v1/historify/catalog', { data: { symbol, exchange, interval } });
     return response.data;
   }
 
   async getHistorifyJobs(limit: number = 50) {
-    const response = await webClient.get('/historify/api/jobs', { params: { limit } });
+    const response = await webClient.get('/api/v1/historify/jobs', { params: { limit } });
     return response.data;
   }
 
   async getHistorifySchedules() {
-    const response = await webClient.get('/historify/api/schedules');
+    const response = await webClient.get('/api/v1/historify/schedules');
     return response.data;
   }
 
-  async updateHistorifyWatchlist(action: 'add' | 'remove', exchange: string, symbol: string) {
-    const response = await webClient.post('/historify/api/watchlist', { action, exchange, symbol });
+  async updateHistorifyWatchlist(action: 'add' | 'remove', exchange: string, symbol?: string, symbols?: string[]) {
+    const response = await webClient.post('/api/v1/historify/watchlist', { action, exchange, symbol, symbols });
+    return response.data;
+  }
+
+  async getHistorifyRecords(symbol: string, exchange: string = 'NSE', interval: string = '5m', limit: number = 1000) {
+    const response = await webClient.get('/api/v1/historify/records', { params: { symbol, exchange, interval, limit } });
+    return response.data;
+  }
+
+  async getHistorifyBreadth(interval: string = '5m') {
+    const response = await webClient.get('/api/v1/historify/breadth', { params: { interval } });
+    return response.data;
+  }
+
+  async runHistorify(payload: { symbol?: string; symbols?: string[]; exchange: string; from_date: string; to_date: string; interval: string; is_incremental?: boolean; operator?: string }) {
+    const response = await webClient.post('/api/v1/historify/run-historify', payload);
+    return response.data;
+  }
+
+  async cancelHistorifyJob(jobId: string) {
+    const response = await webClient.delete(`/api/v1/historify/jobs/${jobId}`);
+    return response.data;
+  }
+
+  async exportHistorifyData(symbol: string, exchange: string = 'NSE', interval: string = '5m', limit: number = 50000) {
+    const response = await webClient.get('/api/v1/historify/export', { params: { symbol, exchange, interval, limit } });
+    return response.data;
+  }
+
+  async seedHistorify() {
+    const response = await webClient.post('/api/v1/historify/seed');
+    return response.data;
+  }
+
+  async getHistorifyStats() {
+    const response = await webClient.get('/api/v1/historify/stats');
+    return response.data;
+  }
+
+  async compactHistorify() {
+    const response = await webClient.post('/api/v1/historify/maintenance/compact');
+    return response.data;
+  }
+
+  async purgeHistorify(days: number = 30) {
+    const response = await webClient.post('/api/v1/historify/maintenance/purge', { days });
     return response.data;
   }
 

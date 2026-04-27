@@ -1,6 +1,3 @@
-import React from 'react';
-import { GlobalHeader } from "@/components/trading/GlobalHeader";
-import { MarketNavbar } from "@/components/trading/MarketNavbar";
 import { ShieldAlert, UserCheck, Shield, Key, Lock } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -12,11 +9,9 @@ const Roles = () => {
   ];
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background industrial-grid relative">
+    <div className="h-full flex flex-col overflow-hidden bg-background relative">
       <div className="noise-overlay" />
       <div className="scanline opacity-10" />
-      <GlobalHeader />
-      <MarketNavbar activeTab="/roles" />
 
       <div className="flex-1 overflow-auto p-8 relative z-10">
         <div className="max-w-4xl mx-auto space-y-8">
@@ -34,7 +29,7 @@ const Roles = () => {
 
           <div className="grid gap-4">
             {roles.map((role, idx) => (
-              <motion.div 
+              <motion.div
                 key={role.name}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -79,7 +74,7 @@ const Roles = () => {
             <div>
                <p className="text-[11px] font-mono font-black text-blue-400 uppercase tracking-widest mb-2">Protocol_Notice:</p>
                <p className="text-[10px] font-mono text-muted-foreground leading-relaxed uppercase opacity-70">
-                 All role assignments are cryptographically signed and logged at the kernel level. 
+                 All role assignments are cryptographically signed and logged at the kernel level.
                  Any unauthorized privilege escalation will trigger an immediate system-wide termination sequence.
                </p>
             </div>

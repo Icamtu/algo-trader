@@ -26,7 +26,7 @@ const baseFetch = async (url: string, options: RequestInit = {}) => {
 // ─── OpenAlgo Client Definition ──────────────────────────────────
 export const openAlgoClient = async (endpoint: string, options: RequestInit = {}) => {
   const mode = localStorage.getItem("algodesk_mode") || "sandbox";
-  
+
   // Get current Supabase session
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
@@ -50,6 +50,19 @@ export const algoApi = {
   liquidateStrategy: (id: string) => openAlgoClient(`/api/v1/strategies/${id}/liquidate`, { method: "POST" }),
   updateStrategyParams: (id: string, params: Record<string, unknown>) =>
     openAlgoClient(`/api/v1/strategies/${id}/params`, { method: "PUT", body: JSON.stringify(params) }),
+  createStrategy: (data: { name: string, template?: string }) =>
+    openAlgoClient("/api/v1/strategies", { method: "POST", body: JSON.stringify(data) }),
+  deleteStrategy: (id: string) => openAlgoClient(`/api/v1/strategies/${id}`, { method: "DELETE" }),
+
+  // Strategy Files (Physical storage)
+  getStrategyFiles: () => openAlgoClient("/api/v1/strategies/files"),
+  getStrategyFile: (filename: string) => openAlgoClient(`/api/v1/strategies/files/${filename}`),
+  saveStrategyFile: (filename: string, content: string) =>
+    openAlgoClient(`/api/v1/strategies/files/${filename}`, { method: "POST", body: JSON.stringify({ content }) }),
+  deleteStrategyFile: (filename: string) => openAlgoClient(`/api/v1/strategies/files/${filename}`, { method: "DELETE" }),
+  renameStrategyFile: (filename: string, newFilename: string) =>
+    openAlgoClient(`/api/v1/strategies/files/${filename}/rename`, { method: "POST", body: JSON.stringify({ new_filename: newFilename }) }),
+  getStrategyVersions: (filename: string) => openAlgoClient(`/api/v1/strategies/files/${filename}/versions`),
 
   // Positions & P&L
   getPositions: () => openAlgoClient("/api/v1/positionbook"),
@@ -71,9 +84,9 @@ export const algoApi = {
   getTradesByStrategy: (strategy: string, limit = 100) =>
     openAlgoClient(`/api/v1/tradebook?strategy=${strategy}&limit=${limit}`),
   getOpenPositions: () => openAlgoClient("/api/v1/tradebook/open"),
-  getOrderStatus: (orderId: string) => 
+  getOrderStatus: (orderId: string) =>
     openAlgoClient("/api/v1/orderstatus", { method: "POST", body: JSON.stringify({ orderid: orderId }) }),
-  cancelOrder: (id: string) => 
+  cancelOrder: (id: string) =>
     openAlgoClient("/api/v1/cancelorder", { method: "POST", body: JSON.stringify({ orderid: id }) }),
   modifyOrder: (params: Record<string, any>) =>
     openAlgoClient("/api/v1/modifyorder", { method: "POST", body: JSON.stringify(params) }),
@@ -90,7 +103,7 @@ export const algoApi = {
     openAlgoClient("/api/v1/basketorder", { method: "POST", body: JSON.stringify({ orders }) }),
 
   // Square-off
-  exitPosition: (symbol: string) => 
+  exitPosition: (symbol: string) =>
     openAlgoClient("/api/v1/exitposition", { method: "POST", body: JSON.stringify({ symbol }) }),
   closePosition: () => openAlgoClient("/api/v1/closeposition", { method: "POST" }),
 
@@ -115,13 +128,22 @@ export const algoApi = {
   getSystemSettings: () => openAlgoClient("/api/v1/settings"),
   updateSystemSettings: (updates: Partial<SystemSettings>) =>
     openAlgoClient("/api/v1/settings", { method: "PUT", body: JSON.stringify(updates) }),
-  getSystemStatus: () => openAlgoClient("/api/v1/system/status"),
+  getSystemStatus: () => openAlgoClient("/api/v1/system/health"),
   getSystemLogs: () => openAlgoClient("/api/v1/system/logs"),
+  reconcilePositions: () => openAlgoClient("/api/v1/system/reconcile", { method: "POST" }),
+  getTickerConfig: () => openAlgoClient("/api/v1/system/config/ticker"),
+  resetPositions: () => openAlgoClient("/api/v1/system/reconcile/reset", { method: "POST" }),
+  getTelemetry: () => openAlgoClient("/api/v1/telemetry"),
+  getTelemetryPnl: () => openAlgoClient("/api/v1/telemetry/pnl"),
+  getTelemetryPerformance: () => openAlgoClient("/api/v1/telemetry/performance"),
 
   // Symbols & Quotes
   searchSymbols: (query: string) => openAlgoClient(`/api/v1/symbol/search?q=${encodeURIComponent(query)}`),
   getQuotes: (symbols: string[]) => openAlgoClient(`/api/v1/quotes?symbols=${symbols.join(",")}`),
   getDepth: (symbol: string) => openAlgoClient(`/api/v1/depth?symbol=${encodeURIComponent(symbol)}`),
+  getMarketBreadth: () => openAlgoClient("/api/v1/historify/breadth"),
+  getHistorifyBreadth: () => openAlgoClient("/api/v1/historify/breadth"),
+  getHistorifySymbols: () => openAlgoClient("/api/v1/historify/symbols"),
 
   // Historical Data & Indicators
   getHistory: (params: Record<string, string>) => {
@@ -146,18 +168,18 @@ export const algoApi = {
     openAlgoClient("/api/v1/backtest/run", { method: "POST", body: JSON.stringify(data) }),
   getBacktestResults: () => openAlgoClient("/api/v1/backtest/results"),
   optimizeStrategy: (data: any) =>
-    openAlgoClient("/api/v1/backtest/optimize", { method: "POST", body: JSON.stringify(data) }),
+    openAlgoClient("/api/v1/strategies/optimize", { method: "POST", body: JSON.stringify(data) }),
 
   // Alerts
   getAlerts: () => openAlgoClient("/api/v1/alerts"),
   createAlert: (alert: Record<string, unknown>) =>
     openAlgoClient("/api/v1/alerts", { method: "POST", body: JSON.stringify(alert) }),
   deleteAlert: (id: number) => openAlgoClient(`/api/v1/alerts/${id}`, { method: "DELETE" }),
-  
+
   // Analyzer toggle
   toggleAnalyzer: (state: boolean) => openAlgoClient("/api/v1/analyzertoggle", { method: "POST", body: JSON.stringify({ state }) }),
   getAnalyzerStatus: () => openAlgoClient("/api/v1/analyzerstatus"),
-  
+
   // Brokers
   listBrokers: () => openAlgoClient("/api/v1/brokers"),
   updateBrokerCredentials: (brokerId: string, data: Record<string, any>) =>
@@ -165,12 +187,27 @@ export const algoApi = {
   authorizeBroker: (brokerId: string, credentials?: Record<string, any>) =>
     openAlgoClient(`/api/v1/brokers/${brokerId}/auth`, { method: "POST", body: credentials ? JSON.stringify(credentials) : undefined }),
 
-  getTelemetry: () => openAlgoClient("/api/v1/telemetry"),
 
   exportTradesUrl: () => `${ALGO_TRADER_URL}/api/v1/tradebook/export?apikey=${CONFIG.API_KEY}`,
 
   // Scanner
   runScanner: (index: string) => openAlgoClient(`/api/v1/scanner?index=${index}`),
+  getBrokerHealth: () => openAlgoClient("/api/v1/broker/health"),
+  getMarketOverview: (universe = "nifty50", index_type = "spot") =>
+    openAlgoClient(`/api/v1/market/overview?universe=${universe}&index_type=${index_type}`),
+
+  // Vault
+  listVaultAssets: (type?: string) => openAlgoClient(`/api/v1/vault/assets${type ? `?type=${type}` : ""}`),
+  searchVaultAssets: (query: string) => openAlgoClient(`/api/v1/vault/search?q=${encodeURIComponent(query)}`),
+
+  sendTerminalCommand: (command: string) => openAlgoClient("/api/v1/terminal/command", { method: "POST", body: JSON.stringify({ command }) }),
+
+  // Strategy Explorer (Recursive)
+  getExplorerTree: (path = ".") => openAlgoClient(`/api/v1/explorer/tree?path=${encodeURIComponent(path)}`),
+  getExplorerFile: (path: string) => openAlgoClient(`/api/v1/explorer/file?path=${encodeURIComponent(path)}`),
+  saveExplorerFile: (path: string, content: string) =>
+    openAlgoClient("/api/v1/explorer/save", { method: "POST", body: JSON.stringify({ path, content }) }),
+  deleteExplorerItem: (path: string) => openAlgoClient(`/api/v1/explorer/delete?path=${encodeURIComponent(path)}`, { method: "DELETE" }),
 
   client: openAlgoClient,
 };

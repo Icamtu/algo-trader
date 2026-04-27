@@ -64,6 +64,7 @@ class UserStrategy(BaseStrategy):
         # ====================== USER INPUT END ======================
 
     async def on_start(self):
+        await super().on_start()
         logger.info("Starting strategy '%s' with initial positions: %s", self.name, self.positions)
 
     async def on_stop(self):

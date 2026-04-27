@@ -320,7 +320,7 @@ export default function OITrackerPage() {
         </div>
       )}
 
-      <div className="flex-1 min-h-[400px]">
+      <div className="flex-1 min-h-[300px] md:min-h-[400px]">
         <AetherPanel className="h-full bg-black/40 border-white/5 overflow-hidden">
            {isLoading && !oiData ? (
              <div className="h-full flex flex-col items-center justify-center gap-4 opacity-20">

@@ -12,6 +12,9 @@ from data.market_data import MarketDataStream
 logger = logging.getLogger(__name__)
 
 
+from services.historify_service import historify_service
+
+
 class AlgoScheduler:
     """
     Coordinates the app lifecycle.
@@ -31,8 +34,9 @@ class AlgoScheduler:
         self.order_manager = order_manager
         self._stop_event = asyncio.Event()
         self._heartbeat_interval = settings.get("system", {}).get("heartbeat_interval_seconds", 30)
-        self._reconciliation_interval = settings.get("system", {}).get("reconciliation_interval_seconds", 60)
+        self._reconciliation_interval = settings.get("system", {}).get("reconciliation_interval_seconds", 30)
         self._session_check_interval = settings.get("system", {}).get("session_check_interval_seconds", 300)
+        self._historify_interval = settings.get("system", {}).get("historify_interval_seconds", 1800)
         self._last_sync_date = None
 
     def install_signal_handlers(self):
@@ -62,7 +66,8 @@ class AlgoScheduler:
 
         try:
             last_reconciliation = 0
-            last_session_check = 0
+            last_session_check = -self._session_check_interval
+            last_historify = 0
             while not self._stop_event.is_set():
                 now = asyncio.get_running_loop().time()
 
@@ -91,7 +96,17 @@ class AlgoScheduler:
 
                     last_session_check = now
 
-                # 3. Risk Circuit Breaker Check
+                # 4. Historify Background Ingestion
+                if (now - last_historify > self._historify_interval):
+                    logger.info("📅 Triggering scheduled Historify background ingestion...")
+                    # Run in thread via service because it spawns its own threads per symbol
+                    try:
+                        historify_service.trigger_scheduled_ingestion(["1m", "5m"])
+                    except Exception as e:
+                        logger.error(f"Failed to trigger Historify ingestion: {e}")
+                    last_historify = now
+
+                # 5. Risk Circuit Breaker Check
                 if self.order_manager and self.order_manager.risk_manager:
                     if self.order_manager.risk_manager.is_circuit_broken():
                         logger.critical("🚨 CIRCUIT BREAKER TRIGGERED! Drawing down positions...")
@@ -99,7 +114,7 @@ class AlgoScheduler:
                         await self.order_manager.cancel_all_orders()
                         # self.request_stop() # Optional: stop the engine
 
-                # 4. Automated Symbol Sync (Master Contract)
+                # 6. Automated Symbol Sync (Master Contract)
                 if self._should_sync_symbols():
                     logger.info("📅 Triggering automated Master Contract sync...")
                     from utils.sync_symbols import run_sync

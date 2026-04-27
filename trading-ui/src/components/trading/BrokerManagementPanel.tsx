@@ -25,74 +25,39 @@ interface BrokerConfig {
 
 const initialBrokers: BrokerConfig[] = [
   {
-    id: "zerodha",
-    name: "Zerodha (Kite)",
-    description: "India's largest retail broker. Kite Connect API for equities, F&O, and commodities.",
-    status: "connected",
-    latency: 12,
-    uptime: 99.97,
-    ordersToday: 342,
-    lastHeartbeat: "2s ago",
-    fields: [
-      { key: "api_key", label: "API Key", type: "text", placeholder: "kite_api_xxxxxxxxx", value: "kite_api_8f2a••••" },
-      { key: "api_secret", label: "API Secret", type: "password", placeholder: "Enter API secret", value: "••••••••••••" },
-      { key: "access_token", label: "Access Token", type: "password", placeholder: "Auto-generated on login", value: "••••••••••••" },
-      { key: "user_id", label: "User ID", type: "text", placeholder: "AB1234", value: "AK7291" },
-    ],
-    features: ["Equities", "F&O", "Commodities", "MF", "WebSocket"],
-  },
-  {
-    id: "ibkr",
-    name: "Interactive Brokers",
-    description: "Global multi-asset broker. TWS API for equities, options, futures, forex, and bonds.",
-    status: "connected",
-    latency: 45,
-    uptime: 99.91,
-    ordersToday: 128,
-    lastHeartbeat: "4s ago",
-    fields: [
-      { key: "host", label: "TWS Host", type: "text", placeholder: "127.0.0.1", value: "127.0.0.1" },
-      { key: "port", label: "TWS Port", type: "text", placeholder: "7497", value: "7497" },
-      { key: "client_id", label: "Client ID", type: "text", placeholder: "1", value: "1" },
-      { key: "account", label: "Account ID", type: "text", placeholder: "DU1234567", value: "DU8834521" },
-    ],
-    features: ["Equities", "Options", "Futures", "Forex", "Bonds", "CFDs"],
-  },
-  {
-    id: "alpaca",
-    name: "Alpaca Markets",
-    description: "Commission-free US equities & crypto. REST + WebSocket streaming API.",
-    status: "degraded",
-    latency: 89,
-    uptime: 98.45,
-    ordersToday: 56,
-    lastHeartbeat: "18s ago",
-    fields: [
-      { key: "api_key", label: "API Key ID", type: "text", placeholder: "PK••••••••••", value: "PKAB7F••••" },
-      { key: "secret_key", label: "Secret Key", type: "password", placeholder: "Enter secret key", value: "••••••••••••" },
-      { key: "base_url", label: "Base URL", type: "text", placeholder: "https://paper-api.alpaca.markets", value: "https://paper-api.alpaca.markets" },
-    ],
-    features: ["US Equities", "Crypto", "Paper Trading", "WebSocket"],
-  },
-  {
     id: "shoonya",
     name: "Shoonya (Finvasia)",
     description: "Zero-brokerage Indian broker. NorenRestApi for equities, F&O, and currency.",
-    status: "connected",
-    latency: 22,
-    uptime: 99.82,
-    ordersToday: 215,
-    lastHeartbeat: "3s ago",
+    status: "disconnected",
+    latency: 0,
+    uptime: 0,
+    ordersToday: 0,
+    lastHeartbeat: "Never",
     fields: [
-      { key: "user", label: "User ID", type: "text", placeholder: "FA12345", value: "FA88712" },
-      { key: "password", label: "Password", type: "password", placeholder: "Enter password", value: "••••••••••••" },
-      { key: "totp_key", label: "TOTP Secret", type: "password", placeholder: "Enter TOTP key", value: "••••••••••••" },
-      { key: "vendor_code", label: "Vendor Code", type: "text", placeholder: "FA12345_U", value: "FA88712_U" },
-      { key: "api_key", label: "API Key", type: "password", placeholder: "Enter API key", value: "••••••••••••" },
-      { key: "imei", label: "IMEI", type: "text", placeholder: "abc1234", value: "aeth3r2024" },
+      { key: "user", label: "User ID", type: "text", placeholder: "FA12345", value: "" },
+      { key: "password", label: "Password", type: "password", placeholder: "Enter password", value: "" },
+      { key: "totp_key", label: "TOTP Secret", type: "password", placeholder: "Enter TOTP key", value: "" },
+      { key: "vendor_code", label: "Vendor Code", type: "text", placeholder: "FA12345_U", value: "" },
+      { key: "api_key", label: "API Key", type: "password", placeholder: "Enter API key", value: "" },
+      { key: "imei", label: "IMEI", type: "text", placeholder: "abc1234", value: "" },
     ],
     features: ["Equities", "F&O", "Currency", "Commodities", "Zero Brokerage"],
   },
+  {
+    id: "zerodha",
+    name: "Zerodha (Kite)",
+    description: "India's largest retail broker. Kite Connect API for equities, F&O, and commodities.",
+    status: "disconnected",
+    latency: 0,
+    uptime: 0,
+    ordersToday: 0,
+    lastHeartbeat: "N/A",
+    fields: [
+      { key: "api_key", label: "API Key", type: "text", placeholder: "kite_api_xxxxxxxxx", value: "" },
+      { key: "api_secret", label: "API Secret", type: "password", placeholder: "Enter API secret", value: "" },
+    ],
+    features: ["Equities", "F&O", "WebSocket"],
+  }
 ];
 
 const statusConfig: Record<BrokerStatus, { icon: typeof CheckCircle2; color: string; label: string; dotClass: string }> = {
@@ -102,7 +67,31 @@ const statusConfig: Record<BrokerStatus, { icon: typeof CheckCircle2; color: str
 };
 
 export function BrokerManagementPanel({ isOpen, onClose, isEmbedded = false }: { isOpen?: boolean; onClose?: () => void; isEmbedded?: boolean }) {
-  const [brokers] = useState<BrokerConfig[]>(initialBrokers);
+  const [brokers, setBrokers] = useState<BrokerConfig[]>(initialBrokers);
+
+  useEffect(() => {
+    const fetchHealth = async () => {
+      try {
+        const res = await algoApi.getBrokerHealth();
+        if (res.status === "success" && res.data) {
+          setBrokers(prev => prev.map(b =>
+            b.id === "shoonya" ? {
+              ...b,
+              status: res.data.status,
+              latency: res.data.latency,
+              ordersToday: res.data.ordersToday,
+              lastHeartbeat: res.data.lastHeartbeat
+            } : b
+          ));
+        }
+      } catch (err) {
+        console.error("Failed to fetch broker health", err);
+      }
+    };
+    fetchHealth();
+    const interval = setInterval(fetchHealth, 20000);
+    return () => clearInterval(interval);
+  }, []);
   const [selectedBroker, setSelectedBroker] = useState<string>("shoonya");
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [syncing, setSyncing] = useState(false);
@@ -119,7 +108,7 @@ export function BrokerManagementPanel({ isOpen, onClose, isEmbedded = false }: {
         .select("*")
         .eq("broker_name", selectedBroker)
         .maybeSingle();
-      
+
       if (data) {
         setFieldValues({
           user: data.broker_user_id || "",
@@ -393,14 +382,14 @@ export function BrokerManagementPanel({ isOpen, onClose, isEmbedded = false }: {
 
         {/* Actions - Refactored for small screens */}
         <div className={`flex flex-wrap items-center gap-2 pt-4 border-t border-border mt-auto`}>
-          <button 
+          <button
             onClick={handleSave}
             disabled={saving}
             className="flex-1 min-w-[100px] glow-button rounded-md px-3 py-2 text-[10px] font-black uppercase tracking-wider disabled:opacity-50"
           >
             {saving ? "Saving..." : "COMMIT_CONF"}
           </button>
-          
+
           {selectedBroker === 'shoonya' && (
             <button
               onClick={handleAuthorize}

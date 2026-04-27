@@ -1,147 +1,229 @@
-import { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { TrendingUp, TrendingDown, Activity, AlertTriangle, Zap, RefreshCw } from "lucide-react";
-import { IndustrialValue } from "./IndustrialValue";
-import { LiveTelemetry } from "./LiveTelemetry";
+import {
+  Play,
+  Bug,
+  Settings2,
+  ChevronDown,
+  Calendar,
+  DollarSign,
+  BarChart3,
+  Zap,
+  Activity,
+  History,
+  Target,
+  PanelRightClose,
+  PanelRightOpen
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
-// Mock data generators
-const generateEquityBars = () => Array.from({ length: 20 }, (_, i) => ({
-  day: i + 1,
-  value: 100000 + Math.random() * 50000 + (i * 2000)
-}));
+interface RightPanelProps {
+  onRun?: () => void;
+  isRunning?: boolean;
+}
 
-const generateDrawdown = () => Array.from({ length: 30 }, (_, i) => ({
-  day: i + 1,
-  value: -(Math.random() * 5 + Math.sin(i * 0.5) * 2)
-}));
+export function RightPanel({ onRun, isRunning }: RightPanelProps) {
+  const [symbol, setSymbol] = useState("ETH/USDT (Binance)");
+  const [startDate, setStartDate] = useState("2023-01-01");
+  const [endDate, setEndDate] = useState("2023-12-31");
+  const [capital, setCapital] = useState("$100,000.00");
+  const [isCollapsed, setIsCollapsed] = useState(true);
 
-const tradeHeatmapData = [
-  { day: "Mon", profit: 12000, loss: -4000 },
-  { day: "Tue", profit: 8000, loss: -12000 },
-  { day: "Wed", profit: 15000, loss: -3000 },
-  { day: "Thu", profit: 6000, loss: -8000 },
-  { day: "Fri", profit: 20000, loss: -5000 },
-];
-
-const riskAlerts = [
-  { id: 1, type: "warning", message: "Portfolio concentration: Tech sector at 42%", time: "2m ago" },
-  { id: 2, type: "info", message: "VaR breach: 95% threshold approached", time: "5m ago" },
-  { id: 3, type: "success", message: "Daily profit target achieved", time: "15m ago" },
-  { id: 4, type: "warning", message: "Unusual volume in NIFTY futures", time: "22m ago" },
-];
-
-export function RightPanel() {
-  const [equityBars, setEquityBars] = useState(generateEquityBars);
-  const [drawdown, setDrawdown] = useState(generateDrawdown);
-  const [lastUpdate, setLastUpdate] = useState(new Date());
-
-  // Simulate live updates
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setEquityBars(prev => {
-        const newBars = [...prev.slice(1)];
-        const lastValue = prev[prev.length - 1].value;
-        newBars.push({
-          day: prev.length + 1,
-          value: lastValue + (Math.random() - 0.48) * 5000
-        });
-        return newBars;
-      });
-      setLastUpdate(new Date());
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const maxEquity = Math.max(...equityBars.map(e => e.value));
-  const currentEquity = equityBars[equityBars.length - 1].value;
-
-  const metrics = [
-    { label: "NET_ACTIVE_VAL", value: `₹${(currentEquity / 100000).toFixed(2)}L`, color: "text-secondary" },
-    { label: "SESSION_DELTA", value: 3840, isIndustrial: true, color: "text-secondary" },
-    { label: "ALPHA_INDEX", value: "6.42", color: "text-primary" },
-    { label: "EXPOSURE_RATIO", value: "68.1%", color: "text-primary/40" },
-  ];
+  if (isCollapsed) {
+    return (
+      <div className="w-[48px] bg-[#020617] border-l border-white/5 flex flex-col shrink-0 items-center py-4 relative z-30 shadow-[-20px_0_50px_rgba(0,0,0,0.5)] transition-all">
+        <button
+          onClick={() => setIsCollapsed(false)}
+          className="p-2 hover:bg-white/10 rounded-sm text-muted-foreground/40 hover:text-primary transition-all"
+          title="Expand Settings"
+        >
+          <PanelRightOpen className="w-4 h-4" />
+        </button>
+        <div className="flex-1" />
+        <div className="flex flex-col gap-2 p-2">
+          <button
+            onClick={onRun}
+            disabled={isRunning}
+            className={cn(
+              "w-8 h-8 rounded-sm flex items-center justify-center transition-all",
+              isRunning ? "bg-primary/50 text-black animate-pulse" : "bg-primary hover:bg-primary/90 text-black shadow-[0_0_15px_rgba(37,99,235,0.2)]"
+            )}
+            title="Run Strategy"
+          >
+            {isRunning ? <Activity className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="w-72 bg-background border-l border-border flex flex-col shrink-0 overflow-y-auto custom-scrollbar industrial-grid relative">
-      <div className="noise-overlay" />
-      <div className="scanline opacity-10" />
-      
-      {/* Telemetry Header */}
-      <div className="p-2.5 border-b border-border flex items-center justify-between bg-card/20 backdrop-blur-md relative z-10">
-        <h3 className="text-[10px] font-mono font-black uppercase tracking-[0.3em] text-primary">Buffer_Log</h3>
-        <div className="flex items-center gap-2 font-mono">
-          <RefreshCw className="w-2.5 h-2.5 text-secondary animate-spin-slow" />
-          <span className="text-[8px] text-muted-foreground/30 font-black uppercase tracking-widest tabular-nums">
-            {lastUpdate.toLocaleTimeString([], { hour12: false })}
-          </span>
-        </div>
+    <div className="w-[280px] bg-[#020617] border-l border-white/5 flex flex-col shrink-0 overflow-y-auto custom-scrollbar relative z-30 shadow-[-20px_0_50px_rgba(0,0,0,0.5)] transition-all">
+      {/* Primary Action Buttons */}
+      <div className="p-4 flex gap-2 border-b border-white/[0.03] bg-white/[0.01]">
+        <button
+          onClick={onRun}
+          disabled={isRunning}
+          className={cn(
+            "flex-1 bg-amber-500 hover:bg-amber-400 text-black h-9 rounded-sm flex items-center justify-center gap-2 font-mono text-[10px] font-black uppercase tracking-widest transition-all shadow-[0_0_15px_rgba(245,158,11,0.2)] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed",
+            isRunning && "animate-pulse"
+          )}
+        >
+          {isRunning ? (
+            <Activity className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Play className="w-3.5 h-3.5 fill-current" />
+          )}
+          {isRunning ? "PROCESSING..." : "RUN STRATEGY"}
+        </button>
+        <button className="w-10 bg-white/[0.03] hover:bg-white/[0.08] text-muted-foreground/60 h-9 rounded-sm flex items-center justify-center transition-all border border-white/5 active:scale-[0.95]">
+          <Bug className="w-4 h-4" />
+        </button>
+        <button onClick={() => setIsCollapsed(true)} className="w-10 bg-white/[0.03] hover:bg-white/[0.08] text-muted-foreground/40 hover:text-muted-foreground h-9 rounded-sm flex items-center justify-center transition-all border border-white/5 active:scale-[0.95]">
+          <PanelRightClose className="w-4 h-4" />
+        </button>
       </div>
 
-      {/* Metrics Registry */}
-      <div className="p-3 border-b border-border bg-card/5 relative z-10">
-        <div className="grid grid-cols-2 gap-3">
-          {metrics.map((m) => (
-            <div key={m.label} className="flex flex-col border-l border-border/20 pl-3">
-              <span className="text-[7px] font-mono font-black uppercase text-muted-foreground/20 tracking-widest leading-tight">{m.label}</span>
-              {m.isIndustrial ? (
-                <IndustrialValue value={m.value as number} prefix="+₹" className="text-[11px] font-black tabular-nums tracking-tighter text-secondary" />
-              ) : (
-                <span className={`text-[11px] font-mono font-black tabular-nums tracking-tighter ${m.color}`}>{m.value}</span>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
+      <div className="flex-1 p-5 space-y-8">
+        {/* Backtest Configuration */}
+        <section className="space-y-5">
+          <div className="flex items-center gap-2 mb-1">
+            <Settings2 className="w-3.5 h-3.5 text-primary" />
+            <h3 className="text-[10px] font-mono font-black uppercase tracking-[0.2em] text-foreground/80">
+              Backtest_Config
+            </h3>
+          </div>
 
-      {/* Equity Trail Readout */}
-      <div className="p-3 border-b border-border bg-card/10 backdrop-blur-md relative z-10">
-        <h4 className="text-[9px] font-mono font-black uppercase tracking-[0.3em] text-muted-foreground/40 mb-3">Equity_Trail</h4>
-        <div className="h-16 flex items-end gap-[1px] px-0.5">
-          {equityBars.map((e, i) => (
-            <div
-              key={i}
-              className="flex-1 min-w-[2px] bg-secondary/10 hover:bg-secondary/60 transition-all cursor-pointer relative group"
-              style={{ height: `${(e.value / maxEquity) * 100}%` }}
-            >
-               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-background border border-border px-1 py-0.5 text-[6px] font-mono font-black whitespace-nowrap z-50">
-                  {e.value.toFixed(0)}
-               </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Weekly Intensity Heatmap */}
-      <div className="p-3 border-b border-border bg-card/5 relative z-10">
-        <h4 className="text-[9px] font-mono font-black uppercase tracking-[0.3em] text-muted-foreground/40 mb-3">Load_Intensity</h4>
-        <div className="space-y-3">
-          {tradeHeatmapData.map((d) => (
-            <div key={d.day} className="flex flex-col gap-1.5">
-              <div className="flex justify-between items-center px-0.5 leading-none">
-                <span className="text-[8px] font-mono font-black text-muted-foreground/30 uppercase tracking-widest">{d.day}_PKT</span>
-                <span className="text-[9px] font-mono font-black text-secondary tabular-nums">+{((d.profit / (d.profit + Math.abs(d.loss))) * 100).toFixed(0)}%</span>
-              </div>
-              <div className="h-1 w-full bg-border/20 overflow-hidden flex relative group">
-                <div
-                  className="h-full bg-secondary relative z-10"
-                  style={{ width: `${(d.profit / (d.profit + Math.abs(d.loss))) * 100}%` }}
-                />
-                <div
-                  className="h-full bg-destructive/30"
-                  style={{ width: `${(Math.abs(d.loss) / (d.profit + Math.abs(d.loss))) * 100}%` }}
-                />
-                <div className="absolute inset-0 bg-white/5 animate-scan-fast opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="space-y-4">
+            {/* Symbol Selection */}
+            <div className="space-y-2">
+              <label className="text-[8px] font-mono font-black uppercase text-muted-foreground/20 tracking-widest">
+                SYMBOL / PAIR
+              </label>
+              <div className="h-9 bg-black/40 border border-white/5 rounded-sm flex items-center px-3 text-foreground/70 justify-between group cursor-pointer hover:border-primary/20 transition-all">
+                <span className="text-[10px] font-mono tracking-tight">{symbol}</span>
+                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground/20 group-hover:text-primary/40 transition-colors" />
               </div>
             </div>
-          ))}
-        </div>
-      </div>
 
-      {/* Real-Time Neural Feed */}
-      <div className="flex-1 min-h-[300px] border-t border-border relative z-10">
-        <LiveTelemetry />
+            {/* Date Range */}
+            <div className="space-y-2">
+              <label className="text-[8px] font-mono font-black uppercase text-muted-foreground/20 tracking-widest">
+                DATE RANGE
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="h-9 bg-black/40 border border-white/5 rounded-sm flex items-center px-3 text-[10px] font-mono text-foreground/50 hover:border-primary/20 cursor-text transition-all">
+                  {startDate}
+                </div>
+                <div className="h-9 bg-black/40 border border-white/5 rounded-sm flex items-center px-3 text-[10px] font-mono text-foreground/50 hover:border-primary/20 cursor-text transition-all">
+                  {endDate}
+                </div>
+              </div>
+            </div>
+
+            {/* Capital */}
+            <div className="space-y-2">
+              <label className="text-[8px] font-mono font-black uppercase text-muted-foreground/20 tracking-widest">
+                INITIAL CAPITAL
+              </label>
+              <div className="h-9 bg-black/40 border border-white/5 rounded-sm flex items-center px-3 text-[10px] font-mono text-foreground/70 hover:border-primary/20 transition-all">
+                {capital}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div className="h-[1px] w-full bg-white/[0.03]" />
+
+        {/* Performance Metrics */}
+        <section className="space-y-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-3.5 h-3.5 text-secondary" />
+              <h3 className="text-[10px] font-mono font-black uppercase tracking-[0.2em] text-foreground/80">
+                Metrics_Buffer
+              </h3>
+            </div>
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-sm bg-secondary/5 border border-secondary/10">
+              <div className="w-1 h-1 rounded-full bg-secondary animate-pulse" />
+              <span className="text-[7px] font-mono font-black text-secondary uppercase tracking-widest">LIVE_FEED</span>
+            </div>
+          </div>
+
+          {/* Sparkline Chart Simulation */}
+          <div className="h-32 w-full bg-black/40 border border-white/5 rounded-sm mb-4 relative overflow-hidden group">
+            <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#2563eb 0.5px, transparent 0.5px)', backgroundSize: '8px 8px' }} />
+
+            <svg className="w-full h-full p-2" viewBox="0 0 100 40" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.2" />
+                  <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <path
+                d="M0,35 Q10,32 20,28 T40,22 T60,25 T80,10 T100,5"
+                fill="none"
+                stroke="#10b981"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                className="drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+              />
+              <path
+                d="M0,35 Q10,32 20,28 T40,22 T60,25 T80,10 T100,5 L100,40 L0,40 Z"
+                fill="url(#chartGradient)"
+              />
+              <circle cx="100" cy="5" r="1.5" fill="#10b981" className="animate-pulse" />
+            </svg>
+
+            <div className="absolute top-2 right-2 flex flex-col items-end">
+              <span className="text-secondary font-mono text-[10px] font-black tracking-tight drop-shadow-md">+18.4%</span>
+            </div>
+          </div>
+
+          {/* Grid Metrics */}
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: "CAGR", value: "24.5%", color: "text-foreground/80" },
+              { label: "MAX DD", value: "-4.2%", color: "text-rose-500" },
+              { label: "SHARPE", value: "1.82", color: "text-foreground/80" },
+              { label: "WIN RATE", value: "62%", color: "text-foreground/80" }
+            ].map((m) => (
+              <div key={m.label} className="p-3 bg-black/40 border border-white/5 rounded-sm hover:border-white/10 transition-all group cursor-crosshair">
+                <span className="block text-[7px] text-muted-foreground/20 font-mono font-black uppercase tracking-[0.2em] mb-1 group-hover:text-primary/40 transition-colors">
+                  {m.label}
+                </span>
+                <span className={cn("block text-sm font-mono font-black tabular-nums tracking-tighter", m.color)}>
+                  {m.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Tactical Feed */}
+        <section className="space-y-4 pt-2">
+            <div className="flex items-center gap-2 mb-1">
+              <History className="w-3.5 h-3.5 text-muted-foreground/20" />
+              <h3 className="text-[10px] font-mono font-black uppercase tracking-[0.2em] text-muted-foreground/30">
+                Recent_Audit
+              </h3>
+            </div>
+            <div className="space-y-3">
+                {[
+                    { id: 1, type: "EXEC", msg: "Buy signal at 2341.2", time: "12s" },
+                    { id: 2, type: "RISK", msg: "Margin buffer 12.4%", time: "1m" }
+                ].map(item => (
+                    <div key={item.id} className="flex items-center justify-between text-[9px] font-mono">
+                        <div className="flex items-center gap-2">
+                            <span className={item.type === 'RISK' ? 'text-amber-500' : 'text-primary'}>[{item.type}]</span>
+                            <span className="text-muted-foreground/40">{item.msg}</span>
+                        </div>
+                        <span className="text-muted-foreground/10">{item.time}</span>
+                    </div>
+                ))}
+            </div>
+        </section>
       </div>
     </div>
   );

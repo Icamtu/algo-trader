@@ -113,7 +113,7 @@ export default function VolSurfacePage() {
   }, [selectedUnderlying, selectedExchange])
 
   const toggleExpiry = (expiry: string) => {
-    setSelectedExpiries(prev => 
+    setSelectedExpiries(prev =>
       prev.includes(expiry) ? prev.filter(e => e !== expiry) : (prev.length >= 8 ? prev : [...prev, expiry])
     )
   }
@@ -285,12 +285,12 @@ export default function VolSurfacePage() {
       <div className="flex flex-wrap gap-2 py-2 border-y border-white/5">
          <span className="text-[9px] font-mono font-black text-muted-foreground/40 uppercase tracking-widest mr-2 self-center">Active_Expiries:</span>
          {expiries.map(exp => (
-           <Badge 
-             key={exp} 
+           <Badge
+             key={exp}
              variant={selectedExpiries.includes(exp) ? "default" : "outline"}
              onClick={() => toggleExpiry(exp)}
              className={cn("cursor-pointer font-mono text-[9px] h-6 px-3 rounded-none uppercase transition-all",
-               selectedExpiries.includes(exp) 
+               selectedExpiries.includes(exp)
                 ? (isAD ? "bg-primary text-black" : "bg-teal-500 text-black")
                 : "border-border/20 hover:border-primary/40"
              )}
@@ -319,7 +319,7 @@ export default function VolSurfacePage() {
         </div>
       )}
 
-      <div className="flex-1 min-h-[500px] relative">
+      <div className="flex-1 min-h-[350px] md:min-h-[500px] relative">
          <AetherPanel className="h-full bg-background/20 border-border/10 overflow-hidden">
             {isLoading && !surfaceData ? (
                <div className="h-full flex flex-col items-center justify-center gap-4 opacity-20 scale-150">
@@ -341,7 +341,7 @@ export default function VolSurfacePage() {
                </div>
             )}
          </AetherPanel>
-         
+
          {/* Corner Shims */}
           <div className="absolute top-0 right-0 w-24 h-24 border-r-2 border-t-2 opacity-20 pointer-events-none" style={{ borderColor: isAD ? '#f59e0b' : '#14b8a6' }} />
          <div className="absolute bottom-0 left-0 w-24 h-24 border-l-2 border-b-2 opacity-20 pointer-events-none" style={{ borderColor: isAD ? '#f59e0b' : '#14b8a6' }} />

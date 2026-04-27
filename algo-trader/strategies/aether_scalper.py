@@ -29,7 +29,15 @@ class AetherScalper(BaseStrategy):
             return
 
         current_position = self.positions.get(tick.symbol, 0)
-        indicators = self._calculate_indicators(tick.symbol, rsi_window=7, vol_window=14)
+
+        # 0. Cooldown Check (Institutional Practice)
+        last_exit = self.active_trades.get(f"{tick.symbol}_last_exit")
+        if last_exit:
+            import datetime
+            if (datetime.datetime.utcnow() - last_exit).total_seconds() < 300: # 5 min cooldown
+                return
+
+        indicators = self._calculate_indicators(tick.symbol, rsi_window=14, vol_window=14)
         rsi = indicators["rsi"]
         vol = indicators["volatility"] # Simplified ATR proxy
 
@@ -52,6 +60,8 @@ class AetherScalper(BaseStrategy):
                 logger.info(f"[{self.name}] {trade['side']} Stop Hit at {tick.price}")
                 action = "SELL" if trade["side"] == "BUY" else "BUY"
                 await self.order_manager.place_order(self.name, tick.symbol, action, abs(current_position), ai_reasoning="Scalp Stop Hit")
+                import datetime
+                self.active_trades[f"{tick.symbol}_last_exit"] = datetime.datetime.utcnow()
                 self.positions[tick.symbol] = 0
                 del self.active_trades[tick.symbol]
                 return
@@ -62,6 +72,8 @@ class AetherScalper(BaseStrategy):
                 logger.info(f"[{self.name}] {trade['side']} Target Hit at {tick.price}")
                 action = "SELL" if trade["side"] == "BUY" else "BUY"
                 await self.order_manager.place_order(self.name, tick.symbol, action, abs(current_position), ai_reasoning="Scalp Target Hit")
+                import datetime
+                self.active_trades[f"{tick.symbol}_last_exit"] = datetime.datetime.utcnow()
                 self.positions[tick.symbol] = 0
                 del self.active_trades[tick.symbol]
                 return
@@ -78,7 +90,7 @@ class AetherScalper(BaseStrategy):
                 qty = int(self.risk_per_trade / stop_dist)
                 if qty < 1: qty = 1
 
-                # Phase 9: Speed-First Execution. 
+                # Phase 9: Speed-First Execution.
                 # Fire trade instantly; synthesize reasoning in the background.
                 await (self.buy if signal == "BUY" else self.sell)(
                     tick.symbol,
@@ -87,7 +99,7 @@ class AetherScalper(BaseStrategy):
                     conviction=0.8, # Default threshold for speed-branch
                     human_approval=self.hitl_enabled
                 )
-                
+
                 # Attach deep synthesis asynchronously
                 await self.async_analyze_signal(tick.symbol, tick.price, rsi, 85, f"Scalp Entry | Vol: {vol:.2f} | Regime: {self.regime_status}")
                 sl = tick.price - stop_dist if signal == "BUY" else tick.price + stop_dist
@@ -98,7 +110,8 @@ class AetherScalper(BaseStrategy):
                     "entry_price": tick.price,
                     "sl": sl,
                     "tp": tp,
-                    "at_breakeven": False
+                    "at_breakeven": False,
+                    "exit_time": None
                 }
                 self.positions[tick.symbol] = qty if signal == "BUY" else -qty
 

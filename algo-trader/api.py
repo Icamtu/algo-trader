@@ -29,11 +29,12 @@ from data.options_engine import build_option_matrix
 from utils.get_shoonya_token import get_shoonya_auth_code
 from utils.finalize_shoonya_auth import finalize_shoonya_session
 from services.asset_vault import get_vault
+from utils.latency_tracker import latency_tracker
 
-# AetherDesk Native Analytics
+# AetherDesk Native Analytics & Explorer
 from blueprints.analytics import analytics_bp, init_analytics
-# AetherDesk Native Action Center (Semi-Auto)
 from blueprints.action_center import action_center_bp
+from blueprints.explorer import explorer_bp
 from execution.action_manager import get_action_manager
 from services.aether_analyzer import get_analyzer
 
@@ -46,7 +47,7 @@ from strategies.aether_swing import AetherSwing
 from strategies.aether_vault import AetherVault
 
 from core.autoresearch_agent import run_iteration_api
-from data.historify_db import init_database
+from data.historify_db import HISTORIFY_DB_PATH
 from services.historify_service import historify_service
 from services.ingestion_scheduler import ingestion_scheduler
 import jwt
@@ -160,9 +161,8 @@ def create_app():
     app.register_blueprint(analytics_bp)
     # Register native action center blueprint
     app.register_blueprint(action_center_bp)
+    app.register_blueprint(explorer_bp)
 
-    # Initialize Historify DuckDB
-    init_database()
     historify_service.reconcile_jobs()
 
     # Start Automated Ingestion Scheduler
@@ -312,6 +312,65 @@ def create_app():
             logger.error(f"Aether Analyze Error: {e}", exc_info=True)
             return jsonify({"status": "error", "message": str(e)}), 500
 
+    @app.route("/api/v1/terminal/command", methods=["POST"])
+    @require_auth
+    async def terminal_command():
+        """
+        Institutional Gateway for direct engine diagnostics.
+        Supported commands: /status, /risk, /sync, /ping, /regime
+        """
+        try:
+            data = request.json or {}
+            raw_cmd = data.get("command", "").strip()
+            if not raw_cmd:
+                return jsonify({"status": "error", "message": "EMPTY_COMMAND"}), 400
+
+            parts = raw_cmd.split()
+            cmd = parts[0].lower()
+            args = parts[1:]
+
+            strategy_runner = _api_context.get("strategy_runner")
+            order_manager = _api_context.get("order_manager")
+
+            if cmd == "/ping":
+                return jsonify({"status": "EXEC_SUCCESS", "output": "PONG_KERNEL_ACTIVE"}), 200
+
+            elif cmd == "/status":
+                matrix = strategy_runner.get_strategy_matrix()
+                active = matrix.get("total_active", 0)
+                uptime = int(__import__('time').time() - SYSTEM_START_TIME.timestamp())
+                return jsonify({
+                    "status": "EXEC_SUCCESS",
+                    "output": f"KERNEL_UPTIME: {uptime}s | ACTIVE_STRATS: {active} | MODE: {order_manager.mode.upper()}"
+                }), 200
+
+            elif cmd == "/risk":
+                action_manager = get_action_manager()
+                risk_lock = getattr(action_manager, "risk_lock", False)
+                pending = len(action_manager.get_pending_queue())
+                return jsonify({
+                    "status": "EXEC_SUCCESS",
+                    "output": f"RISK_LOCK: {'ENGAGED' if risk_lock else 'DISENGAGED'} | PENDING_APPROVALS: {pending} | AUTO_EXEC: {getattr(action_manager, 'auto_execute', False)}"
+                }), 200
+
+            elif cmd == "/sync":
+                # Trigger a reconciliation
+                await order_manager.sync_with_broker()
+                return jsonify({"status": "EXEC_SUCCESS", "output": "POS_RECONCILIATION_SYNCED_WITH_BROKER"}), 200
+
+            elif cmd == "/regime":
+                regime = strategy_runner.current_regime_data
+                return jsonify({
+                    "status": "EXEC_SUCCESS",
+                    "output": f"MARKET_REGIME: {regime.get('regime')} | CONFIDENCE: {regime.get('confidence', 0)*100:.1f}% | REASONING: {regime.get('reasoning')}"
+                }), 200
+
+            return jsonify({"status": "CMD_UNKNOWN", "output": f"COMMAND_NOT_RECOGNIZED: {cmd}"}), 404
+
+        except Exception as e:
+            logger.error(f"Terminal Command Error: {e}")
+            return jsonify({"status": "EXEC_FAILURE", "output": f"KERNEL_EXCEPTION: {str(e)}"}), 500
+
     @app.route("/api/v1/telemetry", methods=["GET"])
     @app.route("/api/v1/system/telemetry", methods=["GET"])
     @require_auth
@@ -344,6 +403,14 @@ def create_app():
                 "auto_execution": getattr(action_manager, "auto_execute", False),
                 "risk_lock": getattr(action_manager, "risk_lock", False),
                 "last_audit_ts": getattr(action_manager, "last_audit_ts", datetime.now().isoformat())
+            }
+
+            # Inject rolling latency stats
+            telemetry["performance"]["latency"] = {
+                "tick_dispatch_ms": round(latency_tracker.get_avg_latency("TickDispatch"), 3),
+                "db_ingest_ms": round(latency_tracker.get_avg_latency("DuckDBIngest"), 3),
+                "order_execution_ms": round(latency_tracker.get_avg_latency("OrderExecution"), 3),
+                "action_approval_ms": round(latency_tracker.get_avg_latency("ActionApproval"), 3)
             }
             return jsonify(telemetry), 200
         except Exception as e:
@@ -450,9 +517,15 @@ def create_app():
     def list_strategy_files():
         """Returns list of strategy files (.py, .json, .yaml, .yml) in the strategies directory."""
         try:
-            strat_dir = os.path.join(os.path.dirname(__file__), "strategies")
+            strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "strategies"))
             allowed_exts = (".py", ".json", ".yaml", ".yml")
-            files = [f for f in os.listdir(strat_dir) if f.endswith(allowed_exts) and f != "__init__.py"]
+            files = []
+            for root, _, filenames in os.walk(strat_dir):
+                for f in filenames:
+                    if f.endswith(allowed_exts) and f != "__init__.py":
+                        # Get relative path from strat_dir
+                        rel_path = os.path.relpath(os.path.join(root, f), strat_dir)
+                        files.append(rel_path)
             return jsonify({"files": files}), 200
         except Exception as e:
             return jsonify({"error": str(e)}), 500
@@ -462,11 +535,15 @@ def create_app():
     def get_strategy_file(filename):
         """Returns the content of a specific strategy file."""
         try:
-            allowed_exts = (".py", ".json", ".yaml", ".yml")
-            if not filename.endswith(allowed_exts):
-                filename += ".py"
-            strat_dir = os.path.join(os.path.dirname(__file__), "strategies")
+            strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "strategies"))
+            filename = filename.replace(":", "/")
             file_path = os.path.join(strat_dir, filename)
+
+            # If the specific file doesn't exist, try adding .py if no extension
+            if not os.path.exists(file_path):
+                allowed_exts = (".py", ".json", ".yaml", ".yml")
+                if not any(filename.endswith(ext) for ext in allowed_exts):
+                    file_path += ".py"
 
             # Security check: ensure path is within strategies directory
             if not os.path.abspath(file_path).startswith(os.path.abspath(strat_dir)):
@@ -495,6 +572,7 @@ def create_app():
                 return jsonify({"error": "No content provided"}), 400
 
             strat_dir = os.path.join(os.path.dirname(__file__), "strategies")
+            filename = filename.replace(":", "/")
             file_path = os.path.join(strat_dir, filename)
 
             # Security check
@@ -528,6 +606,7 @@ def create_app():
                 filename += ".py"
 
             strat_dir = os.path.join(os.path.dirname(__file__), "strategies")
+            filename = filename.replace(":", "/")
             file_path = os.path.join(strat_dir, filename)
 
             # Security check
@@ -594,7 +673,8 @@ def create_app():
                 new_filename += ".py"
 
             strat_dir = os.path.join(os.path.dirname(__file__), "strategies")
-            old_file_path = os.path.join(strat_dir, filename)
+            old_filename = filename.replace(":", "/")
+            file_path = os.path.join(strat_dir, filename)
             new_file_path = os.path.join(strat_dir, new_filename)
 
             # Security check
@@ -671,6 +751,7 @@ def create_app():
             name = name.replace(".py", "").replace(" ", "_").lower()
             filename = f"{name}.py"
             strat_dir = os.path.join(os.path.dirname(__file__), "strategies")
+            filename = filename.replace(":", "/")
             file_path = os.path.join(strat_dir, filename)
 
             if os.path.exists(file_path):
@@ -719,6 +800,7 @@ def create_app():
             # Find the file
             filename = f"{strategy_id.replace('-', '_')}.py"
             strat_dir = os.path.join(os.path.dirname(__file__), "strategies")
+            filename = filename.replace(":", "/")
             file_path = os.path.join(strat_dir, filename)
 
             # Try removing with .py if not exists, try without
@@ -775,11 +857,9 @@ def create_app():
                 engine.strategy_class = OptimizedStrategy
 
             # 3. Run Backtest
-            trade_logs = await engine.run(days=days, initial_capital=initial_cash)
-
-            # 4. Calculate Performance
-            calc = PerformanceCalculator(trade_logs, initial_capital=initial_cash)
-            m = calc.calculate_metrics()
+            result = await engine.run(days=days, initial_capital=initial_cash)
+            m = result.get("performance", {})
+            trade_logs = result.get("trades", [])
 
             # 5. Persist Results for UI polling
             db_logger = get_trade_logger()
@@ -846,47 +926,126 @@ def create_app():
             logger.error(f"Optimization API Error: {e}", exc_info=True)
             return jsonify({"status": "error", "message": str(e)}), 500
 
+    autoresearch_tasks = {}
+
     @app.route("/api/v1/autoresearch/iteration", methods=["POST"])
     @require_auth
-    async def api_autoresearch_iteration():
-        data = request.json or {}
-        strategy_name = data.get("strategy_name")
-        code = data.get("code")
-        symbol = data.get("symbol", "RELIANCE")
-        targets = data.get("targets", {})
-        timeframe = data.get("timeframe", "1m")
-        days = data.get("days", 7)
+    def api_autoresearch_iteration():
+        import uuid
+        import threading
+        import asyncio
 
+        data = request.json or {}
+        task_id = str(uuid.uuid4())
+        autoresearch_tasks[task_id] = {"status": "processing"}
+
+        def run_in_bg(tid, req_data):
+            logger.info(f"Autoresearch task {tid} started in background thread.")
+
+            def update_status(payload):
+                if tid in autoresearch_tasks:
+                    autoresearch_tasks[tid].update(payload)
+
+            def check_cancel():
+                return autoresearch_tasks.get(tid, {}).get("status") == "cancelled"
+
+            async def _run():
+                try:
+                    result = await run_iteration_api(
+                        code=req_data.get("code"),
+                        strategy_name=req_data.get("strategy_name"),
+                        symbol=req_data.get("symbol", "RELIANCE"),
+                        targets=req_data.get("targets", {}),
+                        timeframe=req_data.get("timeframe", "1m"),
+                        days=req_data.get("days", 7),
+                        model=req_data.get("model", "deepseek-coder:1.3b"),
+                        task_callback=update_status,
+                        check_cancel=check_cancel
+                    )
+                    if not check_cancel():
+                        autoresearch_tasks[tid] = {"status": "completed", "result": result}
+                except Exception as e:
+                    logger.error(f"Autoresearch API background error: {e}", exc_info=True)
+                    autoresearch_tasks[tid] = {"status": "error", "error": str(e)}
+
+            # Create a new event loop for this thread to run the async function
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(_run())
+            loop.close()
+
+        threading.Thread(target=run_in_bg, args=(task_id, data), daemon=True).start()
+
+        # Simple cleanup of old tasks (older than 1 hour)
         try:
-            result = await run_iteration_api(
-                code=code,
-                strategy_name=strategy_name,
-                symbol=symbol,
-                targets=targets,
-                timeframe=timeframe,
-                days=days
-            )
-            return jsonify(result), 200
-        except Exception as e:
-            logger.error(f"Autoresearch API error: {e}", exc_info=True)
-            return jsonify({"error": str(e)}), 500
+            now = datetime.now()
+            to_delete = []
+            # Note: This is a bit risky with concurrent access, but fine for low volume
+            for tid, tdata in list(autoresearch_tasks.items()):
+                # We'd need a timestamp in the task to do this properly
+                # For now, let's just limit the size of the dict
+                if len(autoresearch_tasks) > 100:
+                    first_key = next(iter(autoresearch_tasks))
+                    del autoresearch_tasks[first_key]
+        except:
+            pass
+    @app.route("/api/v1/autoresearch/stop", methods=["POST"])
+    @require_auth
+    def api_autoresearch_stop():
+        data = request.json or {}
+        task_id = data.get("taskId")
+        if task_id in autoresearch_tasks:
+            autoresearch_tasks[task_id]["status"] = "cancelled"
+            return jsonify({"status": "success", "message": "Research task cancellation requested."}), 200
+        return jsonify({"status": "error", "message": "Task not found."}), 404
+
+        return jsonify({"status": "processing", "task_id": task_id}), 202
+
+    @app.route("/api/v1/autoresearch/status/<task_id>", methods=["GET"])
+    @require_auth
+    def api_autoresearch_status(task_id):
+        if task_id not in autoresearch_tasks:
+            return jsonify({"error": "Task not found"}), 404
+        return jsonify(autoresearch_tasks[task_id]), 200
 
     @app.route("/api/v1/autoresearch/history", methods=["GET"])
     @require_auth
     def api_autoresearch_history():
+        import math
+        def sanitize(obj):
+            """Recursively replace NaN/Inf with None for JSON safety, and drop heavy curve arrays."""
+            if isinstance(obj, float):
+                if math.isnan(obj) or math.isinf(obj):
+                    return None
+                return obj
+            if isinstance(obj, dict):
+                return {k: sanitize(v) for k, v in obj.items() if k not in ('equity_curve', 'benchmark_curve', 'returns')}
+            if isinstance(obj, list):
+                # Drop large arrays (>50 items) that are backtest curves
+                if len(obj) > 50:
+                    return None
+                return [sanitize(i) for i in obj]
+            return obj
+
         try:
             strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'strategies'))
             research_dir = os.path.join(strat_dir, 'autoresearch_history')
             if not os.path.exists(research_dir):
+                os.makedirs(research_dir, exist_ok=True)
                 return jsonify({"history": []}), 200
 
             history = []
             for f in os.listdir(research_dir):
                 if f.endswith(".json"):
-                    with open(os.path.join(research_dir, f), 'r') as jf:
-                        meta = json.load(jf)
-                        meta['id'] = f.replace('.json', '')
-                        history.append(meta)
+                    try:
+                        with open(os.path.join(research_dir, f), 'r') as jf:
+                            meta = json.load(jf)
+                            clean = sanitize(meta)
+                            clean['id'] = f.replace('.json', '')
+                            history.append(clean)
+                    except Exception as fe:
+                        logger.warning(f"Skipping corrupt history file {f}: {fe}")
+                        continue
 
             # Sort by timestamp in ID (base_name_YYYYMMDD_HHMMSS)
             history.sort(key=lambda x: x['id'].split('_')[-2] + x['id'].split('_')[-1], reverse=True)
@@ -937,7 +1096,9 @@ def create_app():
             base_name = strategy_name.replace(".py", "")
             filename = f"{base_name}_Autoresearch.py"
 
-            strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'strategies'))
+            strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'strategies', 'AutoResearch'))
+            if not os.path.exists(strat_dir): os.makedirs(strat_dir, exist_ok=True)
+            filename = filename.replace(":", "/")
             file_path = os.path.join(strat_dir, filename)
 
             # Security check
@@ -998,7 +1159,8 @@ def create_app():
                 return jsonify({"error": "Missing strategy name"}), 400
 
             base_name = strategy_name.replace(".py", "")
-            strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'strategies'))
+            strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'strategies', 'AutoResearch'))
+            if not os.path.exists(strat_dir): os.makedirs(strat_dir, exist_ok=True)
             file_path = os.path.join(strat_dir, f"{base_name}.py")
 
             # Security check
@@ -1036,7 +1198,9 @@ def create_app():
             label_suffix = f"_{label}" if label else ""
             filename = f"{base_name}_autoresearch{label_suffix}.py"
 
-            strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'strategies'))
+            strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'strategies', 'AutoResearch'))
+            if not os.path.exists(strat_dir): os.makedirs(strat_dir, exist_ok=True)
+            filename = filename.replace(":", "/")
             file_path = os.path.join(strat_dir, filename)
 
             # Security check
@@ -3174,7 +3338,82 @@ def create_app():
 
     # All Historify routes have been moved to blueprints/analytics.py
 
+    # ── Analyzer Toggle & Status ─────────────────────────────────────────────
+    # The AetherAnalyzer singleton holds an `enabled` flag in memory.
+    # These endpoints allow the GlobalHeader SURGICAL toggle to work correctly.
 
+    @app.route("/api/v1/analyzertoggle", methods=["POST"])
+    @require_auth
+    def toggle_analyzer():
+        """Toggle the Surgical AI Analyzer on/off."""
+        try:
+            data = request.json or {}
+            state = bool(data.get("state", False))
+            analyzer = get_analyzer()
+            analyzer.enabled = state
+            logger.info(f"AetherAnalyzer toggled to: {state}")
+            return jsonify({"status": "success", "state": state}), 200
+        except Exception as e:
+            logger.error(f"Analyzer toggle error: {e}", exc_info=True)
+            return jsonify({"status": "error", "message": str(e)}), 500
+
+    @app.route("/api/v1/analyzerstatus", methods=["GET"])
+    @require_auth
+    def get_analyzer_status():
+        """Returns current Surgical AI Analyzer state."""
+        try:
+            analyzer = get_analyzer()
+            state = getattr(analyzer, "enabled", False)
+            return jsonify({"status": "success", "state": state}), 200
+        except Exception as e:
+            logger.error(f"Analyzer status error: {e}", exc_info=True)
+            return jsonify({"status": "error", "message": str(e)}), 500
+
+    # ── Backtest Results Polling ──────────────────────────────────────────────
+    # BacktestCanvas polls this endpoint after a run to display results.
+    # Returns the most recent persisted backtest run from the DB.
+
+    @app.route("/api/v1/backtest/results", methods=["GET"])
+    @require_auth
+    async def get_backtest_results():
+        """Returns the most recent backtest run results for the BacktestCanvas."""
+        try:
+            db_logger = get_trade_logger()
+            result = await db_logger.get_latest_backtest_run_async()
+
+            if not result:
+                return jsonify({
+                    "status": "no_data",
+                    "message": "No backtest results available. Run a backtest first.",
+                    "tradesCount": 0,
+                    "winRate": 0,
+                    "sharpe": 0,
+                    "sortino": 0,
+                    "maxDD": 0,
+                    "cagr": 0,
+                    "equityCurve": [],
+                    "trades": []
+                }), 200
+
+            m = result.get("metrics", {})
+            return jsonify({
+                "status": "success",
+                "strategy_id": result.get("strategy_id"),
+                "symbol": result.get("symbol"),
+                "tradesCount": m.get("total_trades", 0),
+                "winRate": m.get("win_rate_pct", 0),
+                "sharpe": m.get("sharpe_ratio", 0),
+                "sortino": m.get("sortino_ratio", 0),
+                "maxDD": m.get("max_drawdown_pct", 0),
+                "cagr": m.get("cagr", 0),
+                "equityCurve": m.get("equity_curve", []),
+                "benchmarkCurve": m.get("benchmark_curve", []),
+                "metrics": m,
+                "trades": result.get("trades", [])[-50:]
+            }), 200
+        except Exception as e:
+            logger.error(f"Backtest results error: {e}", exc_info=True)
+            return jsonify({"status": "error", "message": str(e)}), 500
 
     return app
 
@@ -3184,12 +3423,18 @@ def create_app():
 def _load_strategy_class(strategy_id: str) -> Optional[Type]:
     """Dynamically loads a strategy class from the strategies directory."""
     try:
-        # Normalize name: aether-scalper -> aether_scalper
-        filename = strategy_id.replace("-", "_")
+        # Normalize name: aether-scalper -> aether_scalper, AetherScalper -> aether_scalper
+        import re
+        # Convert CamelCase to snake_case
+        filename = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', strategy_id)
+        filename = re.sub('([a-z0-9])([A-Z])', r'\1_\2', filename).lower()
+        filename = filename.replace("-", "_")
+
         if not filename.endswith(".py"):
             filename += ".py"
 
         strat_dir = os.path.join(os.path.dirname(__file__), "strategies")
+        filename = filename.replace(":", "/")
         file_path = os.path.join(strat_dir, filename)
 
         if not os.path.exists(file_path):

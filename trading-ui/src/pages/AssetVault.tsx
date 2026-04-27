@@ -1,15 +1,13 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { GlobalHeader } from "@/components/trading/GlobalHeader";
-import { MarketNavbar } from "@/components/trading/MarketNavbar";
-import { 
-  Database, 
-  Search, 
-  Filter, 
-  Plus, 
-  FileText, 
-  Download, 
-  Link as LinkIcon, 
+import {
+  Database,
+  Search,
+  Filter,
+  Plus,
+  FileText,
+  Download,
+  Link as LinkIcon,
   Tag as TagIcon,
   ChevronRight,
   Zap,
@@ -51,7 +49,7 @@ export default function AssetVault() {
   const { mode } = useAppModeStore();
   const { toast } = useToast();
   const isAD = mode === 'AD';
-  
+
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -96,11 +94,9 @@ export default function AssetVault() {
   const accentBgClass = isAD ? "bg-amber-500/5" : "bg-teal-500/5";
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background industrial-grid relative">
+    <div className="h-full flex flex-col overflow-hidden bg-background relative">
       <div className="noise-overlay" />
       <div className="scanline opacity-10" />
-      <GlobalHeader />
-      <MarketNavbar activeTab="/vault" />
 
       {/* Header Bar */}
       <div className="flex items-center justify-between px-6 py-4 bg-card/5 border-b border-border relative z-10">
@@ -120,7 +116,7 @@ export default function AssetVault() {
         <div className="flex items-center gap-4">
           <div className="relative group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/40 group-focus-within:text-primary transition-colors" />
-            <Input 
+            <Input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -128,7 +124,7 @@ export default function AssetVault() {
               className="pl-10 pr-4 py-1.5 h-9 bg-background/50 border-border/50 font-mono text-[10px] w-64 rounded-none focus-visible:ring-0 focus-visible:border-primary transition-all uppercase tracking-wider"
             />
           </div>
-          <Button 
+          <Button
             onClick={() => setShowRegisterModal(true)}
             className={cn("bg-primary text-black font-black font-mono text-[10px] uppercase tracking-widest rounded-none h-9 hover:bg-white")}
           >
@@ -156,8 +152,8 @@ export default function AssetVault() {
                   onClick={() => setSelectedType(t.id)}
                   className={cn(
                     "w-full flex items-center justify-between px-3 py-2 text-[10px] font-mono font-black uppercase tracking-widest transition-all",
-                    selectedType === t.id 
-                      ? "bg-primary/10 " + primaryColorClass + " border-r-2 border-primary" 
+                    selectedType === t.id
+                      ? "bg-primary/10 " + primaryColorClass + " border-r-2 border-primary"
                       : "text-muted-foreground/30 hover:text-foreground/60 hover:bg-card/10"
                   )}
                 >
@@ -238,7 +234,7 @@ export default function AssetVault() {
                         </span>
                       )}
                     </div>
-                    
+
                     <div className="absolute top-0 right-0 w-16 h-16 pointer-events-none opacity-5 group-hover:opacity-10 transition-opacity">
                        <Database className="w-full h-full rotate-12" />
                     </div>

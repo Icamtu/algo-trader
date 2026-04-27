@@ -19,6 +19,7 @@ interface Position {
   ltp: number;
   strategy: string;
   lot_size?: number;
+  est_charges?: number;
   metadata?: {
     scaled?: boolean;
     scaling_stage?: string;
@@ -44,7 +45,7 @@ function BlotterRow({
 
   const prevLtp = useRef(p.ltp);
   const [flashClass, setFlashClass] = useState<string>("");
-  
+
   useEffect(() => {
     if (p.ltp > prevLtp.current) {
       setFlashClass("pnl-flash-up");
@@ -59,7 +60,7 @@ function BlotterRow({
   }, [p.ltp]);
 
   return (
-    <tr 
+    <tr
       className={`group/row cursor-crosshair relative border-b border-border/5 last:border-b-0 transition-colors duration-500 ${flashClass}`}
     >
       <td className="px-4 py-1.5 text-[10px] font-black font-display text-foreground tracking-widest uppercase border-r border-border/5">
@@ -83,25 +84,28 @@ function BlotterRow({
         <IndustrialValue value={p.ltp} className="text-[10px] font-black text-foreground tabular-nums" />
       </td>
       <td className="px-4 py-1.5 border-r border-border/5">
-        <IndustrialValue 
-          value={pnlValue} 
-          prefix="₹" 
-          className={`text-[10px] font-black tabular-nums ${isPositive ? "text-secondary" : "text-destructive"}`} 
+        <IndustrialValue
+          value={pnlValue}
+          prefix="₹"
+          className={`text-[10px] font-black tabular-nums ${isPositive ? "text-secondary" : "text-destructive"}`}
         />
       </td>
       <td className={`px-4 py-1.5 text-[9px] font-mono font-black tabular-nums border-r border-border/5 ${isPositive ? "text-secondary" : "text-destructive"}`}>
         {isPositive ? "+" : ""}{pnlPct.toFixed(2)}%
       </td>
+      <td className="px-4 py-1.5 text-[9px] font-mono font-black text-muted-foreground/40 tabular-nums border-r border-border/5 tracking-tighter">
+        ₹{p.est_charges?.toFixed(2) || "0.00"}
+      </td>
       <td className="px-4 py-1.5 text-[8px] font-mono font-black text-muted-foreground/20 uppercase tracking-[0.1em] border-r border-border/5">{p.strategy}</td>
       <td className="px-3 py-1.5 text-right flex gap-1 justify-end">
-        <button 
+        <button
           onClick={() => handleKill(p.symbol)}
           disabled={isKilling === p.symbol}
           className="opacity-0 group-hover/row:opacity-100 px-2 py-0.5 bg-destructive text-destructive-foreground text-[8px] font-mono font-black uppercase tracking-[0.2em] transition-all hover:bg-destructive/80 active:scale-95 disabled:opacity-50"
         >
           {isKilling === p.symbol ? <Loader2 className="w-2 h-2 animate-spin inline mr-1" /> : null}KILL
         </button>
-        <button 
+        <button
           onClick={() => onTradeClick?.(p.symbol)}
           className="opacity-0 group-hover/row:opacity-100 px-2 py-0.5 bg-primary/20 text-primary hover:bg-primary hover:text-black text-[8px] font-mono font-black uppercase tracking-[0.2em] transition-all active:scale-95"
         >
@@ -125,7 +129,7 @@ export function LiveBlotter({ onTradeClick }: LiveBlotterProps) {
   const [isKilling, setIsKilling] = useState<string | "ALL" | null>(null);
   const { mode } = useAppModeStore();
   const isAD = mode === 'AD';
-  
+
   const accentColor = isAD ? "text-primary" : "text-teal";
   const accentShadow = isAD ? "shadow-[0_0_8px_rgba(255,176,0,0.4)]" : "shadow-[0_0_8px_rgba(0,212,212,0.4)]";
   const accentBgSecondary = isAD ? "bg-secondary" : "bg-primary";
@@ -166,13 +170,15 @@ export function LiveBlotter({ onTradeClick }: LiveBlotterProps) {
       ltp: prices[p.symbol] || p.average_price,
       strategy: p.strategy || "CORE_BUFFER",
       lot_size: p.lot_size || 1,
+      est_charges: p.est_charges || 0,
       metadata: p.metadata || {}
     })) as Position[];
   }, [positionsData, prices]);
 
-  const netPnL = positions.reduce((acc, p) => {
+  const netPnLValue = positions.reduce((acc, p) => {
     const lotSize = p.lot_size || 1;
-    return acc + (p.ltp - p.entry_price) * p.qty * lotSize;
+    const gross = (p.ltp - p.entry_price) * p.qty * lotSize;
+    return acc + gross - (p.est_charges || 0);
   }, 0);
 
   if (loading) {
@@ -190,7 +196,7 @@ export function LiveBlotter({ onTradeClick }: LiveBlotterProps) {
     <div className="bg-background border-t border-border flex flex-col h-[300px] industrial-grid relative overflow-hidden group/blotter">
       <div className="noise-overlay" />
       <div className="scanline opacity-10" />
-      
+
       {/* Blotter Header */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-card/10 relative z-10">
         <div className="flex items-center gap-4">
@@ -201,14 +207,14 @@ export function LiveBlotter({ onTradeClick }: LiveBlotterProps) {
           </div>
         </div>
         <div className="flex items-center gap-4 bg-background px-2 py-0.5 border border-border">
-          <span className="text-[8px] font-mono font-black uppercase text-muted-foreground/20 tracking-[0.2em]">AGG_DLT</span>
-          <IndustrialValue 
-            value={netPnL} 
-            prefix="₹" 
-            className={`text-[11px] font-black tabular-nums tracking-tighter ${netPnL >= 0 ? "text-secondary" : "text-destructive"}`} 
+          <span className="text-[8px] font-mono font-black uppercase text-muted-foreground/20 tracking-[0.2em]">AGG_NET</span>
+          <IndustrialValue
+            value={netPnLValue}
+            prefix="₹"
+            className={`text-[11px] font-black tabular-nums tracking-tighter ${netPnLValue >= 0 ? "text-secondary" : "text-destructive"}`}
           />
           {positions.length > 0 && (
-            <button 
+            <button
               onClick={handleKillAll}
               disabled={isKilling === "ALL"}
               className="ml-2 px-2 py-0.5 bg-destructive/10 text-destructive border border-destructive/20 text-[8px] font-mono font-black uppercase tracking-[0.2em] transition-all hover:bg-destructive hover:text-destructive-foreground flex items-center gap-1 active:scale-95"
@@ -225,7 +231,7 @@ export function LiveBlotter({ onTradeClick }: LiveBlotterProps) {
         <table className="w-full border-collapse">
           <thead>
             <tr className="border-b border-border bg-card/5 sticky top-0 z-20">
-              {["TAG", "DIR", "QTY", "ENTRY", "LTP", "DELTA", "RATIO", "KERNEL", "COMMAND"].map((h) => (
+              {["TAG", "DIR", "QTY", "ENTRY", "LTP", "DELTA", "RATIO", "FEES", "KERNEL", "COMMAND"].map((h) => (
                 <th key={h} className="px-3 py-1.5 text-left text-[8px] uppercase tracking-[0.3em] text-muted-foreground/30 font-mono font-black border-r border-border/10 last:border-r-0">
                   {h}
                 </th>
@@ -234,17 +240,17 @@ export function LiveBlotter({ onTradeClick }: LiveBlotterProps) {
           </thead>
           <tbody className="divide-y divide-border/10">
             {positions.map((p) => (
-              <BlotterRow 
-                key={p.symbol} 
-                p={p} 
-                onTradeClick={onTradeClick} 
-                handleKill={handleKill} 
-                isKilling={isKilling} 
+              <BlotterRow
+                key={p.symbol}
+                p={p}
+                onTradeClick={onTradeClick}
+                handleKill={handleKill}
+                isKilling={isKilling}
               />
             ))}
             {positions.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-20 text-center">
+                <td colSpan={10} className="px-4 py-20 text-center">
                   <div className="flex flex-col items-center gap-4">
                     <Activity className={cn("w-5 h-5 opacity-20", accentColor)} />
                     <span className="text-[8px] text-muted-foreground/20 font-mono font-black uppercase tracking-[0.5em] italic">ZERO_SIGNALS_DETECTED</span>

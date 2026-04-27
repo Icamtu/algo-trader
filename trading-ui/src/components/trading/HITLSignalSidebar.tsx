@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Bell, 
-  Check, 
-  X, 
-  ShieldCheck, 
-  Zap, 
-  Clock, 
+import {
+  Bell,
+  Check,
+  X,
+  ShieldCheck,
+  Zap,
+  Clock,
   Brain,
   TrendingUp,
   TrendingDown,
@@ -19,6 +19,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useWebSocket } from '@/hooks/useWebSocket';
+import { CONFIG } from '@/lib/config';
 
 interface Signal {
   id: number;
@@ -49,7 +50,9 @@ export const HITLSignalSidebar = ({ onSelectSignal, selectedSignalId }: HITLSign
 
   const fetchSignals = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || "http://localhost:18788"}/api/v1/hitl/signals`);
+      const response = await fetch(`${CONFIG.API_BASE_URL}/api/v1/hitl/signals`, {
+        headers: { 'apikey': CONFIG.API_KEY }
+      });
       const result = await response.json();
       if (result.status === 'success') {
         const data = result.data || [];
@@ -79,14 +82,14 @@ export const HITLSignalSidebar = ({ onSelectSignal, selectedSignalId }: HITLSign
       const newSignal = lastMessage.payload as Signal;
       setSignals(prev => {
         if (prev.some(s => s.id === newSignal.id)) return prev;
-        
+
         if (newSignal.conviction > 0.8) {
           toast.warning("URGENT: High Conviction Signal", {
             description: `${newSignal.symbol} ${newSignal.action} @ ${newSignal.price}`,
             icon: <Zap className="w-4 h-4 text-yellow-500 animate-pulse" />
           });
         }
-        
+
         const updated = [newSignal, ...prev];
         // If this is the only signal, select it
         if (updated.length === 1 && onSelectSignal) {
@@ -113,11 +116,11 @@ export const HITLSignalSidebar = ({ onSelectSignal, selectedSignalId }: HITLSign
   const handleApprove = async (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || "http://localhost:18788"}/api/v1/hitl/approve`, {
+      const response = await fetch(`${CONFIG.API_BASE_URL}/api/v1/hitl/approve`, {
         method: 'POST',
-        headers: { 
+        headers: {
             'Content-Type': 'application/json',
-            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || ""
+            'apikey': CONFIG.API_KEY
         },
         body: JSON.stringify({ id })
       });
@@ -136,11 +139,11 @@ export const HITLSignalSidebar = ({ onSelectSignal, selectedSignalId }: HITLSign
   const handleReject = async (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
     try {
-      await fetch(`${import.meta.env.VITE_API_BASE_URL || "http://localhost:18788"}/api/v1/hitl/reject`, {
+      await fetch(`${CONFIG.API_BASE_URL}/api/v1/hitl/reject`, {
         method: 'POST',
-        headers: { 
+        headers: {
             'Content-Type': 'application/json',
-            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || ""
+            'apikey': CONFIG.API_KEY
         },
         body: JSON.stringify({ id, reason: 'Manual Rejection' })
       });
@@ -197,16 +200,16 @@ export const HITLSignalSidebar = ({ onSelectSignal, selectedSignalId }: HITLSign
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 pt-2">
-                       <Button 
-                        size="sm" 
-                        variant="outline" 
+                       <Button
+                        size="sm"
+                        variant="outline"
                         className="h-7 text-[9px] font-bold border-red-500/20 text-red-400 hover:bg-red-500/20 bg-red-500/5"
                         onClick={(e) => handleReject(e, signal.id)}
                       >
                          REJECT
                       </Button>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         className="h-7 text-[9px] font-black bg-primary text-black hover:bg-white transition-all shadow-lg shadow-primary/20"
                         onClick={(e) => handleApprove(e, signal.id)}
                       >
@@ -218,7 +221,7 @@ export const HITLSignalSidebar = ({ onSelectSignal, selectedSignalId }: HITLSign
               </motion.div>
             ))}
           </AnimatePresence>
-          
+
           {signals.length === 0 && !loading && (
             <div className="flex flex-col items-center justify-center py-20 text-center opacity-20">
               <ShieldCheck className="w-10 h-10 mb-2 stroke-[1px]" />
@@ -227,7 +230,7 @@ export const HITLSignalSidebar = ({ onSelectSignal, selectedSignalId }: HITLSign
           )}
         </div>
       </ScrollArea>
-      
+
       <div className="p-3 border-t bg-black/40 flex items-center justify-between font-mono text-[8px]">
         <div className="flex items-center gap-1.5">
           <Clock className="w-3 h-3 text-muted-foreground" />

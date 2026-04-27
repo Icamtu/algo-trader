@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useAether } from "@/contexts/AetherContext";
 import { algoApi } from "@/features/openalgo/api/client";
 import { X, Plus, GripVertical, Clock, GitBranch, ChevronRight, ChevronDown, Layers, Play, Pause, Trash2, Copy, Tag, History, CheckCircle2, Circle, ArrowUpDown, Search, MoreHorizontal, Sparkles } from "lucide-react";
 
@@ -85,7 +86,7 @@ const versionHistory: VersionEntry[] = [
 ];
 
 const universeSymbols = [
-  "NIFTY 50", "NIFTY BANK", "RELIANCE", "HDFCBANK", "INFY", "TCS", 
+  "NIFTY 50", "NIFTY BANK", "RELIANCE", "HDFCBANK", "INFY", "TCS",
   "ICICIBANK", "SBIN", "BHARTIARTL", "ITC", "KOTAKBANK", "LT"
 ];
 
@@ -97,6 +98,7 @@ const langColors: Record<string, string> = {
 
 // --- Component ---
 export function ScriptGroupPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const { tickerSymbols } = useAether();
   const [groups, setGroups] = useState<ScriptGroup[]>(initialGroups);
   const [selectedScript, setSelectedScript] = useState<Script | null>(initialGroups[0].scripts[0]);
   const [activeView, setActiveView] = useState<"scripts" | "versions" | "assign">("scripts");
@@ -428,7 +430,7 @@ export function ScriptGroupPanel({ isOpen, onClose }: { isOpen: boolean; onClose
                         </div>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                        {universeSymbols.map((sym) => {
+                        {(tickerSymbols.length > 0 ? tickerSymbols : universeSymbols).map((sym) => {
                           const isAssigned = selectedScript.assignedStrategies.includes(sym);
                           return (
                             <button
@@ -446,7 +448,7 @@ export function ScriptGroupPanel({ isOpen, onClose }: { isOpen: boolean; onClose
                           );
                         })}
                       </div>
-                      
+
                       {/* Empty state visual when few items selected */}
                       {selectedScript.assignedStrategies.length === 0 && (
                         <div className="mt-8 text-center p-8 border border-dashed border-border/50 rounded-xl">

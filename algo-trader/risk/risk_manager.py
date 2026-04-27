@@ -78,6 +78,12 @@ class RiskManager:
         self.risk_per_trade_inr = float(
             risk_per_trade or os.getenv("RISK_PER_TRADE_INR", 500)
         )
+        self.strategy_max_daily_loss = float(
+            os.getenv("RISK_STRATEGY_DAILY_LOSS", 10_000)
+        )
+        self.max_symbol_notional = float(
+            os.getenv("RISK_MAX_SYMBOL_NOTIONAL", 200_000)
+        )
 
         # 2. Override with persistent settings from DB (Priority 2: User Settings)
         try:
@@ -90,6 +96,8 @@ class RiskManager:
             if "max_daily_trades" in persistent: self.max_daily_trades = int(persistent["max_daily_trades"])
             if "max_daily_loss" in persistent: self.max_daily_loss = float(persistent["max_daily_loss"])
             if "risk_per_trade_inr" in persistent: self.risk_per_trade_inr = float(persistent["risk_per_trade_inr"])
+            if "strategy_max_daily_loss" in persistent: self.strategy_max_daily_loss = float(persistent["strategy_max_daily_loss"])
+            if "max_symbol_notional" in persistent: self.max_symbol_notional = float(persistent["max_symbol_notional"])
         except Exception as e:
             logger.error(f"RiskManager: Could not load persistent settings: {e}")
 
@@ -97,20 +105,22 @@ class RiskManager:
         self._today: date = date.today()
         self._daily_trades: int = 0
         self._daily_realised_loss: float = 0.0
+        self._strategy_daily_realised_loss: Dict[str, float] = {}
+        self._daily_charges: float = 0.0
         self._open_symbol_count: int = 0  # updated externally via update_state()
         self._breached_strategies: set = set() # Track strategies that hit kill-switches
         self.global_halt: bool = False # Portfolio-wide emergency freeze
 
         logger.info(
             "RiskManager initialised — max_qty=%d max_notional=%.0f max_pos_qty=%d "
-            "max_positions=%d max_daily_trades=%d max_daily_loss=%.0f risk_per_trade=%.0f",
+            "max_positions=%d max_daily_trades=%d max_daily_loss=%.0f strategy_max_loss=%.0f",
             self.max_order_quantity,
             self.max_order_notional,
             self.max_position_quantity_per_symbol,
             self.max_open_positions,
             self.max_daily_trades,
             self.max_daily_loss,
-            self.risk_per_trade_inr,
+            self.strategy_max_daily_loss
         )
 
     # ------------------------------------------------------------------
@@ -124,13 +134,22 @@ class RiskManager:
             self._today = today
             self._daily_trades = 0
             self._daily_realised_loss = 0.0
+            self._strategy_daily_realised_loss = {}
+            self._daily_charges = 0.0
 
-    def record_trade(self, pnl: float = 0.0):
+    def record_trade(self, strategy_id: str = "default", pnl: float = 0.0, charges: float = 0.0):
         """Call after every filled order to maintain daily counters."""
         self._maybe_reset_daily()
         self._daily_trades += 1
+        self._daily_charges += charges
         if pnl < 0:
-            self._daily_realised_loss += abs(pnl)
+            loss = abs(pnl)
+            self._daily_realised_loss += loss
+
+            # Strategy-level loss tracking
+            if strategy_id not in self._strategy_daily_realised_loss:
+                self._strategy_daily_realised_loss[strategy_id] = 0.0
+            self._strategy_daily_realised_loss[strategy_id] += loss
 
     def update_open_positions(self, count: int):
         """Sync the number of distinct open position symbols."""
@@ -240,6 +259,24 @@ class RiskManager:
                 f">= limit ₹{self.max_daily_loss:,.0f}",
             )
 
+        # 7.5 Strategy-specific Daily Loss check
+        strategy_loss = self._strategy_daily_realised_loss.get(strategy_id, 0.0)
+        if strategy_loss >= self.strategy_max_daily_loss:
+            return RiskCheckResult(
+                False,
+                f"strategy '{strategy_id}' daily loss limit reached (₹{strategy_loss:,.0f} >= ₹{self.strategy_max_daily_loss:,.0f})"
+            )
+
+        # 7.6 Symbol Notional Concentration check
+        if price > 0:
+            current_notional = abs(current_position) * price
+            new_notional = projected * price
+            if new_notional > self.max_symbol_notional:
+                return RiskCheckResult(
+                    False,
+                    f"symbol concentration breach: {symbol} projected notional ₹{new_notional:,.0f} exceeds max ₹{self.max_symbol_notional:,.0f}"
+                )
+
         # 8. MIS Time Check
         if product.upper() == "MIS" and not self.is_mis_allowed():
             return RiskCheckResult(
@@ -263,11 +300,14 @@ class RiskManager:
             "max_order_notional": self.max_order_notional,
             "max_position_qty": self.max_position_quantity_per_symbol,
             "global_halt": self.global_halt,
+            "strategy_max_loss": self.strategy_max_daily_loss,
+            "max_symbol_notional": self.max_symbol_notional,
             "daily_loss_pct": (
                 round(self._daily_realised_loss / self.max_daily_loss * 100, 1)
                 if self.max_daily_loss
                 else 0
             ),
+            "daily_charges": round(self._daily_charges, 2),
         }
 
     def update_limits(self, updates: Dict[str, Any]):

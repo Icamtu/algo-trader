@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronsUpDown, RefreshCw, BarChart3, Database, Activity } from 'lucide-react'
+import { Check, ChevronsUpDown, RefreshCw, BarChart3, Database, Activity, Zap, TrendingUp, Shield, BarChart, Target, Clock } from 'lucide-react'
+import Plotly from 'plotly.js-dist-min'
+import createPlotlyComponent from 'react-plotly.js/factory'
 import type * as PlotlyTypes from 'plotly.js'
 import { useSupportedExchanges } from '@/hooks/useSupportedExchanges'
 import { useThemeStore } from '@/stores/themeStore'
@@ -25,8 +27,24 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
-import Plot from 'react-plotly.js'
 import { cn } from '@/lib/utils'
+import { VirtualizedDataTable, type ColumnDefinition } from '../components/VirtualizedDataTable'
+import { IndustrialValue } from '@/components/trading/IndustrialValue'
+
+const Plot = createPlotlyComponent(Plotly)
+
+const PageLoader = ({ message = "INITIALIZING_ALPHA_SCAN" }: { message?: string }) => (
+  <div className="h-[600px] flex flex-col items-center justify-center p-20 text-center space-y-4">
+    <div className="relative">
+      <Activity className="h-12 w-12 text-rose-500 animate-pulse" />
+      <div className="absolute inset-0 h-12 w-12 border-2 border-rose-500/20 rounded-full animate-ping" />
+    </div>
+    <div className="space-y-1">
+      <div className="text-[11px] font-mono font-black text-rose-500 tracking-[0.4em] uppercase animate-pulse">{message}</div>
+      <div className="text-[9px] font-mono text-muted-foreground/40 uppercase tracking-[0.2em]">Synchronizing_Gamma_Telemetry...</div>
+    </div>
+  </div>
+)
 
 const AUTO_REFRESH_INTERVAL = 30000
 
@@ -51,250 +69,188 @@ export default function GEXDashboardPage() {
   const { toast } = useToast()
   const { appMode } = useThemeStore()
   const { fnoExchanges, defaultFnoExchange, defaultUnderlyings } = useSupportedExchanges()
-  const isDark = true // AetherDesk is primarily dark themed
 
-  const [selectedExchange, setSelectedExchange] = useState(defaultFnoExchange)
-  const [underlyings, setUnderlyings] = useState<string[]>(defaultUnderlyings[defaultFnoExchange] || [])
-  const [underlyingOpen, setUnderlyingOpen] = useState(false)
-  const [selectedUnderlying, setSelectedUnderlying] = useState(defaultUnderlyings[defaultFnoExchange]?.[0] || '')
-  const [expiries, setExpiries] = useState<string[]>([])
-  const [selectedExpiry, setSelectedExpiry] = useState('')
+  const [selectedExchange, setSelectedExchange] = useState<string>('')
+  const [selectedUnderlying, setSelectedUnderlying] = useState<string>('')
+  const [selectedExpiry, setSelectedExpiry] = useState<string>('')
+  const [expiryOptions, setExpiryOptions] = useState<string[]>([])
   const [gexData, setGexData] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [autoRefresh, setAutoRefresh] = useState(false)
-  const requestIdRef = useRef(0)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const { mode } = useAppModeStore()
-  const isAD = mode === 'AD'
-  const primaryColorClass = isAD ? "text-primary text-amber-500" : "text-teal-500"
-  const accentBorderClass = isAD ? "border-primary/20" : "border-teal-500/20"
-  const accentBgClass = isAD ? "bg-primary/5" : "bg-teal-500/5"
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+
+  const autoRefreshRef = useRef<boolean>(true)
+  const refreshTimer = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
-    setSelectedExchange((prev) =>
-      prev && fnoExchanges.some((ex) => ex.value === prev) ? prev : defaultFnoExchange
-    )
-  }, [defaultFnoExchange, fnoExchanges])
+    if (fnoExchanges.length > 0 && !selectedExchange) {
+      setSelectedExchange(defaultFnoExchange)
+    }
+  }, [fnoExchanges, defaultFnoExchange, selectedExchange])
+
+  const underlyings = useMemo(() => {
+    if (!selectedExchange) return []
+    return defaultUnderlyings[selectedExchange] || []
+  }, [selectedExchange, defaultUnderlyings])
 
   useEffect(() => {
-    const defaults = defaultUnderlyings[selectedExchange] || []
-    setUnderlyings(defaults)
-    setSelectedUnderlying(defaults[0] || '')
-    setExpiries([])
-    setSelectedExpiry('')
-    setGexData(null)
+    if (underlyings.length > 0 && !selectedUnderlying) {
+      setSelectedUnderlying(underlyings[0])
+    }
+  }, [underlyings, selectedUnderlying])
 
-    tradingService.getUnderlyings(selectedExchange).then((res) => {
-      if (res.status === 'success' && res.underlyings.length > 0) {
-        setUnderlyings(res.underlyings)
-        if (!res.underlyings.includes(defaults[0])) {
-          setSelectedUnderlying(res.underlyings[0])
-        }
-      }
-    }).catch(() => toast({ variant: 'destructive', title: 'FAULT::ASSET_LOAD', description: 'Failed to synchronize underlying assets.' }))
-  }, [selectedExchange])
-
-  useEffect(() => {
-    if (!selectedUnderlying) return
-    setExpiries([])
-    setSelectedExpiry('')
-    setGexData(null)
-
-    tradingService.getExpiries(selectedExchange, selectedUnderlying).then((res) => {
-      if (res.status === 'success' && res.expiries.length > 0) {
-        setExpiries(res.expiries)
-        setSelectedExpiry(res.expiries[0])
-      }
-    }).catch(() => toast({ variant: 'destructive', title: 'FAULT::EXPIRY_LOAD', description: 'Failed to synchronize expiry dates.' }))
-  }, [selectedUnderlying, selectedExchange])
-
-  const fetchGEXData = useCallback(async () => {
-    if (!selectedExpiry) return
-    const requestId = ++requestIdRef.current
-    setIsLoading(true)
+  const fetchExpiries = useCallback(async (exchange: string, symbol: string) => {
+    if (!exchange || !symbol) return
     try {
+      const response = await tradingService.getExpiries(exchange, symbol)
+      const expiries = response.expiries || []
+      setExpiryOptions(expiries)
+      if (expiries.length > 0) {
+        setSelectedExpiry(expiries[0])
+      }
+    } catch (error) {
+      console.error('Failed to fetch expiries:', error)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (selectedExchange && selectedUnderlying) {
+      fetchExpiries(selectedExchange, selectedUnderlying)
+    }
+  }, [selectedExchange, selectedUnderlying, fetchExpiries])
+
+  const fetchGEX = useCallback(async (force = false) => {
+    if (!selectedExchange || !selectedUnderlying || !selectedExpiry) return
+
+    if (force) setIsRefreshing(true)
+    else setIsLoading(true)
+
+    try {
+      const apiExpiry = convertExpiryForAPI(selectedExpiry)
       const response = await tradingService.getGEXData({
-        underlying: selectedUnderlying,
         exchange: selectedExchange,
-        expiry_date: convertExpiryForAPI(selectedExpiry),
+        underlying: selectedUnderlying,
+        expiry_date: apiExpiry
       })
-      if (requestIdRef.current !== requestId) return
-      if (response.status === 'success') {
+
+      if (response && response.data) {
         setGexData(response)
-      } else {
-        toast({ variant: 'destructive', title: 'DATA_FAULT', description: response.message || 'Failed to fetch GEX telemetry.' })
+        setLastUpdated(new Date())
       }
-    } catch {
-      if (requestIdRef.current !== requestId) return
-      toast({ variant: 'destructive', title: 'WRITE_FAULT', description: 'Failed to connect to GEX telemetry node.' })
+    } catch (error) {
+      console.error('Failed to fetch GEX:', error)
     } finally {
-      if (requestIdRef.current === requestId) setIsLoading(false)
+      setIsLoading(false)
+      setIsRefreshing(false)
     }
-  }, [selectedUnderlying, selectedExpiry, selectedExchange])
+  }, [selectedExchange, selectedUnderlying, selectedExpiry])
 
   useEffect(() => {
-    if (selectedExpiry) fetchGEXData()
-  }, [selectedExpiry, fetchGEXData])
+    fetchGEX()
+  }, [fetchGEX])
 
   useEffect(() => {
-    if (autoRefresh && selectedExpiry) {
-      intervalRef.current = setInterval(fetchGEXData, AUTO_REFRESH_INTERVAL)
+    if (refreshTimer.current) clearInterval(refreshTimer.current)
+    refreshTimer.current = setInterval(() => {
+      if (autoRefreshRef.current) fetchGEX(true)
+    }, AUTO_REFRESH_INTERVAL)
+    return () => { if (refreshTimer.current) clearInterval(refreshTimer.current) }
+  }, [fetchGEX])
+
+  const totals = useMemo(() => gexData?.summary || null, [gexData])
+
+  const gexPlot = useMemo(() => {
+    if (!gexData || !gexData.data) return { data: [], layout: {} }
+    const levels = gexData.data.map((d: any) => d.strike)
+    const netGex = gexData.data.map((d: any) => d.netGex)
+    const spot = gexData.spot_price
+
+    return {
+      data: [
+        {
+          x: levels,
+          y: netGex,
+          type: 'bar',
+          name: 'Net GEX',
+          marker: {
+            color: netGex.map((val: number) => val >= 0 ? '#10b981' : '#f43f5e'),
+          },
+        } as PlotlyTypes.Data
+      ],
+      layout: {
+        template: 'plotly_dark' as any,
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        barmode: 'group' as const,
+        margin: { t: 30, r: 10, b: 40, l: 50 },
+        height: undefined,
+        width: undefined,
+        autosize: true,
+        showlegend: true,
+        legend: { x: 0, y: 1.1, orientation: 'h' as const, font: { size: 10 } },
+        xaxis: {
+          gridcolor: 'rgba(255,255,255,0.05)',
+          title: { text: "STRIKE_PRICE", font: { family: 'JetBrains Mono, monospace', size: 10 } },
+          zerolinecolor: 'rgba(255,255,255,0.1)',
+          tickfont: { size: 9 }
+        },
+        yaxis: {
+          gridcolor: 'rgba(255,255,255,0.05)',
+          title: { text: "GEX_INTENSITY", font: { family: 'JetBrains Mono, monospace', size: 10 } },
+          zerolinecolor: 'rgba(255,255,255,0.1)',
+          tickfont: { size: 9 }
+        },
+        shapes: spot ? [
+          {
+            type: 'line' as const,
+            x0: spot,
+            x1: spot,
+            y0: 0,
+            y1: 1,
+            yref: 'paper',
+            line: { color: '#fbbf24', width: 2, dash: 'dash' }
+          }
+        ] as Partial<PlotlyTypes.Shape>[] : []
+      } as Partial<PlotlyTypes.Layout>
     }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-    }
-  }, [autoRefresh, fetchGEXData, selectedExpiry])
+  }, [gexData])
 
-  const themeColors = useMemo(() => ({
-    bg: 'rgba(0,0,0,0)',
-    paper: 'rgba(0,0,0,0)',
-    text: '#ffffff',
-    grid: 'rgba(255,255,255,0.05)',
-    ceBar: '#f43f5e',
-    peBar: '#10b981',
-    positiveGex: '#10b981',
-    negativeGex: isAD ? '#f59e0b' : '#f43f5e',
-    atmLine: isAD ? '#f59e0b' : '#2dd4bf',
-    hoverBg: '#0f172a',
-    hoverFont: '#ffffff',
-    hoverBorder: isAD ? 'rgba(255,176,0,0.5)' : 'rgba(20,184,166,0.5)', 
-  }), [isAD])
-
-  const plotConfig: Partial<PlotlyTypes.Config> = {
-    displayModeBar: false,
-    responsive: true,
-  }
-
-  const oiWallsPlot = useMemo(() => {
-    if (!gexData?.chain) return { data: [], layout: {} }
-    const lotSize = gexData.lot_size || 1
-    const chain = gexData.chain
-    const xIndices = chain.map((_, i) => i)
-    const tickLabels = chain.map((item: any) => item.strike.toString())
-    
-    const data: PlotlyTypes.Data[] = [
-      {
-        x: xIndices,
-        y: chain.map((item: any) => Math.round(item.ce_oi / lotSize)),
-        type: 'bar',
-        name: 'CE_OI [LOTS]',
-        marker: { color: themeColors.ceBar },
-      },
-      {
-        x: xIndices,
-        y: chain.map((item: any) => Math.round(item.pe_oi / lotSize)),
-        type: 'bar',
-        name: 'PE_OI [LOTS]',
-        marker: { color: themeColors.peBar },
-      }
-    ]
-
-    const atmIndex = chain.findIndex((item: any) => item.strike === gexData.atm_strike)
-    
-    const layout: Partial<PlotlyTypes.Layout> = {
-      paper_bgcolor: themeColors.paper,
-      plot_bgcolor: themeColors.bg,
-      font: { color: themeColors.text, family: 'JetBrains Mono, monospace', size: 10 },
-      barmode: 'group',
-      bargap: 0.2,
-      showlegend: true,
-      legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.2 },
-      margin: { l: 40, r: 10, t: 20, b: 60 },
-      xaxis: {
-        tickmode: 'array',
-        tickvals: xIndices.filter((_, i) => i % Math.max(1, Math.floor(chain.length/12)) === 0),
-        ticktext: tickLabels.filter((_, i) => i % Math.max(1, Math.floor(chain.length/12)) === 0),
-        gridcolor: themeColors.grid,
-        tickangle: -45,
-      },
-      yaxis: { gridcolor: themeColors.grid },
-      shapes: atmIndex >= 0 ? [{
-        type: 'line', x0: atmIndex, x1: atmIndex, y0: 0, y1: 1, yref: 'paper',
-        line: { color: themeColors.atmLine, width: 2, dash: 'dash' }
-      }] : []
-    }
-    return { data, layout }
-  }, [gexData, themeColors])
-
-  const netGexPlot = useMemo(() => {
-    if (!gexData?.chain) return { data: [], layout: {} }
-    const chain = gexData.chain
-    const xIndices = chain.map((_, i) => i)
-    const netGexValues = chain.map((item: any) => item.net_gex)
-    
-    const data: PlotlyTypes.Data[] = [{
-      x: xIndices,
-      y: netGexValues,
-      type: 'bar',
-      marker: { color: netGexValues.map(v => v >= 0 ? themeColors.positiveGex : themeColors.negativeGex) },
-      name: 'NET_GEX',
-    }]
-
-    const atmIndex = chain.findIndex((item: any) => item.strike === gexData.atm_strike)
-    
-    const layout: Partial<PlotlyTypes.Layout> = {
-      paper_bgcolor: themeColors.paper,
-      plot_bgcolor: themeColors.bg,
-      font: { color: themeColors.text, family: 'JetBrains Mono, monospace', size: 10 },
-      margin: { l: 40, r: 10, t: 20, b: 60 },
-      xaxis: {
-        tickmode: 'array',
-        tickvals: xIndices.filter((_, i) => i % Math.max(1, Math.floor(chain.length/12)) === 0),
-        ticktext: chain.map((item: any) => item.strike.toString()).filter((_, i) => i % Math.max(1, Math.floor(chain.length/12)) === 0),
-        gridcolor: themeColors.grid,
-        tickangle: -45,
-      },
-      yaxis: { gridcolor: themeColors.grid },
-      shapes: atmIndex >= 0 ? [{
-        type: 'line', x0: atmIndex, x1: atmIndex, y0: 0, y1: 1, yref: 'paper',
-        line: { color: themeColors.atmLine, width: 2, dash: 'dash' }
-      }] : []
-    }
-    return { data, layout }
-  }, [gexData, themeColors])
+  if (isLoading && !gexData) return <PageLoader message="MAPPING_GAMMA_LEVELS" />
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">
-        <div className="flex items-center gap-4">
-          <div className={cn("bg-card/20 p-2 border rounded-sm shadow-xl", accentBorderClass)}>
-            <BarChart3 className={cn("h-6 w-6", primaryColorClass)} />
+    <div className="h-full flex flex-col space-y-4 font-mono overflow-y-auto custom-scrollbar bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-slate-900/40 via-background to-background p-4 md:p-6">
+      {/* Header Deck */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 bg-slate-900/60 p-5 border border-white/5 rounded-xl shadow-2xl backdrop-blur-md relative overflow-hidden group">
+        <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-rose-500/40 to-transparent" />
+        <div className="flex flex-col gap-1.5 relative z-10">
+          <div className="flex items-center gap-3">
+             <div className="p-2 bg-rose-500/10 rounded-lg border border-rose-500/20 group-hover:shadow-[0_0_15px_rgba(244,63,94,0.3)] transition-all duration-500">
+                <Activity className="h-6 w-6 text-rose-500 animate-pulse" />
+             </div>
+             <h2 className="text-xl md:text-2xl font-black tracking-tight uppercase bg-clip-text text-transparent bg-gradient-to-br from-white to-white/40">Gamma_Exposure_Kernel</h2>
           </div>
-          <div>
-            <h1 className={cn("text-2xl font-black font-mono tracking-[0.2em] uppercase", primaryColorClass)}>GEX_Dashboard_Kernel</h1>
-            <div className="flex items-center gap-2 mt-1">
-              <Activity className={cn("w-3 h-3 animate-pulse", isAD ? "text-emerald-500" : "text-teal-500")} />
-              <span className="text-[10px] font-mono font-black text-muted-foreground/60 tracking-widest uppercase italic">GAMMA_EXPOSURE // NODE::{selectedUnderlying || 'ASSET_SCAN'}</span>
-            </div>
-          </div>
+          <p className="text-[10px] text-muted-foreground uppercase opacity-60 tracking-[0.2em] font-bold">Real-time Options Feedback // Liquidity Analysis Vector</p>
         </div>
 
-        <div className="flex flex-wrap gap-2 items-center bg-card/20 p-2 border border-border/40 rounded-sm">
-          <Select value={selectedExchange} onValueChange={setSelectedExchange}>
-            <SelectTrigger className="w-24 font-mono text-[11px] font-black h-9 border-border/40 bg-background/50 uppercase">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {fnoExchanges.map(ex => <SelectItem key={ex.value} value={ex.value} className="text-[11px] font-mono font-black">{ex.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-
-          <Popover open={underlyingOpen} onOpenChange={setUnderlyingOpen}>
+        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+          <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="w-36 justify-between h-9 font-mono text-[11px] font-black border-border/40 bg-background/50">
-                {selectedUnderlying || 'ASSET_ID'}
-                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-40" />
+              <Button variant="outline" size="sm" className="h-10 border-white/10 font-bold tracking-tight bg-white/5 hover:bg-white/10 flex-1 lg:flex-none">
+                <BarChart3 className="mr-2 h-4 w-4 text-rose-400" />
+                {selectedUnderlying || "Select Asset"}
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-48 p-0" align="start">
-              <Command className="bg-background">
-                <CommandInput placeholder="Search ticker..." className="font-mono text-xs" />
-                <CommandList>
-                  <CommandEmpty className="p-4 text-[10px] font-mono uppercase text-muted-foreground/40">Not found</CommandEmpty>
-                  <CommandGroup>
-                    {underlyings.map((u) => (
-                      <CommandItem key={u} value={u} onSelect={() => { setSelectedUnderlying(u); setUnderlyingOpen(false); }} className="font-mono text-[11px] font-black">
-                        <Check className={cn('mr-2 h-3 w-3', selectedUnderlying === u ? 'opacity-100' : 'opacity-0')} /> {u}
+            <PopoverContent className="w-[240px] p-0 border-white/10 bg-slate-950 shadow-2xl" align="end">
+              <Command className="bg-transparent">
+                <CommandInput placeholder="Filter assets..." className="h-10 border-none bg-transparent" />
+                <CommandList className="max-h-[300px]">
+                  <CommandEmpty>No assets found.</CommandEmpty>
+                  <CommandGroup heading="Supported Underlyings">
+                    {underlyings.map(u => (
+                      <CommandItem key={u} onSelect={() => setSelectedUnderlying(u)} className="cursor-pointer hover:bg-white/5">
+                        <Check className={cn("mr-2 h-4 w-4 text-rose-500", selectedUnderlying === u ? "opacity-100" : "opacity-0")} />
+                        <span className="font-mono text-xs font-bold uppercase">{u}</span>
                       </CommandItem>
                     ))}
                   </CommandGroup>
@@ -304,114 +260,122 @@ export default function GEXDashboardPage() {
           </Popover>
 
           <Select value={selectedExpiry} onValueChange={setSelectedExpiry}>
-            <SelectTrigger className="w-36 font-mono text-[11px] font-black h-9 border-border/40 bg-background/50">
-              <SelectValue placeholder="EXPIRY" />
+            <SelectTrigger className="w-full lg:w-[160px] h-10 border-white/10 font-bold bg-white/5 hover:bg-white/10 flex-1 lg:flex-none">
+              <Clock className="w-4 h-4 mr-2 text-blue-400" />
+              <SelectValue placeholder="Expiry" />
             </SelectTrigger>
-            <SelectContent>
-              {expiries.map(exp => <SelectItem key={exp} value={exp} className="text-[11px] font-mono font-black">{exp}</SelectItem>)}
+            <SelectContent className="border-white/10 bg-slate-950">
+              {expiryOptions.map(exp => (
+                <SelectItem key={exp} value={exp} className="text-xs uppercase font-mono font-bold">{exp}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
-          <div className="h-6 w-px bg-border/40 mx-2" />
-
-          <Button variant={autoRefresh ? 'secondary' : 'outline'} size="sm" onClick={() => setAutoRefresh(!autoRefresh)} className="h-9 font-mono text-[11px] font-black uppercase">
-            {autoRefresh ? 'AUTO_ON' : 'AUTO_OFF'}
-          </Button>
-
-          <Button onClick={fetchGEXData} disabled={isLoading} variant="secondary" className="h-9 font-mono text-[11px] font-black px-4 ml-2 shadow-[0_0_15px_rgba(255,176,0,0.1)]">
-            <RefreshCw className={cn('h-3.5 w-3.5 mr-2', isLoading && 'animate-spin')} /> RE_SYNC
+          <Button variant="ghost" size="icon" className="h-10 w-10 hover:bg-white/10 border border-white/5 rounded-lg" onClick={() => fetchGEX(true)} disabled={isLoading || isRefreshing}>
+            <RefreshCw className={cn("h-4 w-4 transition-all duration-700", isRefreshing && "animate-spin text-rose-500")} />
           </Button>
         </div>
       </div>
 
-       {gexData && (
-        <div className="flex flex-wrap gap-3">
-          <Badge className={cn("bg-card/40 border-primary/20 font-mono text-[10px] px-3 py-1", primaryColorClass)}>SPOT::{gexData.spot_price?.toFixed(1)}</Badge>
-          <Badge className="bg-card/40 text-muted-foreground border-border/20 font-mono text-[10px] px-3 py-1 uppercase">LOT_SIZE::{gexData.lot_size}</Badge>
-          <Badge className={cn("bg-card/40 border-emerald-500/20 font-mono text-[10px] px-3 py-1", isAD ? "text-emerald-400" : "text-teal-400")}>PCR::{gexData.pcr_oi?.toFixed(2)}</Badge>
-          <Badge className={cn("bg-card/40 border-primary/20 font-mono text-[10px] px-3 py-1 uppercase", primaryColorClass)}>ATM::{gexData.atm_strike}</Badge>
-          <Badge className="bg-card/40 text-sky-400 border-sky-500/20 font-mono text-[10px] px-3 py-1">NET_GEX::{formatNumber(gexData.total_net_gex || 0)}</Badge>
-        </div>
-      )}
+      {/* Main Content Deck */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Sentiment Side Deck */}
+        <div className="lg:col-span-1 space-y-6">
+          <AetherPanel className="p-5 border-white/5 bg-slate-900/30 backdrop-blur-xl shadow-2xl relative overflow-hidden group h-full">
+             <div className="absolute top-0 right-0 p-4 opacity-[0.02] group-hover:opacity-[0.05] transition-opacity duration-1000">
+                <Target className="w-48 h-48 rotate-12" />
+             </div>
+             <h4 className="text-[10px] font-black text-rose-500/60 uppercase tracking-[0.3em] mb-6 flex items-center gap-2">
+                <Shield className="w-3 h-3" /> Sentiment_Audit
+             </h4>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <AetherPanel className="p-0 border-2 border-border/40 bg-card/10 backdrop-blur-md relative overflow-hidden h-[450px]">
-          <div className="bg-muted/30 px-4 py-2 border-b border-border/40 flex justify-between items-center">
-            <span className={cn("text-[10px] font-black font-mono uppercase tracking-[0.2em]", primaryColorClass)}>OI_Walls_Kernel // Analysis</span>
-            <span className="text-[9px] font-mono text-muted-foreground/30 italic uppercase">LOT_NORMALIZED</span>
-          </div>
-          <div className="p-4 h-[400px]">
-            {isLoading && !gexData ? (
-              <div className="h-full flex items-center justify-center text-[11px] font-mono font-black text-muted-foreground animate-pulse tracking-widest uppercase">Initializing_Telemetry...</div>
-            ) : (
-              <Plot data={oiWallsPlot.data} layout={oiWallsPlot.layout} config={plotConfig} useResizeHandler style={{ width: '100%', height: '380px' }} />
-            )}
-          </div>
-        </AetherPanel>
-
-        <AetherPanel className="p-0 border-2 border-border/40 bg-card/10 backdrop-blur-md relative overflow-hidden h-[450px]">
-          <div className="bg-muted/30 px-4 py-2 border-b border-border/40 flex justify-between items-center">
-            <span className={cn("text-[10px] font-black font-mono uppercase tracking-[0.2em]", primaryColorClass)}>Net_GEX_Exposure // Hypervisor</span>
-            <span className="text-[9px] font-mono text-muted-foreground/30 italic uppercase">GAMMA_WEIGHTED</span>
-          </div>
-          <div className="p-4 h-[400px]">
-             {isLoading && !gexData ? (
-              <div className="h-full flex items-center justify-center text-[11px] font-mono font-black text-muted-foreground animate-pulse tracking-widest uppercase">Initializing_Telemetry...</div>
-            ) : (
-              <Plot data={netGexPlot.data} layout={netGexPlot.layout} config={plotConfig} useResizeHandler style={{ width: '100%', height: '380px' }} />
-            )}
-          </div>
-        </AetherPanel>
-      </div>
-
-      {gexData?.chain && (
-        <AetherPanel className="p-0 border-2 border-border/40 bg-card/10 backdrop-blur-md relative overflow-hidden">
-          <div className="bg-muted/30 px-4 py-2 border-b border-border/40 flex justify-between items-center">
-            <span className="text-[10px] font-black font-mono uppercase tracking-[0.2em] text-primary/60">Strike_Level_Exposure_Grid</span>
-            <div className="flex gap-4">
-               <span className="text-[9px] font-mono text-rose-400 font-bold uppercase tracking-widest">RESISTANCE::MAX_CE</span>
-               <span className="text-[9px] font-mono text-emerald-400 font-bold uppercase tracking-widest">SUPPORT::MAX_PE</span>
+             <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-4">
+              {[
+                { label: "NET_GAMMA", val: totals?.netGex || 0, icon: Activity, col: "text-amber-500", plus: true },
+                { label: "CALL_STRENGTH", val: totals?.callGex || 0, icon: TrendingUp, col: "text-emerald-500", plus: false },
+                { label: "PUT_DEFENSE", val: totals?.putGex || 0, icon: Shield, col: "text-rose-500", plus: false },
+              ].map((item, idx) => (
+                <AetherPanel key={idx} className="p-4 bg-white/5 border-white/5 hover:border-white/10 transition-all group/stat relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-transparent to-white/[0.02]" />
+                  <div className="flex items-center justify-between mb-2 relative z-10">
+                    <span className="text-[8px] font-black text-muted-foreground uppercase tracking-widest">{item.label}</span>
+                    <item.icon className={cn("w-3.5 h-3.5 opacity-30 group-hover/stat:opacity-100 transition-all", item.col)} />
+                  </div>
+                  <IndustrialValue value={item.val} className={cn("text-2xl font-black relative z-10 tracking-tighter", item.col)} showPlus={item.plus} />
+                  <div className="mt-3 h-[2px] bg-white/5 rounded-full overflow-hidden relative z-10 font-mono">
+                    <div className={cn("absolute inset-y-0 left-0 bg-current opacity-20", item.col)} style={{ width: '45%' }} />
+                  </div>
+                </AetherPanel>
+              ))}
             </div>
+
+            <div className="mt-6 p-4 rounded-lg bg-blue-500/5 border border-blue-500/10 hidden lg:block">
+               <div className="flex items-center gap-2 mb-2">
+                  <Badge variant="outline" className="rounded-none bg-blue-500/10 text-blue-400 border-blue-500/20 text-[9px] px-2 py-0">LIVE_TELEMETRY</Badge>
+                  <span className="text-[8px] font-black text-blue-500/60 uppercase tracking-widest italic">System_Logic</span>
+               </div>
+               <p className="text-[9px] leading-relaxed text-muted-foreground/60 italic font-medium">
+                  Gamma exposure indicates the sensitivity of options prices to underlying movements. High GEX clusters often act as dynamic support/resistance zones.
+               </p>
+            </div>
+          </AetherPanel>
+        </div>
+
+        {/* Visual Engine Deck */}
+        <AetherPanel className="lg:col-span-3 flex flex-col p-0 overflow-hidden border-white/5 bg-slate-950/40 backdrop-blur-xl shadow-2xl relative">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 blur-[100px] pointer-events-none" />
+          <div className="p-5 border-b border-white/5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-black/40 backdrop-blur-md relative z-10">
+             <div className="flex flex-wrap items-center gap-3">
+                <Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-[9px] font-black px-2 py-1 flex items-center gap-1.5 uppercase shadow-[0_0_10px_rgba(16,185,129,0.1)]">
+                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                   SPOT: {gexData?.spot_price ? formatNumber(gexData.spot_price) : "---"}
+                </Badge>
+                <Badge variant="outline" className="border-amber-500/20 bg-amber-500/5 text-amber-500 text-[9px] font-black px-2 py-1 flex items-center gap-1.5 uppercase shadow-[0_0_10px_rgba(245,158,11,0.1)]">
+                   <Target className="w-2.5 h-2.5" />
+                   MAX_OI: {gexData?.max_oi_strike || "---"}
+                </Badge>
+             </div>
+             <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-blue-500/40" />
+                <span className="text-[8px] font-black font-mono text-muted-foreground/40 uppercase tracking-widest">LAST_SYNC: {lastUpdated ? lastUpdated.toLocaleTimeString() : "PENDING"}</span>
+             </div>
           </div>
-          <div className="overflow-x-auto max-h-[400px]">
-             <table className="w-full text-[11px] font-mono">
-               <thead className="sticky top-0 bg-background/80 backdrop-blur-md z-10 border-b border-border/60">
-                 <tr>
-                    <th className="text-left py-3 px-6 text-muted-foreground uppercase tracking-widest">Strike</th>
-                    <th className="text-right py-3 px-6 text-rose-400 uppercase tracking-widest">Call GEX</th>
-                    <th className="text-right py-3 px-6 text-emerald-400 uppercase tracking-widest">Put GEX</th>
-                    <th className="text-right py-3 px-6 text-sky-400 uppercase tracking-widest">Net GEX</th>
-                 </tr>
-               </thead>
-               <tbody>
-                  {gexData.chain.map((item: any) => {
-                    const isATM = item.strike === gexData.atm_strike
-                    return (
-                      <tr key={item.strike} className={cn('border-b border-border/20 hover:bg-white/5 transition-colors', isATM && 'bg-primary/10')}>
-                         <td className="py-2.5 px-6 font-black">{item.strike} {isATM && <span className="ml-2 text-[9px] bg-primary text-black px-1">ATM</span>}</td>
-                          <td className="py-2.5 px-6 text-right text-rose-400/80">{item.ce_gex.toFixed(2)}</td>
-                          <td className="py-2.5 px-6 text-right text-emerald-400/80">{item.pe_gex.toFixed(2)}</td>
-                          <td className={cn('py-2.5 px-6 text-right font-black', item.net_gex >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
-                            {item.net_gex >= 0 ? '+' : ''}{item.net_gex.toFixed(2)}
-                          </td>
-                      </tr>
-                    )
-                  })}
-               </tbody>
-                <tfoot className="sticky bottom-0 bg-background/80 backdrop-blur-md border-t-2 border-border/60 font-black">
-                   <tr className="bg-foreground/5">
-                    <td className="py-3 px-6 uppercase tracking-widest text-[10px] font-black">AGGREGATE_TELEMETRY</td>
-                     <td className="py-3 px-6 text-right text-rose-400">{gexData.total_ce_gex?.toFixed(2)}</td>
-                     <td className="py-3 px-6 text-right text-emerald-400">{gexData.total_pe_gex?.toFixed(2)}</td>
-                     <td className={cn('py-3 px-6 text-right text-[12px]', gexData.total_net_gex >= 0 ? 'text-emerald-400' : 'text-rose-400')}>
-                       {gexData.total_net_gex >= 0 ? '+' : ''}{formatNumber(gexData.total_net_gex || 0)}
-                     </td>
-                   </tr>
-                </tfoot>
-             </table>
+
+          <div className="relative flex-1 w-full min-h-[350px] md:min-h-[500px]">
+             {gexData ? (
+                <div className="absolute inset-0 p-4 md:p-6 transition-all duration-500 ease-in-out">
+                  <Plot
+                    className="w-full h-full"
+                    data={gexPlot.data}
+                    layout={gexPlot.layout}
+                    config={{ responsive: true, displayModeBar: false }}
+                    useResizeHandler
+                    style={{ width: '100%', height: '100%' }}
+                  />
+                </div>
+             ) : (
+               <div className="h-full flex flex-col items-center justify-center text-muted-foreground/20 font-black animate-pulse uppercase tracking-[0.8em]">
+                 <Database className="w-16 h-16 mb-6 opacity-5 rotate-12" />
+                 NO_TELEMETRY_STREAM
+               </div>
+             )}
+          </div>
+
+          <div className="p-3 border-t border-white/5 bg-foreground/5 flex justify-between items-center px-6">
+             <div className="flex gap-4">
+                <div className="flex items-center gap-1.5">
+                   <div className="w-2 h-2 rounded-sm bg-[#10b981]" />
+                   <span className="text-[7px] font-black uppercase text-muted-foreground tracking-widest italic">Positive_GEX</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                   <div className="w-2 h-2 rounded-sm bg-[#f43f5e]" />
+                   <span className="text-[7px] font-black uppercase text-muted-foreground tracking-widest italic">Negative_GEX</span>
+                </div>
+             </div>
+             <Badge variant="outline" className="text-[7px] border-white/5 opacity-20 font-mono tracking-[0.3em] font-black">KERNEL_V.4.2</Badge>
           </div>
         </AetherPanel>
-      )}
+      </div>
     </div>
   )
 }

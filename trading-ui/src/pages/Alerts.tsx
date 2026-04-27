@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { GlobalHeader } from "@/components/trading/GlobalHeader";
-import { MarketNavbar } from "@/components/trading/MarketNavbar";
 import { RightPanel } from "@/components/trading/RightPanel";
 import { NewOrderModal } from "@/components/trading/NewOrderModal";
 import { Plus, Trash2, BellRing, Mail, MessageSquare, Smartphone, Loader2, Radio } from "lucide-react";
@@ -102,12 +100,10 @@ export default function Alerts() {
   };
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background industrial-grid relative">
+    <div className="h-full flex flex-col overflow-hidden bg-background relative">
       <div className="noise-overlay" />
       <div className="scanline opacity-10" />
-      <GlobalHeader />
-      <MarketNavbar activeTab="/alerts" />
-      
+
       {/* Industrial Sub-Tabs */}
       <div className="flex px-4 bg-card/5 border-b border-border/20 relative z-10">
         <div className="flex items-center gap-3 pr-4 mr-4 border-r border-border/20">
@@ -177,7 +173,7 @@ export default function Alerts() {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-xl mx-auto space-y-4">
               <div className="border border-border/20 bg-card/5 p-6">
                 <h3 className="text-xl font-black font-display uppercase tracking-widest mb-6">Set_Signal</h3>
-                
+
                 <div className="space-y-6">
                   <div>
                     <div className="text-[8px] font-mono font-black text-primary uppercase tracking-[0.3em] mb-2">Signal_Type</div>
@@ -200,17 +196,17 @@ export default function Alerts() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <div className="text-[8px] font-mono font-black text-primary uppercase tracking-[0.3em] mb-2">Symbol</div>
-                      <input 
-                        value={newAlert.symbol} 
-                        onChange={e => setNewAlert({ ...newAlert, symbol: e.target.value.toUpperCase() })} 
-                        className="w-full bg-background border border-border/40 p-2 text-[10px] font-mono font-black text-foreground focus:outline-none focus:border-primary" 
+                      <input
+                        value={newAlert.symbol}
+                        onChange={e => setNewAlert({ ...newAlert, symbol: e.target.value.toUpperCase() })}
+                        className="w-full bg-background border border-border/40 p-2 text-[10px] font-mono font-black text-foreground focus:outline-none focus:border-primary"
                       />
                     </div>
                     <div>
                       <div className="text-[8px] font-mono font-black text-primary uppercase tracking-[0.3em] mb-2">Logic</div>
-                      <select 
-                        value={newAlert.condition} 
-                        onChange={e => setNewAlert({ ...newAlert, condition: e.target.value })} 
+                      <select
+                        value={newAlert.condition}
+                        onChange={e => setNewAlert({ ...newAlert, condition: e.target.value })}
                         className="w-full bg-background border border-border/40 p-2 text-[10px] font-mono font-black text-foreground focus:outline-none focus:border-primary uppercase"
                       >
                         {conditions[newAlert.type].map(c => (<option key={c} value={c}>{c}</option>))}
@@ -221,11 +217,11 @@ export default function Alerts() {
                   <div>
                     <div className="text-[8px] font-mono font-black text-primary uppercase tracking-[0.3em] mb-2">Value</div>
                     <IndustrialValue value={parseFloat(newAlert.value) || 0} className="hidden" />
-                    <input 
+                    <input
                       type="number"
-                      value={newAlert.value} 
-                      onChange={e => setNewAlert({ ...newAlert, value: e.target.value })} 
-                      className="w-full bg-background border border-border/40 p-2 text-[10px] font-mono font-black text-foreground focus:outline-none focus:border-primary" 
+                      value={newAlert.value}
+                      onChange={e => setNewAlert({ ...newAlert, value: e.target.value })}
+                      className="w-full bg-background border border-border/40 p-2 text-[10px] font-mono font-black text-foreground focus:outline-none focus:border-primary"
                     />
                   </div>
 

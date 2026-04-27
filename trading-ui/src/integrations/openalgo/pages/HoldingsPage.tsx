@@ -1,13 +1,14 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { RefreshCw, Download, TrendingUp, TrendingDown, Briefcase, Activity } from 'lucide-react';
 import { AetherPanel } from '@/components/ui/AetherPanel';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { tradingService } from '@/services/tradingService';
 import { useAuthStore } from '@/stores/authStore';
 import { cn } from '@/lib/utils';
 import { useAppModeStore } from '@/stores/appModeStore';
+import { VirtualizedDataTable, type ColumnDefinition } from '../components/VirtualizedDataTable';
+import { IndustrialValue } from '@/components/trading/IndustrialValue';
 
 interface Holding {
   symbol: string;
@@ -30,15 +31,14 @@ export const HoldingsPage: React.FC = () => {
   const isAD = mode === 'AD';
   const primaryColorClass = isAD ? "text-amber-500" : "text-teal-500";
   const accentBorderClass = isAD ? "border-amber-500/20" : "border-teal-500/20";
-  const accentBgClass = isAD ? "bg-amber-500/5" : "bg-teal-500/5";
 
   const fetchHoldings = useCallback(async (showRefresh = false) => {
     if (!apiKey) return;
     if (showRefresh) setIsRefreshing(true);
-    
+
     try {
       const response = await tradingService.getHoldings(apiKey);
-      if (response.status === 'success') {
+      if (response && response.status === 'success') {
         setHoldings(response.data.holdings || []);
         setStats(response.data.statistics);
       }
@@ -56,8 +56,72 @@ export const HoldingsPage: React.FC = () => {
     return () => clearInterval(interval);
   }, [fetchHoldings]);
 
+  const columns = useMemo<ColumnDefinition<Holding>[]>(() => [
+    {
+      key: 'symbol',
+      header: 'Symbol',
+      width: 220,
+      cell: (h) => (
+        <div className="flex flex-col">
+          <span className="font-black font-mono text-[11px] uppercase tracking-wider">{h.symbol}</span>
+          <span className="text-[7px] text-muted-foreground/40 uppercase tracking-widest">{h.exchange}</span>
+        </div>
+      )
+    },
+    {
+      key: 'quantity',
+      header: 'Qty',
+      width: 100,
+      align: 'right',
+      cell: (h) => <span className="font-mono font-bold tabular-nums text-foreground/80">{h.quantity}</span>
+    },
+    {
+      key: 'avg_px',
+      header: 'Avg_Px',
+      width: 100,
+      align: 'right',
+      cell: (h) => <span className="font-mono text-[10px] text-muted-foreground/60 tabular-nums">₹{h.average_price.toFixed(2)}</span>
+    },
+    {
+      key: 'ltp',
+      header: 'LTP',
+      width: 120,
+      align: 'right',
+      cell: (h) => (
+        <IndustrialValue
+          value={h.ltp}
+          decimals={2}
+          prefix="₹"
+          className={cn("text-[11px]", primaryColorClass)}
+        />
+      )
+    },
+    {
+      key: 'pnl',
+      header: 'Net_PnL',
+      width: 120,
+      align: 'right',
+      cell: (h) => (
+        <span className={cn("font-mono font-black tabular-nums italic text-[11px]", (h.pnl || 0) >= 0 ? "text-emerald-500" : "text-rose-500")}>
+          {(h.pnl || 0) >= 0 ? "+" : " " }₹{Math.abs(h.pnl || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </span>
+      )
+    },
+    {
+      key: 'yield',
+      header: 'Yield%',
+      width: 100,
+      align: 'right',
+      cell: (h) => (
+         <span className={cn("font-mono text-[10px] font-black tabular-nums", (h.pnlpercent || 0) >= 0 ? "text-emerald-500" : "text-rose-500")}>
+            {(h.pnlpercent || 0).toFixed(2)}%
+         </span>
+      )
+    }
+  ], [primaryColorClass]);
+
   return (
-    <div className="h-full flex flex-col p-6 space-y-6 bg-background overflow-hidden font-mono">
+    <div className="h-full flex flex-col p-6 space-y-6 overflow-hidden font-mono">
        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className={cn("bg-card/20 p-2 border rounded-sm shadow-xl", accentBorderClass)}>
@@ -79,31 +143,31 @@ export const HoldingsPage: React.FC = () => {
                ₹{stats?.totalholdingvalue?.toLocaleString() || '0'}
             </div>
           </div>
-          <Button 
-            variant="secondary" 
-            onClick={() => fetchHoldings(true)} 
+          <Button
+            variant="secondary"
+            onClick={() => fetchHoldings(true)}
             disabled={isRefreshing}
             className="h-10 font-mono text-[11px] font-black px-4 shadow-[0_0_15px_rgba(255,176,0,0.1)]"
           >
-            {isRefreshing ? <RefreshCw className="h-3.5 w-3.5 mr-2 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-2" />} 
+            {isRefreshing ? <RefreshCw className="h-3.5 w-3.5 mr-2 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-2" />}
             RE_SYNC_VAULT
           </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 shrink-0">
          <AetherPanel className={cn("border-border/10 bg-background/20 group hover:border-emerald-500/20 transition-all", (stats?.totalprofitandloss || 0) >= 0 ? "border-emerald-500/10" : "border-rose-500/10")}>
             <div className="flex justify-between items-start">
                <div className="space-y-1">
                   <div className="micro-label text-muted-foreground/40 italic">Portfolio_Alpha</div>
                   <div className={cn("text-3xl font-black font-mono tracking-tighter", (stats?.totalprofitandloss || 0) >= 0 ? "text-emerald-500" : "text-rose-500")}>
-                     {(stats?.totalprofitandloss || 0) >= 0 ? "+" : ""}{stats?.totalprofitandloss?.toLocaleString() || '0'}
+                     {(stats?.totalprofitandloss || 0) >= 0 ? "+" : "-"}₹{Math.abs(stats?.totalprofitandloss || 0).toLocaleString()}
                   </div>
                </div>
                <Activity className={cn("w-5 h-5 opacity-20", (stats?.totalprofitandloss || 0) >= 0 ? "text-emerald-500" : "text-rose-500")} />
             </div>
          </AetherPanel>
- 
+
          <AetherPanel className={cn("border-border/10 bg-background/20 group hover:border-primary/20 transition-all", (stats?.totalpnlpercentage || 0) >= 0 ? isAD ? "border-primary/10" : "border-teal-500/10" : "border-rose-500/10")}>
             <div className="flex justify-between items-start">
                <div className="space-y-1">
@@ -117,56 +181,24 @@ export const HoldingsPage: React.FC = () => {
          </AetherPanel>
       </div>
 
-      <AetherPanel className={cn("p-0 border-border/10 overflow-hidden bg-background/20", accentBorderClass)}>
-         <div className="p-6 border-b border-border/10 flex justify-between items-center bg-foreground/5">
+      <AetherPanel className={cn("flex-1 min-h-0 flex flex-col p-0 border-border/10 overflow-hidden bg-background/20", accentBorderClass)}>
+         <div className="p-4 border-b border-border/10 flex justify-between items-center bg-foreground/5 shrink-0">
             <div className="micro-label flex items-center gap-2">
                <Download className={cn("w-3.5 h-3.5", primaryColorClass)} /> Vault_Asset_Matrix
             </div>
             <Badge variant="outline" className="text-[7px] font-mono tracking-widest opacity-40 uppercase">V5_COLDINIT_CACHE</Badge>
          </div>
- 
-         <div className="overflow-x-auto">
-            <Table>
-               <TableHeader className="bg-foreground/5">
-                  <TableRow className="border-border/10 hover:bg-transparent uppercase font-mono text-[9px]">
-                     <TableHead className="p-4 font-black">Symbol</TableHead>
-                     <TableHead className="p-4 font-black text-right">Quantity</TableHead>
-                     <TableHead className="p-4 font-black text-right">Avg_Px</TableHead>
-                     <TableHead className="p-4 font-black text-right">LTP</TableHead>
-                     <TableHead className="p-4 font-black text-right">Net_PnL</TableHead>
-                     <TableHead className="p-4 font-black text-right">Yield%</TableHead>
-                  </TableRow>
-               </TableHeader>
-               <TableBody>
-                  {holdings.length === 0 ? (
-                    <TableRow>
-                       <TableCell colSpan={6} className="p-20 text-center opacity-20 italic uppercase tracking-[0.4em] font-mono text-[10px]">NO_VAULT_ASSETS_FOUND</TableCell>
-                    </TableRow>
-                  ) : (
-                    holdings.map((h, idx) => (
-                      <tr key={`${h.symbol}-${idx}`} className={cn("border-b border-border/10 transition-colors group", isAD ? "hover:bg-primary/5" : "hover:bg-teal-500/5")}>
-                         <td className="p-4 font-black font-mono text-[11px]">
-                            <div className="flex flex-col">
-                               <span>{h.symbol}</span>
-                               <span className="text-[7px] text-muted-foreground/40 uppercase tracking-widest">{h.exchange}</span>
-                            </div>
-                         </td>
-                         <td className="p-4 text-right font-mono font-bold tabular-nums text-foreground/80">{h.quantity}</td>
-                         <td className="p-4 text-right font-mono text-[10px] text-muted-foreground/60 tabular-nums">{h.average_price.toFixed(2)}</td>
-                         <td className={cn("p-4 text-right font-mono font-bold tabular-nums", primaryColorClass)}>{h.ltp.toFixed(2)}</td>
-                         <td className={cn("p-4 text-right font-mono font-black tabular-nums italic", h.pnl >= 0 ? "text-emerald-500" : "text-rose-500")}>
-                            {h.pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                         </td>
-                         <td className={cn("p-4 text-right font-mono text-[10px] font-black tabular-nums", h.pnlpercent >= 0 ? "text-emerald-500" : "text-rose-500")}>
-                            {h.pnlpercent?.toFixed(2)}%
-                         </td>
-                      </tr>
-                    ))
-                  )}
-               </TableBody>
-            </Table>
-         </div>
-      </AetherPanel>
+
+         <div className="flex-1 min-h-0 overflow-hidden">
+            <VirtualizedDataTable
+              data={holdings}
+              columns={columns}
+              rowHeight={50}
+              emptyMessage="NO_VAULT_ASSETS_FOUND"
+            />
+          </div>
+       </AetherPanel>
     </div>
   );
 };
+;

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { ShieldCheck, Filter, Download, Activity, AlertTriangle, BarChart3, Users, Eye, Terminal, Search, Calendar, RefreshCw } from 'lucide-react';
 import { AetherPanel } from '@/components/ui/AetherPanel';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { tradingService } from '@/services/tradingService';
 import { cn } from '@/lib/utils';
 import { useAppModeStore } from '@/stores/appModeStore';
+import { VirtualizedDataTable, type ColumnDefinition } from '../components/VirtualizedDataTable';
 
 export const AnalyzerPage: React.FC = () => {
   const { mode } = useAppModeStore();
@@ -56,6 +57,69 @@ export const AnalyzerPage: React.FC = () => {
   const stats = data?.stats || { total_requests: 0, issues: { total: 0 }, symbols: [], sources: [] };
   const requests = data?.requests || [];
 
+  const columns = useMemo<ColumnDefinition<any>[]>(() => [
+    {
+      key: 'timestamp',
+      header: 'Timestamp',
+      width: 180,
+      cell: (req) => <span className="text-muted-foreground/40 italic">{req.timestamp}</span>
+    },
+    {
+      key: 'type',
+      header: 'Type',
+      width: 120,
+      cell: (req) => (
+        <Badge variant="outline" className={cn("text-[8px] uppercase", isAD ? "border-primary/20 text-primary" : "border-teal-500/20 text-teal-500")}>
+          {req.api_type}
+        </Badge>
+      )
+    },
+    {
+      key: 'source',
+      header: 'Source',
+      width: 150,
+      cell: (req) => <span className="opacity-70 italic">{req.source}</span>
+    },
+    {
+      key: 'symbol',
+      header: 'Symbol',
+      width: 150,
+      cell: (req) => <span className="font-black">{req.symbol || 'N/A'}</span>
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 150,
+      cell: (req) => (
+        req.analysis?.issues ? (
+          <div className="flex items-center gap-2 text-rose-500 font-black italic">
+             <AlertTriangle className="w-3 h-3" /> ANOMALY
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-emerald-500 font-black italic">
+             <ShieldCheck className="w-3 h-3" /> VALID
+          </div>
+        )
+      )
+    },
+    {
+      key: 'actions',
+      header: '',
+      width: 120,
+      align: 'right',
+      cell: (req) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => { setSelectedRequest(req); setShowDetails(true); }}
+          className={cn("h-8 border border-border/10 text-[9px] uppercase tracking-widest transition-all", isAD ? "hover:border-primary/50" : "hover:border-teal-500/50")}
+        >
+           <Eye className="w-3.5 h-3.5 mr-2" /> Inspect
+        </Button>
+      )
+    }
+  ], [isAD]);
+
   return (
     <div className="h-full flex flex-col p-6 space-y-6 bg-background overflow-hidden font-mono">
        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -73,12 +137,12 @@ export const AnalyzerPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          <Button 
-            variant="secondary" 
-            onClick={() => fetchData(startDate, endDate)} 
+          <Button
+            variant="secondary"
+            onClick={() => fetchData(startDate, endDate)}
             className="h-10 font-mono text-[11px] font-black px-4 shadow-[0_0_15px_rgba(255,176,0,0.1)]"
           >
-            <RefreshCw className="h-3.5 w-3.5 mr-2" /> 
+            <RefreshCw className="h-3.5 w-3.5 mr-2" />
             RE_SCAN_VECTORS
           </Button>
         </div>
@@ -89,18 +153,18 @@ export const AnalyzerPage: React.FC = () => {
           <form onSubmit={handleFilter} className="flex flex-wrap items-end gap-6">
              <div className="space-y-2">
                 <div className="micro-label flex items-center gap-2"><Calendar className={cn("w-3 h-3", primaryColorClass)}/> START_VECTOR</div>
-                <input 
-                  type="date" 
-                  value={startDate} 
+                <input
+                  type="date"
+                  value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
                   className={cn("w-full bg-background/60 border border-border/10 p-3 font-mono text-[10px] uppercase focus:outline-none h-12 transition-all", isAD ? "text-amber-500 focus:border-amber-500/40" : "text-teal-500 focus:border-teal-500/40")}
                 />
              </div>
              <div className="space-y-2">
                 <div className="micro-label flex items-center gap-2"><Calendar className={cn("w-3 h-3", primaryColorClass)}/> END_VECTOR</div>
-                <input 
-                  type="date" 
-                  value={endDate} 
+                <input
+                  type="date"
+                  value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
                   className={cn("w-full bg-background/60 border border-border/10 p-3 font-mono text-[10px] uppercase focus:outline-none h-12 transition-all", isAD ? "text-amber-500 focus:border-amber-500/40" : "text-teal-500 focus:border-teal-500/40")}
                 />
@@ -138,7 +202,7 @@ export const AnalyzerPage: React.FC = () => {
        </div>
 
        {/* Request Stream */}
-        <AetherPanel className="p-0 border-border/10 overflow-hidden min-h-[600px] flex flex-col bg-background/20">
+        <AetherPanel className="p-0 border-border/10 overflow-hidden min-h-[400px] md:min-h-[600px] flex-1 flex flex-col bg-background/20">
            <div className="p-6 border-b border-border/10 flex justify-between items-center bg-foreground/5">
               <div className="micro-label flex items-center gap-2">
                  <Terminal className={cn("w-3.5 h-3.5", primaryColorClass)} /> Payload_Buffer_Listen
@@ -146,59 +210,14 @@ export const AnalyzerPage: React.FC = () => {
               <Badge variant="outline" className="text-[7px] font-mono tracking-widest opacity-40 uppercase">V4_REALTIME_HOOKS</Badge>
            </div>
 
-          <div className="overflow-x-auto flex-1">
-              <table className="w-full text-left font-mono text-[10px]">
-                 <thead>
-                    <tr className="border-b border-border/10 bg-foreground/5 uppercase tracking-tighter text-muted-foreground/60">
-                       <th className="p-4 font-black">Timestamp</th>
-                       <th className="p-4 font-black">Type</th>
-                       <th className="p-4 font-black">Source</th>
-                       <th className="p-4 font-black">Symbol</th>
-                       <th className="p-4 font-black">Status</th>
-                       <th className="p-4 font-black text-right">Actions</th>
-                    </tr>
-                 </thead>
-                 <tbody>
-                    {requests.map((req: any, i: number) => (
-                      <tr key={i} className={cn("border-b border-border/10 transition-colors group", isAD ? "hover:bg-primary/5" : "hover:bg-teal-500/5")}>
-                         <td className="p-4 text-muted-foreground/40 italic">{req.timestamp}</td>
-                         <td className="p-4">
-                            <Badge variant="outline" className={cn("text-[8px] uppercase", isAD ? "border-primary/20 text-primary" : "border-teal-500/20 text-teal-500")}>{req.api_type}</Badge>
-                         </td>
-                        <td className="p-4 opacity-70 italic">{req.source}</td>
-                        <td className="p-4 font-black">{req.symbol || 'N/A'}</td>
-                         <td className="p-4">
-                            {req.analysis?.issues ? (
-                              <div className="flex items-center gap-2 text-rose-500 font-black italic">
-                                 <AlertTriangle className="w-3 h-3" /> ANOMALY
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-2 text-emerald-500 font-black italic">
-                                 <ShieldCheck className="w-3 h-3" /> VALID
-                              </div>
-                            )}
-                         </td>
-                         <td className="p-4 text-right">
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => { setSelectedRequest(req); setShowDetails(true); }}
-                              className={cn("h-8 border border-border/10 text-[9px] uppercase tracking-widest transition-all", isAD ? "hover:border-primary/50" : "hover:border-teal-500/50")}
-                            >
-                               <Eye className="w-3.5 h-3.5 mr-2" /> Inspect
-                            </Button>
-                         </td>
-                     </tr>
-                   ))}
-                   {requests.length === 0 && (
-                     <tr>
-                        <td colSpan={6} className="p-20 text-center opacity-20 italic uppercase tracking-[0.4em]">NO_PAYLOADS_INTERCEPTED</td>
-                     </tr>
-                   )}
-                </tbody>
-             </table>
-          </div>
-       </AetherPanel>
+           <div className="flex-1 min-h-0 overflow-hidden">
+              <VirtualizedDataTable
+                data={requests}
+                columns={columns}
+                emptyMessage="NO_PAYLOADS_INTERCEPTED"
+              />
+           </div>
+        </AetherPanel>
 
        {/* Detailed Inspection Dialog */}
         <Dialog open={showDetails} onOpenChange={setShowDetails}>
@@ -230,7 +249,7 @@ export const AnalyzerPage: React.FC = () => {
                     </div>
                  </div>
               </div>
-                          <div className="p-4 border-t border-border/10 bg-background/60 flex justify-end">
+                           <div className="p-4 border-t border-border/10 bg-background/60 flex justify-end">
                  <Button onClick={() => setShowDetails(false)} className={cn("font-mono font-black text-[9px] uppercase tracking-widest h-10 px-6 text-black transition-all", isAD ? "bg-primary shadow-[0_0_20px_rgba(255,176,0,0.1)] hover:bg-white" : "bg-teal-500 shadow-[0_0_20px_rgba(20,184,166,0.1)] hover:bg-white")}>
                     Close_Buffer
                  </Button>

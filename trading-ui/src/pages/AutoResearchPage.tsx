@@ -225,9 +225,34 @@ export default function AutoResearchPage() {
           headers: { "Content-Type": "application/json", "Authorization": AUTH() },
           body: JSON.stringify({ strategy_name: currentCode ? undefined : baseStrategy, code: currentCode, symbol, timeframe, days, targets, benchmark: benchmark || undefined })
         });
-        if (!r.ok) throw new Error("Failed to run iteration");
-        const data = await r.json();
-        if (data.error) throw new Error(data.error);
+        if (!r.ok) throw new Error("Failed to start iteration");
+        const initData = await r.json();
+        if (initData.error) throw new Error(initData.error);
+
+        const taskId = initData.task_id;
+        let data: any = null;
+
+        // Polling loop
+        while (true) {
+          await new Promise(resolve => setTimeout(resolve, 5000));
+
+          const pollRes = await fetch(`${CONFIG.API_BASE_URL}/api/v1/autoresearch/status/${taskId}`, {
+            headers: { "Authorization": AUTH() }
+          });
+          if (!pollRes.ok) continue;
+
+          const pollData = await pollRes.json();
+          if (pollData.status === "completed") {
+            data = pollData.result;
+            if (data && data.error) {
+              throw new Error(data.error);
+            }
+            break;
+          } else if (pollData.status === "error") {
+            throw new Error(pollData.error || "Generation failed in background");
+          }
+        }
+
         const iter: Iteration = { id: currentIteration, code: data.new_code || currentCode, metrics: data.metrics, timestamp: new Date().toISOString() };
         setIterations(prev => [...prev, iter]);
         setActiveCode(data.new_code);
@@ -478,15 +503,36 @@ export default function AutoResearchPage() {
                     <div className="text-[10px] text-muted-foreground text-center py-6 italic">No history yet...</div>
                   ) : history.map(item => (
                     <div key={item.id} onClick={() => loadHistoryItem(item.id)}
-                      className="p-2 bg-background/20 border border-border/20 hover:border-primary/40 cursor-pointer rounded transition-all">
-                      <div className="flex justify-between mb-0.5">
-                        <span className="text-[10px] font-semibold truncate max-w-[140px]">{item.id.split('_')[0]}</span>
-                        <span className="text-[8px] text-muted-foreground">{item.id.split('_').slice(-2).join(' ')}</span>
+                      className="p-2 bg-background/20 border border-border/20 hover:border-primary/40 cursor-pointer rounded transition-all group">
+                      <div className="flex justify-between mb-1">
+                        <span className="text-[10px] font-semibold truncate max-w-[140px] group-hover:text-primary transition-colors">{item.id.split('_')[0]}</span>
+                        <span className="text-[8px] text-muted-foreground opacity-60">{item.id.split('_').slice(-2).join(' ')}</span>
                       </div>
-                      <div className="flex gap-1.5 text-[8px]">
-                        <span className="bg-primary/10 text-primary px-1 rounded">{item.symbol}</span>
-                        <span className="bg-white/5 px-1 rounded">{item.timeframe}</span>
-                        {item.metrics && <span className="text-emerald-500 font-mono">{item.metrics.cagr?.toFixed(1)}% CAGR</span>}
+                      <div className="grid grid-cols-2 gap-y-1 gap-x-3 text-[8px]">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="opacity-40 uppercase">CAGR</span>
+                          <span className={`${(item.metrics?.cagr || 0) >= (item.targets?.cagr || targets.cagr) ? 'text-emerald-400' : 'text-red-400'} font-mono`}>
+                            {item.metrics?.cagr?.toFixed(1) || '0.0'}%
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="opacity-40 uppercase">Sharpe</span>
+                          <span className={`${(item.metrics?.sharpe_ratio || 0) >= (item.targets?.sharpe || targets.sharpe) ? 'text-emerald-400' : 'text-red-400'} font-mono`}>
+                            {item.metrics?.sharpe_ratio?.toFixed(2) || '0.00'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="opacity-40 uppercase">Win%</span>
+                          <span className={`${(item.metrics?.win_rate_pct || 0) >= (item.targets?.win_rate || targets.win_rate) ? 'text-emerald-400' : 'text-red-400'} font-mono`}>
+                            {item.metrics?.win_rate_pct?.toFixed(1) || '0.0'}%
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="opacity-40 uppercase">MaxDD</span>
+                          <span className={`${(item.metrics?.max_drawdown_pct || 100) <= (item.targets?.max_dd || targets.max_dd) ? 'text-emerald-400' : 'text-red-400'} font-mono`}>
+                            {item.metrics?.max_drawdown_pct?.toFixed(1) || '0.0'}%
+                          </span>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -529,6 +575,12 @@ export default function AutoResearchPage() {
             )}
 
             <div className="ml-auto flex items-center gap-2">
+              {activeCode && (
+                <Button variant="outline" size="sm" className="h-6 text-[9px] gap-1 border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/40"
+                  onClick={() => setIsSaveVersionOpen(true)}>
+                  <Save className="w-3 h-3" /> Save Evolved
+                </Button>
+              )}
               {isRunning && (
                 <div className="flex items-center gap-1.5">
                   <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />

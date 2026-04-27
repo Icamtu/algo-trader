@@ -15,6 +15,8 @@ export interface Trade {
   status: "filled" | "pending" | "rejected" | "blocked";
   order_id: string | null;
   pnl: number | null;
+  charges?: number;
+  net_pnl?: number;
   mode: "sandbox" | "live";
   created_at: string;
 }
@@ -25,6 +27,8 @@ export interface Position {
   quantity: number;
   average_price: number;
   current_value: number;
+  est_charges?: number;
+  net_pnl?: number;
   metadata?: Record<string, any>;
 }
 
@@ -69,6 +73,7 @@ export interface RiskStatus {
   max_order_notional: number;
   max_position_qty: number;
   daily_loss_pct: number;
+  daily_charges?: number;
   broker_session?: {
     is_healthy: boolean;
     last_check: string | null;
@@ -132,6 +137,30 @@ export interface RiskMatrixResponse {
   status: string;
   matrix: Record<string, StrategyMetrics>;
   count: number;
+}
+
+// ─── Telemetry (from /api/v1/telemetry/*) ──────────────────────────
+export interface TelemetryPnlItem {
+  pnl: number;
+  charges: number;
+  net: number;
+  unrealized?: number;
+}
+
+export interface TelemetryPnlResponse {
+  all_time: TelemetryPnlItem;
+  monthly: TelemetryPnlItem;
+  weekly: TelemetryPnlItem;
+  daily: TelemetryPnlItem;
+  equity_curve: { time: string; value: number }[];
+}
+
+export interface TelemetryPerformanceResponse {
+  sharpe: number;
+  sortino: number;
+  max_drawdown: number;
+  profit_factor: number;
+  total_trades: number;
 }
 
 // ─── System Status (from /api/system/status) ──────────────────────
@@ -259,19 +288,25 @@ export interface BacktestRequest {
   strategy_key: string;
   symbol: string;
   days?: number;
+  slippage?: number;
   candles?: Record<string, unknown>[];
   from_date?: string;
   to_date?: string;
   initial_cash?: number;
+  interval?: string;
 }
 
 export interface BacktestPerformance {
   total_return_pct: number;
   sharpe_ratio: number;
+  sortino_ratio?: number;
   profit_factor: number;
   max_drawdown_pct: number;
   win_rate_pct: number;
-  [key: string]: number;
+  net_profit?: number;
+  gross_profit?: number;
+  total_charges?: number;
+  [key: string]: number | undefined;
 }
 
 export interface BacktestResponse {

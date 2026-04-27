@@ -3,8 +3,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Search, Settings2, Globe, RefreshCw, Radio
 } from "lucide-react";
-import { GlobalHeader } from "@/components/trading/GlobalHeader";
-import { MarketNavbar } from "@/components/trading/MarketNavbar";
 import { algoApi } from "@/features/openalgo/api/client";
 import { BrokerLogo } from "@/components/trading/BrokerLogo";
 import { IndustrialValue } from "@/components/trading/IndustrialValue";
@@ -55,7 +53,7 @@ export default function BrokerRegistry() {
         const data = await algoApi.client("/api/v1/brokers");
         // Enrich data with statuses from system health if available
         const health = await algoApi.getSystemStatus();
-        
+
         setBrokers(data.brokers.map((b: any) => ({
           ...b,
           status: b.active ? "CONNECTED" : "DISCONNECTED",
@@ -71,18 +69,16 @@ export default function BrokerRegistry() {
   }, []);
 
   const filteredBrokers = brokers.filter(b => {
-    const matchesSearch = b.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const matchesSearch = b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           b.id.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter = filterType === "ALL" || b.type.toUpperCase() === filterType;
     return matchesSearch && matchesFilter;
   });
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background industrial-grid relative">
+    <div className="h-full flex flex-col overflow-hidden bg-background relative">
       <div className="noise-overlay" />
       <div className="scanline opacity-10" />
-      <GlobalHeader />
-      <MarketNavbar activeTab="/brokers" />
 
       {/* Industrial Sub-Header */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 bg-primary/5 border-b border-border/20 relative z-10">
@@ -101,16 +97,16 @@ export default function BrokerRegistry() {
         <div className="flex items-center gap-3 w-full md:w-auto">
           <div className="relative flex-1 md:w-64 group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/30 group-focus-within:text-primary transition-colors" />
-            <input 
-              type="text" 
-              placeholder="FILTER_NODES..." 
+            <input
+              type="text"
+              placeholder="FILTER_NODES..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-black/40 border border-border/40 py-2 pl-9 pr-4 text-[9px] font-mono text-primary placeholder:text-muted-foreground/20 focus:outline-none focus:border-primary/40 focus:bg-black/60 transition-all uppercase"
             />
           </div>
-          
-          <select 
+
+          <select
             value={filterType}
             onChange={(e) => setFilterType(e.target.value.toUpperCase())}
             className="bg-black/40 border border-border/40 p-2 text-[9px] font-mono text-primary appearance-none px-4 hover:border-primary/20 transition-all cursor-pointer focus:outline-none"
@@ -137,10 +133,10 @@ export default function BrokerRegistry() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-20">
               {filteredBrokers.map((broker) => (
-                <BrokerCard 
-                  key={broker.id} 
-                  broker={broker} 
-                  onClick={() => setSelectedBroker(broker)} 
+                <BrokerCard
+                  key={broker.id}
+                  broker={broker}
+                  onClick={() => setSelectedBroker(broker)}
                 />
               ))}
             </div>
@@ -152,12 +148,12 @@ export default function BrokerRegistry() {
       <AnimatePresence>
         {selectedBroker && (
           <>
-            <motion.div 
+            <motion.div
                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100]"
                onClick={() => setSelectedBroker(null)}
             />
-            <motion.div 
+            <motion.div
               initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
               className="fixed right-0 top-0 bottom-0 w-[450px] bg-background border-l border-primary/20 p-6 z-[101] shadow-[-10px_0_40px_rgba(0,0,0,0.5)] flex flex-col industrial-grid"
@@ -199,22 +195,22 @@ export default function BrokerRegistry() {
                 <div className="glass-panel p-4 border border-primary/10">
                    <h3 className="text-[10px] font-mono font-black text-muted-foreground/60 uppercase tracking-[0.3em] mb-4">CREDENTIAL_CONFIGURATION</h3>
                    <div className="space-y-4">
-                      <ConfigInput 
-                        label="API_KEY" 
-                        placeholder="REDACTED_SECURE_TOKEN" 
+                      <ConfigInput
+                        label="API_KEY"
+                        placeholder="REDACTED_SECURE_TOKEN"
                         value={config.api_key || ""}
                         onChange={(v) => setConfig(prev => ({...prev, api_key: v}))}
                       />
-                      <ConfigInput 
-                        label="API_SECRET" 
-                        placeholder="••••••••••••••••" 
-                        type="password" 
+                      <ConfigInput
+                        label="API_SECRET"
+                        placeholder="••••••••••••••••"
+                        type="password"
                         value={config.api_secret || ""}
                         onChange={(v) => setConfig(prev => ({...prev, api_secret: v}))}
                       />
-                      <ConfigInput 
-                        label="TOTP_KEY" 
-                        placeholder="ENTER_TOTP_SECRET" 
+                      <ConfigInput
+                        label="TOTP_KEY"
+                        placeholder="ENTER_TOTP_SECRET"
                         value={config.totp_key || ""}
                         onChange={(v) => setConfig(prev => ({...prev, totp_key: v}))}
                       />
@@ -224,7 +220,7 @@ export default function BrokerRegistry() {
               </div>
 
               <div className="pt-6 border-t border-border/10 flex gap-2">
-                 <button 
+                 <button
                   onClick={handleSave}
                   disabled={isSaving}
                   className="flex-1 py-3 bg-primary text-black font-mono font-black text-[10px] uppercase tracking-widest hover:bg-white transition-all shadow-[0_0_20px_rgba(255,176,0,0.3)] disabled:opacity-50"
@@ -246,7 +242,7 @@ export default function BrokerRegistry() {
 function BrokerCard({ broker, onClick }: { broker: Broker, onClick: () => void }) {
   const isConnected = broker.status === "CONNECTED";
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -4, scale: 1.02 }}
@@ -256,7 +252,7 @@ function BrokerCard({ broker, onClick }: { broker: Broker, onClick: () => void }
       <div className="absolute top-0 right-0 w-8 h-8 opacity-5 group-hover:opacity-10 transition-opacity">
         <Globe className="w-full h-full text-foreground" />
       </div>
-      
+
       <div className="flex items-start justify-between mb-4">
         <BrokerLogo id={broker.id} size="md" className="group-hover:border-primary/40 transition-colors" />
         <div className={`px-2 py-0.5 border font-mono font-black text-[7px] uppercase tracking-widest ${isConnected ? "border-secondary/20 text-secondary" : "border-muted-foreground/10 text-muted-foreground/40"}`}>
@@ -306,9 +302,9 @@ function ConfigInput({ label, placeholder, type = "text", value, readOnly, onCha
   return (
     <div className="flex flex-col gap-1.5">
        <label className="text-[8px] font-mono font-black text-primary uppercase tracking-widest ml-1">{label}_NODE</label>
-       <input 
-         type={type} 
-         placeholder={placeholder} 
+       <input
+         type={type}
+         placeholder={placeholder}
          value={value}
          readOnly={readOnly}
          onChange={(e) => onChange?.(e.target.value)}

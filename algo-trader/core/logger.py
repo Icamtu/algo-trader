@@ -52,6 +52,10 @@ def setup_logging():
     file_handler.setFormatter(log_format)
     root_logger.addHandler(file_handler)
 
+    # Silence noisy loggers from dependencies
+    logging.getLogger('websockets').setLevel(logging.WARNING)
+    logging.getLogger('werkzeug').setLevel(logging.WARNING)
+
     logging.info(f"Logging configured with level {log_level_str}")
 
 # Setup logging immediately when this module is imported

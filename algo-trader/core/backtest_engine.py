@@ -46,7 +46,11 @@ class BacktestEngine:
             strategy.analyze_signal = mock_analyze
 
         # 2. Fetch History for ALL strategy symbols
-        symbols_to_fetch = list(set(strategy.symbols + [getattr(strategy, 'market_anchor', "NIFTY 50")]))
+        market_anchor = getattr(strategy, 'market_anchor', "NIFTY 50")
+        if market_anchor == "NIFTY":
+            market_anchor = "NIFTY 50"
+
+        symbols_to_fetch = list(set(strategy.symbols + [market_anchor]))
         all_candles = []
 
         # Parse dates (UI will now pass these explicitly)
@@ -72,9 +76,9 @@ class BacktestEngine:
             for sym in symbols_to_fetch:
                 logger.info(f"Checking data readiness for {sym}...")
                 # We assume NSE for now, but in a production app we'd map this
-                exchange = "NSE" 
+                exchange = "NSE"
                 interval = self.interval.replace("m", "") # Convert 1m to 1
-                
+
                 # Check and wait for data if missing
                 # A more optimized version would check DuckDB range first
                 success = historify_service.check_and_wait_for_data(
@@ -87,27 +91,45 @@ class BacktestEngine:
                 if not success:
                     logger.warning(f"Data sync failed for {sym}. Backtest results may be partial.")
 
+        import pandas as pd
+        import numpy as np
+
         for sym in symbols_to_fetch:
             logger.info(f"Loading history for {sym}...")
-            candles = self.history_manager.get_candles(
+            df = self.history_manager.get_candles_df(
                 sym,
                 interval=self.interval,
                 start_date=start_date.strftime("%Y-%m-%d"),
                 end_date=end_date.strftime("%Y-%m-%d")
             )
-            for c in candles:
-                c['symbol'] = sym
-                # Normalize timestamp
-                ts_val = c.get('timestamp', c.get('time', ''))
-                try:
-                    import pandas as pd
-                    if isinstance(ts_val, (int, float)):
-                        c['_ts'] = ts_val if ts_val > 10**10 else ts_val * 1000 # Guess s vs ms
-                    else:
-                        c['_ts'] = pd.to_datetime(str(ts_val)).timestamp()
-                except:
-                    c['_ts'] = time.time()
-            all_candles.extend(candles)
+
+            if df.empty:
+                continue
+
+            df['symbol'] = sym
+
+            # Identify timestamp column
+            ts_col = 'timestamp' if 'timestamp' in df.columns else ('time' if 'time' in df.columns else None)
+
+            if ts_col:
+                # Convert to numeric, handle s vs ms vs datetime
+                ts_series = pd.to_numeric(df[ts_col], errors='coerce')
+
+                # If numeric conversion failed (likely datetime string), use pd.to_datetime
+                if ts_series.isna().any():
+                    df['_ts'] = pd.to_datetime(df[ts_col]).view('int64') // 10**9
+                else:
+                    # Guess s vs ms: if > 10**10, it's likely ms
+                    df['_ts'] = np.where(ts_series > 10**11, ts_series / 1000, ts_series)
+            else:
+                df['_ts'] = time.time()
+
+            # Filter by date range if necessary (DuckDB might return more)
+            start_ts = start_date.timestamp()
+            end_ts = end_date.timestamp()
+            df = df[(df['_ts'] >= start_ts) & (df['_ts'] <= end_ts)]
+
+            all_candles.extend(df.to_dict('records'))
 
         # 3. Synchronize Ticks (Sort by Timestamp)
         all_candles.sort(key=lambda x: x['_ts'])
@@ -134,10 +156,14 @@ class BacktestEngine:
                 timestamp=ts,
                 raw=candle
             )
-            
+
             # Sync simulation clock with order manager
             self.order_manager.set_sim_time(ts)
-            
+
+            # Update strategy price buffers for indicators
+            if hasattr(strategy, 'update_history'):
+                strategy.update_history(tick)
+
             await strategy.on_tick(tick)
 
         # 5. Finalize
@@ -147,15 +173,16 @@ class BacktestEngine:
         # 6. Calculate Institutional Performance Metrics
         from core.performance import PerformanceCalculator
         trade_logs = self.order_manager.get_trade_log()
-        
+
         calc = PerformanceCalculator(
             trade_logs=trade_logs,
             initial_capital=initial_capital,
-            price_history=price_history
+            price_history=price_history,
+            benchmark_symbol=market_anchor
         )
-        
+
         report = calc.calculate_metrics()
-        
+
         logger.info(f"Backtest Complete. Total Trades: {report.get('total_trades', 0)}")
 
         return {

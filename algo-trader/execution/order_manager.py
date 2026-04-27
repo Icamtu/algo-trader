@@ -12,11 +12,18 @@ Flow for every order:
 
 import asyncio
 import logging
-from typing import Any, Optional
+import time
+from datetime import datetime
+from typing import Any, Optional, Dict
 
+from core.config import settings
 from database.trade_logger import get_trade_logger
 from risk.risk_manager import RiskManager
 from execution.position_manager import PositionManager
+from utils.throttling import AsyncTokenBucket
+from data.timescale_logger import ts_logger
+from services.charges_service import get_charges_service
+from utils.latency_tracker import latency_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -47,11 +54,20 @@ class OrderManager:
         self.telemetry_callback = telemetry_callback
         self.action_manager = action_manager
 
-        # Dual position managers for Sandbox/Live isolation
-        self.live_position_manager = position_manager or PositionManager()
-        self.sandbox_position_manager = PositionManager()
+        # Position Management Delegates (Phase 16: Separate state tracks)
+        self.live_position_manager = position_manager if self.mode == "live" else PositionManager()
+        self.sandbox_position_manager = position_manager if self.mode != "live" else PositionManager()
+
+        # Rate Limiting (Phase 16: Institutional Throttling)
+        self.limiter = AsyncTokenBucket(5, 5)
+
+        self.risk_dispatcher = None
 
         logger.info("OrderManager initialised in %s mode.", self.mode.upper())
+
+    def set_risk_dispatcher(self, dispatcher):
+        """Sets the risk dispatcher for broadcasting updates."""
+        self.risk_dispatcher = dispatcher
 
     def get_position_manager(self, mode: Optional[str] = None) -> PositionManager:
         """Get the specific position manager for a mode."""
@@ -64,6 +80,11 @@ class OrderManager:
     def position_manager(self) -> PositionManager:
         """Get the active position manager based on the default system mode."""
         return self.get_position_manager()
+
+    def set_mode(self, mode: str):
+        """Switch the system mode between 'live' and 'sandbox'."""
+        self.mode = mode.lower()
+        logger.info("OrderManager mode switched to %s.", self.mode.upper())
 
     # ------------------------------------------------------------------
     # Core order placement
@@ -83,153 +104,193 @@ class OrderManager:
         conviction: Optional[float] = None,
         mode: Optional[str] = None,
         **kwargs
-    ):
+    ) -> Dict[str, Any]:
         """
         Place an order with full risk check, broker call, position update,
-        and trade logging.
+        latency tracking, and trade logging.
         """
-        action = action.upper()
-        effective_mode = (mode or self.mode).lower()
-        pm = self.get_position_manager(effective_mode)
+        async with await latency_tracker.measure_async(f"OrderExecution:{symbol}", threshold_ms=10.0):
+            action = action.upper()
+            effective_mode = (mode or self.mode).lower()
+            pm = self.get_position_manager(effective_mode)
 
-        # 1. Risk check
-        current_pos = pm.get_quantity(symbol)
-        risk_result = self.risk_manager.validate_order(
-            symbol=symbol,
-            action=action,
-            quantity=quantity,
-            price=price,
-            current_position=current_pos,
-            strategy_id=strategy_name,
-            product=product,
-        )
-        if not risk_result.allowed:
-            logger.warning(
-                "[%s] ORDER BLOCKED by risk: %s", strategy_name, risk_result.reason
-            )
-            self.trade_logger.log_trade(
-                strategy=strategy_name,
-                symbol=symbol,
-                side=action,
-                quantity=quantity,
-                price=price,
-                status="blocked",
-                ai_reasoning=ai_reasoning,
-                conviction=conviction,
-            )
-            if self.telemetry_callback:
-                asyncio.create_task(self.telemetry_callback("order_rejected", {
-                    "strategy": strategy_name, "symbol": symbol, "action": action, "reason": risk_result.reason
-                }))
-            return {"status": "blocked", "reason": risk_result.reason}
-
-        logger.info(
-            "[%s] >> %s %d %s @ %s [%s/%s]",
-            strategy_name, action, quantity, symbol, order_type, product, exchange,
-        )
-
-        # 1.5 Semi-Auto Gateway Diversion
-        # If the order explicitly requests human approval, divert to Action Center
-        am = self.action_manager
-        if not am:
-            from execution.action_manager import get_action_manager
-            am = get_action_manager()
-
-        # Check if the strategy or request explicitly wants manual gate
-        if getattr(self, 'force_semi_auto', False) or kwargs.get('human_approval') == True:
-            logger.info("[%s] Diverting order to Action Center for approval: %s", strategy_name, symbol)
-            am.queue_for_approval({
-                "strategy": strategy_name,
-                "symbol": symbol,
-                "action": action,
-                "quantity": quantity,
-                "price": price,
-                "price_type": order_type,
-                "product": product,
-                "exchange": exchange,
-                "api_type": "Diverted",
-                "ai_reasoning": ai_reasoning,
-                "conviction": conviction,
-            })
-            return {"status": "success", "message": "Order queued for human approval", "location": "action_center"}
-
-        # 2. Call broker
-        try:
-            response = await asyncio.to_thread(
-                self.client.place_order,
+            # 1. Risk check
+            current_pos = pm.get_quantity(symbol)
+            risk_result = self.risk_manager.validate_order(
                 symbol=symbol,
                 action=action,
                 quantity=quantity,
+                price=price,
+                current_position=current_pos,
+                strategy_id=strategy_name,
                 product=product,
-                order_type=order_type,
-                price=price,
-                exchange=exchange,
-                strategy=strategy_name,
             )
-        except Exception as e:
-            logger.error("[%s] Broker call failed for %s: %s", strategy_name, symbol, e, exc_info=True)
-            self.trade_logger.log_trade(
-                strategy=strategy_name,
-                symbol=symbol,
-                side=action,
-                quantity=quantity,
-                price=price,
-                status="rejected",
-                mode=effective_mode,
-                ai_reasoning=ai_reasoning,
-                conviction=conviction,
+            if not risk_result.allowed:
+                logger.warning(
+                    "[%s] ORDER BLOCKED by risk: %s", strategy_name, risk_result.reason
+                )
+                asyncio.create_task(self.trade_logger.log_trade(
+                    strategy=strategy_name,
+                    symbol=symbol,
+                    side=action,
+                    quantity=quantity,
+                    price=price,
+                    status="blocked",
+                    ai_reasoning=ai_reasoning,
+                    conviction=conviction,
+                ))
+                if self.telemetry_callback:
+                    asyncio.create_task(self.telemetry_callback("order_rejected", {
+                        "strategy": strategy_name, "symbol": symbol, "action": action, "reason": risk_result.reason
+                    }))
+                return {"status": "blocked", "reason": risk_result.reason}
+
+            logger.info(
+                "[%s] >> %s %d %s @ %s [%s/%s]",
+                strategy_name, action, quantity, symbol, order_type, product, exchange,
             )
-            return None
 
-        logger.info("[%s] << Response: %s", strategy_name, response)
+            # 1.5 Semi-Auto Gateway Diversion
+            am = self.action_manager
+            if not am:
+                from execution.action_manager import get_action_manager
+                am = get_action_manager()
 
-        # Determine execution outcome
-        resp_status = (response or {}).get("status", "filled") if response else "rejected"
-        execution_price = price
-        if response and isinstance(response, dict):
-            execution_price = float(response.get("price", price) or price)
-        order_id = (response or {}).get("order_id") if response else None
-
-        is_filled = resp_status not in {"error", "rejected", "blocked"}
-
-        # 3. Log to database (Phase 9: Async Logging for latency)
-        asyncio.create_task(asyncio.to_thread(
-            self.trade_logger.log_trade,
-            strategy=strategy_name,
-            symbol=symbol,
-            side=action,
-            quantity=quantity,
-            price=execution_price,
-            status=resp_status if is_filled else "rejected",
-            order_id=str(order_id) if order_id else None,
-            mode=effective_mode,
-            ai_reasoning=ai_reasoning,
-            conviction=conviction,
-        ))
-
-        # 4. Update in-memory position
-        if is_filled:
-            pm.update(symbol, action, quantity, execution_price)
-            # Sync open position count to risk manager
-            open_positions = sum(
-                1 for p in pm.all_positions().values() if p.quantity != 0
-            )
-            self.risk_manager.update_open_positions(open_positions)
-
-            # 5. Record trade in risk counters
-            self.risk_manager.record_trade(pnl=0.0)  # P&L calculated at close
-
-            if self.telemetry_callback:
-                asyncio.create_task(self.telemetry_callback("trade_filled", {
+            if getattr(self, 'force_semi_auto', False) or kwargs.get('human_approval') == True:
+                logger.info("[%s] Diverting order to Action Center for approval: %s", strategy_name, symbol)
+                am.queue_for_approval({
                     "strategy": strategy_name,
                     "symbol": symbol,
                     "action": action,
                     "quantity": quantity,
-                    "price": execution_price,
-                    "order_id": order_id
-                }))
+                    "price": price,
+                    "price_type": order_type,
+                    "product": product,
+                    "exchange": exchange,
+                    "api_type": "Diverted",
+                    "ai_reasoning": ai_reasoning,
+                    "conviction": conviction,
+                })
+                return {"status": "success", "message": "Order queued for human approval", "location": "action_center"}
 
-        return response
+            # 2. Call broker (WITH RATE LIMITING)
+            start_broker = time.perf_counter()
+            try:
+                # Wait for token before calling broker for Live orders
+                if effective_mode == "live":
+                    await self.limiter.wait()
+
+                response = await asyncio.to_thread(
+                    self.client.place_order,
+                    symbol=symbol,
+                    action=action,
+                    quantity=quantity,
+                    product=product,
+                    order_type=order_type,
+                    price=price,
+                    exchange=exchange,
+                    strategy=strategy_name,
+                )
+                broker_latency = (time.perf_counter() - start_broker) * 1000
+                logger.info(f"[AUDIT] Broker Latency for {symbol} {action}: {broker_latency:.2f}ms")
+            except Exception as e:
+                logger.error("[%s] Broker call failed for %s: %s", strategy_name, symbol, e, exc_info=True)
+                asyncio.create_task(self.trade_logger.log_trade(
+                    strategy=strategy_name,
+                    symbol=symbol,
+                    side=action,
+                    quantity=quantity,
+                    price=price,
+                    status="rejected",
+                    mode=effective_mode,
+                    ai_reasoning=ai_reasoning,
+                    conviction=conviction,
+                ))
+                return {"status": "error", "message": str(e)}
+
+            logger.info("[%s] << Response: %s", strategy_name, response)
+
+            # Determine execution outcome
+            resp_status = (response or {}).get("status", "filled") if response else "rejected"
+            execution_price = price
+            if response and isinstance(response, dict):
+                execution_price = float(response.get("price", price) or price)
+            order_id = (response or {}).get("order_id") if response else None
+
+            is_filled = resp_status not in {"error", "rejected", "blocked"}
+
+            # Phase 16: Ensure Pricing Integrity
+            if is_filled and execution_price == 0.0:
+                try:
+                    quote = await self.get_quote(symbol, exchange)
+                    if quote and isinstance(quote, dict):
+                        broker_ltp = float(quote.get("last_price") or quote.get("lp") or 0.0)
+                        if broker_ltp > 0:
+                            execution_price = broker_ltp
+                            logger.info("[%s] Fallback pricing triggered for %s: %s", strategy_name, symbol, execution_price)
+                except Exception as pe:
+                     logger.warning(f"PLACE_ORDER_PRICING_FALLBACK_FAULT: {pe}")
+
+            # Calculate charges
+            est_charges = 0.0
+            if is_filled:
+                try:
+                    asset_type = "OPTIONS" if any(idx in symbol for idx in ["NIFTY", "BANKNIFTY", "FINNIFTY"]) and any(c.isdigit() for c in symbol) else "EQUITY"
+                    charges_service = get_charges_service()
+                    charge_data = charges_service.calculate(
+                        symbol=symbol,
+                        side=action,
+                        quantity=quantity,
+                        price=execution_price,
+                        product=product,
+                        asset_type=asset_type
+                    )
+                    est_charges = charge_data["total"]
+                except Exception as ce:
+                    logger.warning(f"CHARGE_CALC_FAULT: {ce}")
+
+            # 3. Log to database
+            asyncio.create_task(self.trade_logger.log_trade(
+                strategy=strategy_name,
+                symbol=symbol,
+                side=action,
+                quantity=quantity,
+                price=execution_price,
+                status=resp_status if is_filled else "rejected",
+                order_id=str(order_id) if order_id else None,
+                charges=est_charges,
+                mode=effective_mode,
+                ai_reasoning=ai_reasoning,
+                conviction=conviction,
+            ))
+
+            # 4. Update in-memory position
+            if is_filled:
+                pm.update(symbol, action, quantity, execution_price)
+                open_positions = sum(1 for p in pm.all_positions().values() if p.quantity != 0)
+                self.risk_manager.update_open_positions(open_positions)
+                self.risk_manager.record_trade(pnl=0.0, charges=est_charges)
+
+                if self.telemetry_callback:
+                    telemetry_payload = {
+                        "type": "ORDER_UPDATE",
+                        "status": "filled",
+                        "strategy": strategy_name,
+                        "symbol": symbol,
+                        "action": action,
+                        "quantity": quantity,
+                        "price": execution_price,
+                        "order_id": order_id,
+                        "timestamp": datetime.now().isoformat(),
+                        "meta": {"broker_latency_ms": round(broker_latency, 2)}
+                    }
+                    asyncio.create_task(self.telemetry_callback("trade_filled", telemetry_payload))
+                    asyncio.create_task(self.telemetry_callback("risk_update", self.risk_manager.get_status()))
+
+                    if self.risk_dispatcher:
+                        self.risk_dispatcher.broadcast_risk(self.risk_manager.get_status())
+
+            return response
 
     # ------------------------------------------------------------------
     # Smart order (position-aware, delegates net qty to OpenAlgo)
@@ -304,8 +365,9 @@ class OrderManager:
         product: str = "MIS",
         exchange: str = "NSE",
     ):
-        logger.info("ModifyOrder %s → qty=%d price=%s", order_id, quantity, price)
+        logger.info("ModifyOrder %s \u2192 qty=%d price=%s", order_id, quantity, price)
         try:
+            await self.limiter.wait() # Always limit destructive/modifying actions
             return await asyncio.to_thread(
                 self.client.modify_order,
                 order_id=order_id,
@@ -322,8 +384,9 @@ class OrderManager:
             return None
 
     async def cancel_order(self, order_id: str):
-        logger.info("CancelOrder → %s", order_id)
+        logger.info("CancelOrder \u2192 %s", order_id)
         try:
+            await self.limiter.wait()
             return await asyncio.to_thread(self.client.cancel_order, order_id)
         except Exception as e:
             logger.error("CancelOrder failed: %s", e, exc_info=True)
@@ -395,16 +458,12 @@ class OrderManager:
 
             # 2. Get active positions for THIS strategy
             positions = self.position_manager.all_positions()
-            # Note: PositionManager might and should track strategy metadata
-            # For now, we rely on symbols the strategy is subscribed to if metadata isn't granular per symbol
-            # BUT better to check the underlying trade logs or current position metadata
 
             squared_count = 0
             tasks = []
             for symbol, pos in positions.items():
                 if pos.quantity != 0:
                     # Check if this position belongs to the target strategy
-                    # In this architecture, we check the metadata field if available
                     if getattr(pos, 'metadata', {}).get('strategy_id') == strategy_id or \
                        getattr(pos, 'metadata', {}).get('strategy') == strategy_id:
 
@@ -440,6 +499,33 @@ class OrderManager:
     async def get_positions(self):
         return await asyncio.to_thread(self.client.get_positions)
 
+    async def get_open_positions_dict(self) -> Dict[str, int]:
+        """
+        Fetch broker positions and return as a flat symbol-to-quantity map.
+        Useful for drift detection and dashboard summaries.
+        """
+        resp = await self.get_positions()
+        pos_dict = {}
+
+        # OpenAlgo response format handling
+        data = resp.get("data", []) if isinstance(resp, dict) else resp
+        if not isinstance(data, list):
+            data = []
+
+        for pos in data:
+            symbol = pos.get("symbol")
+            # OpenAlgo uses 'netqty' or 'quantity'
+            qty_str = pos.get("netqty") or pos.get("quantity") or "0"
+            try:
+                qty = int(float(qty_str))
+            except (ValueError, TypeError):
+                qty = 0
+
+            if symbol:
+                pos_dict[symbol] = pos_dict.get(symbol, 0) + qty
+
+        return pos_dict
+
     async def get_holdings(self):
         return await asyncio.to_thread(self.client.get_holdings)
 
@@ -460,13 +546,30 @@ class OrderManager:
         start_date: str = "",
         end_date: str = "",
     ):
-        return await asyncio.to_thread(
-            self.client.get_history,
+        # Normalize date format for OpenAlgo/Shoonya (expects DD-MM-YYYY)
+        def _normalize_date(d: str) -> str:
+            if not d: return ""
+            try:
+                from datetime import datetime
+                if "T" in d:
+                    dt = datetime.fromisoformat(d.replace("Z", "+00:00"))
+                elif "-" in d and len(d.split("-")[0]) == 4:
+                    dt = datetime.strptime(d, "%Y-%m-%d")
+                else:
+                    return d
+                return dt.strftime("%Y-%m-%d")
+            except:
+                return d
+
+        n_start = _normalize_date(start_date)
+        n_end = _normalize_date(end_date)
+
+        return await self.client.get_history_async(
             symbol=symbol,
             exchange=exchange,
             interval=interval,
-            start_date=start_date,
-            end_date=end_date,
+            start_date=n_start,
+            end_date=n_end,
         )
 
     async def toggle_analyzer(self, state: bool):
@@ -507,27 +610,84 @@ class OrderManager:
                     return
 
             broker_positions = await self.get_positions()
-            # Shoonya/OpenAlgo returns positions list
-            # We need to map this to symbol: qty
-            if not broker_positions or not isinstance(broker_positions, list):
-                logger.info("No active positions found on broker or error.")
-                return
+            if not isinstance(broker_positions, list):
+                # Handle dictionary response from OpenAlgo
+                broker_positions = broker_positions.get("data", []) if isinstance(broker_positions, dict) else []
 
-            # Clear and rebuild or diff match
-            # For robustness, we'll reconcile to broker reality
+            # 1. Track symbols seen in broker
+            broker_symbols = set()
+            pm = self.position_manager
+
+            # Full snapshot for audit log
+            local_snapshot = pm.all_positions()
+            snapshot_data = {
+                "local": {s: p.quantity for s, p in local_snapshot.items()},
+                "broker": {}
+            }
+
             for pos in broker_positions:
                 symbol = pos.get("symbol")
-                net_qty = int(pos.get("quantity") or 0)
-                avg_price = float(pos.get("avg_price") or 0.0)
+                if not symbol: continue
 
-                local_qty = self.position_manager.get_quantity(symbol)
+                net_qty = int(float(pos.get("quantity") or pos.get("netqty") or 0))
+                avg_price = float(pos.get("avg_price") or pos.get("lp") or 0.0)
+
+                broker_symbols.add(symbol)
+                snapshot_data["broker"][symbol] = net_qty
+
+                local_qty = pm.get_quantity(symbol)
                 if local_qty != net_qty:
+                    drift_type = "MISMATCH"
+                    action = "AUTO_ALIGN_LOCAL"
+
                     logger.warning(
                         "Reconciliation Drift detected for %s! Local: %d | Broker: %d. Aligning...",
                         symbol, local_qty, net_qty
                     )
-                    # Force update local manager
-                    self.position_manager.set_position(symbol, net_qty, avg_price)
+
+                    # Persistent Audit Log
+                    asyncio.create_task(self.trade_logger.log_drift_event(
+                        symbol=symbol,
+                        local_qty=local_qty,
+                        broker_qty=net_qty,
+                        drift_type=drift_type,
+                        action=action,
+                        snapshot=snapshot_data
+                    ))
+
+                    if self.telemetry_callback:
+                        asyncio.create_task(self.telemetry_callback("drift_detected", {
+                            "symbol": symbol,
+                            "local_qty": local_qty,
+                            "broker_qty": net_qty,
+                            "action": action
+                        }))
+                    pm.set_position(symbol, net_qty, avg_price)
+
+            # 2. Check for Orphaned Local Positions (in local but not in broker)
+            for symbol, pos in local_snapshot.items():
+                if pos.quantity != 0 and symbol not in broker_symbols:
+                    logger.warning(f"Orphaned local position detected for {symbol} (Qty: {pos.quantity})! Broker reports 0. Purging local state...")
+
+                    snapshot_data["broker"][symbol] = 0
+
+                    asyncio.create_task(self.trade_logger.log_drift_event(
+                        symbol=symbol,
+                        local_qty=pos.quantity,
+                        broker_qty=0,
+                        drift_type="ORPHAN",
+                        action="PURGE_LOCAL",
+                        snapshot=snapshot_data
+                    ))
+
+                    if self.telemetry_callback:
+                        asyncio.create_task(self.telemetry_callback("drift_detected", {
+                            "symbol": symbol,
+                            "local_qty": pos.quantity,
+                            "broker_qty": 0,
+                            "action": "PURGE_LOCAL"
+                        }))
+                    pm.set_position(symbol, 0, 0.0)
 
             logger.info("Broker reconciliation complete.")
         except Exception as e:

@@ -1,0 +1,31 @@
+# algo-trader/config/ticker.yaml
+# Managed UI Ticker Symbols for AetherDesk Prime
+
+ticker_symbols:
+  - symbol: "NIFTY"
+    exchange: "NSE"
+    index: true
+  - symbol: "BANKNIFTY"
+    exchange: "NSE"
+    index: true
+  - symbol: "RELIANCE"
+    exchange: "NSE"
+    index: false
+  - symbol: "HDFCBANK"
+    exchange: "NSE"
+    index: false
+  - symbol: "TCS"
+    exchange: "NSE"
+    index: false
+  - symbol: "INFY"
+    exchange: "NSE"
+    index: false
+  - symbol: "ICICIBANK"
+    exchange: "NSE"
+    index: false
+  - symbol: "HCLTECH"
+    exchange: "NSE"
+    index: false
+  - symbol: "SBIN"
+    exchange: "NSE"
+    index: false

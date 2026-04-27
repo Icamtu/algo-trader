@@ -8,12 +8,14 @@ RUN apt-get update && apt-get install -y \
     libopenblas-dev \
     python3-dev \
     wget \
-    gnupg \
-    unzip \
     ca-certificates \
     curl \
     chromium \
     chromium-driver \
+    libgbm1 \
+    libnss3 \
+    libatk-bridge2.0-0 \
+    libgtk-3-0 \
     && curl -fsSL https://tailscale.com/install.sh | sh \
     && rm -rf /var/lib/apt/lists/*
 

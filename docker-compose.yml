@@ -21,7 +21,7 @@ services:
       - no-new-privileges:true
 
   mongodb:
-    image: mongo:latest
+    image: mongo:6.0.8
     container_name: mongodb
     restart: always
     environment:
@@ -40,9 +40,32 @@ services:
       timeout: 5s
       retries: 5
 
+  browser:
+    image: ghcr.io/browserless/chromium:1.61-puppeteer-21.4.1
+    container_name: browserless
+    restart: always
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - MAX_CONCURRENT_SESSIONS=5
+      - SCREEN_WIDTH=1920
+      - SCREEN_HEIGHT=1080
+      - SCREEN_DEPTH=24
+      - ENABLE_CORS=true
+      - CONNECTION_TIMEOUT=60000
+    networks:
+      - trading_net
+    mem_limit: 2GB
+    cpu_shares: 1024
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # --- TRADING PLATFORM ---
   openalgo:
-    image: marketcalls/openalgo:latest
+    image: marketcalls/openalgo:latest # marketcalls doesn't provide semantic versions consistently
     container_name: openalgo-web
     ports:
       - "5000:5000"
@@ -51,6 +74,7 @@ services:
     shm_size: '512m'
     volumes:
       - ./openalgo/db:/app/db
+      - ./openalgo/shoonya_data_patched.py:/app/broker/shoonya/api/data.py:ro
       - openalgo_log:/app/log
       - openalgo_strategies:/app/strategies
       - openalgo_keys:/app/keys
@@ -84,26 +108,35 @@ services:
     restart: always
     ports:
       - "18788:18788"
-      - "5002:5002"
     env_file: .env
     depends_on:
       redis:
         condition: service_healthy
       openalgo:
         condition: service_healthy
+      timescaledb:
+        condition: service_healthy
     volumes:
       - ./algo-trader:/app
-      - ./openalgo/db:/app/storage:rw
+      - ./openalgo/db:/app/storage
       - ./openalgo-upstream:/app/openalgo-upstream:ro
     environment:
       - OPENALGO_BASE_URL=http://openalgo-web:5000
       - PORT=18788
       - TRADES_DB_PATH=/app/storage/trades.db
       - HISTORIFY_DB_PATH=/app/storage/historify.duckdb
+      - TS_DB_HOST=timescaledb
+      - TS_DB_PORT=5432
+      - TS_DB_USER=postgres
+      - TS_DB_NAME=postgres
       - OPENALGO_DB_PATH=/app/storage/openalgo.db
       - RISK_MAX_DAILY_LOSS=50000
       - RISK_MAX_DAILY_TRADES=200
       - TAILSCALE_AUTH_KEY=${TAILSCALE_AUTH_KEY}
+      - SIMULATION_ENABLED=false
+      - OPENALGO_WS_URL=ws://openalgo-web:8765
+      - OPENALGO_API_KEY=${API_KEY}
+      - DEBUG_AUTH=true
     networks:
       - trading_net
     mem_limit: 1.5GB
@@ -214,7 +247,7 @@ services:
     environment:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /tmp/kong.yml
-    command: 
+    command:
       - sh
       - -c
       - |
@@ -266,6 +299,27 @@ services:
     restart: always
     mem_limit: 256MB
 
+  # --- INSTITUTIONAL DATA STORE ---
+  timescaledb:
+    image: timescale/timescaledb:2.11.0-pg15
+    container_name: timescaledb
+    restart: always
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - ./timescale_data:/var/lib/postgresql/data
+      - ./algo-trader/database/init_timescale.sql:/docker-entrypoint-initdb.d/init_timescale.sql:ro
+    networks:
+      - trading_net
+    mem_limit: 2GB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # --- CUSTOM TRADING UI ---
   trading-ui:
     build:
@@ -308,7 +362,7 @@ services:
 
   # Zero-Touch Sync Engine: Monitors src/ and builds to dist/ automatically
   ui-builder:
-    image: oven/bun:latest
+    image: oven/bun:1.1.0
     container_name: ui-builder
     # Use root to avoid permission issues with host-mounted volumes during build
     user: "0:0"
@@ -329,7 +383,7 @@ services:
 
   # --- LOCAL AI ENGINE ---
   ollama_engine:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.1.32
     container_name: local_ollama
     restart: always
     env_file: .env
@@ -347,6 +401,12 @@ services:
     mem_limit: 10GB
     security_opt:
       - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   # --- ANALYTICS & REPORTING ---
   openclaw:
@@ -354,7 +414,7 @@ services:
     container_name: openclaw
     depends_on:
       ollama_engine:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "18789:18789"
     environment:
@@ -366,9 +426,9 @@ services:
       - OPENCLAW_GATEWAY_CONTROL_UI_DANGEROUSLY_DISABLE_SECURE_CONTEXT_CHECK=true
       - OPENALGO_API_URL=http://openalgo-web:5000
       - DB_PATH=/app/db/openalgo.db
-      - OLLAMA_BASE_URL=http://ollama_engine:11434
-      - LOCAL_LLM_MODEL=minimax/minimax-01
-      - OPENCLAW_AI_MODEL=openrouter/minimax/minimax-01
+      - OLLAMA_BASE_URL=http://local_ollama:11434
+      - LOCAL_LLM_MODEL=qwen3.5-claude:latest
+      - OPENCLAW_AI_MODEL=ollama/qwen3.5-claude:latest
       - NODE_OPTIONS=--dns-result-order=ipv4first
       - OLLAMA_API_KEY=${OLLAMA_API_KEY}
       - TELEGRAM_DELETE_WEBHOOK_ON_START=false
@@ -392,6 +452,12 @@ services:
         max-file: "3"
     security_opt:
       - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18789/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   # --- CLAUDE CODE CLI ---
   claude-code:

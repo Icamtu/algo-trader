@@ -29,7 +29,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "api_key": "",
     },
     "simulation": {
-        "enabled": True,
+        "enabled": False,
         "tick_interval_seconds": 1.0,
         "base_price": 100.0,
         "price_step": 1.5,

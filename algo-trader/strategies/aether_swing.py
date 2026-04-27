@@ -86,9 +86,9 @@ class AetherSwing(BaseStrategy):
 
                 if conviction >= 0.75:
                     await (self.buy if signal == "BUY" else self.sell)(
-                        tick.symbol, 
-                        qty, 
-                        ai_reasoning=reasoning, 
+                        tick.symbol,
+                        qty,
+                        ai_reasoning=reasoning,
                         conviction=conviction,
                         human_approval=self.hitl_enabled
                     )

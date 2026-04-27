@@ -1,8 +1,11 @@
 # Stage 1: Build
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm install
+RUN apk add --no-cache git curl bash
+RUN npm install -g bun
+
+COPY package.json bun.lockb ./
+RUN bun install
 COPY . .
 
 # Build Arguments passed from docker-compose
@@ -11,7 +14,7 @@ ARG VITE_SUPABASE_ANON_KEY
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
 
-RUN npm run build
+RUN bun run build
 
 # Stage 2: Serve with Nginx
 FROM nginx:alpine

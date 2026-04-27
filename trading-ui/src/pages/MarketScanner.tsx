@@ -2,44 +2,30 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, RefreshCw, Brain, PlayCircle, Settings2,
-  Terminal, Fingerprint
+  Terminal, Fingerprint, Radar, Target, Cpu, Activity
 } from "lucide-react";
-import { GlobalHeader } from "@/components/trading/GlobalHeader";
-import { MarketNavbar } from "@/components/trading/MarketNavbar";
-import { RightPanel } from "@/components/trading/RightPanel";
 import { algoApi } from "@/features/openalgo/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { IndustrialValue } from "@/components/trading/IndustrialValue";
-import { useAppModeStore } from "@/stores/appModeStore";
+import { useAether } from "@/contexts/AetherContext";
 import { cn } from "@/lib/utils";
 
 type IndexType = "NIFTY_50" | "NIFTY_BANK" | "NIFTY_AUTO" | "NIFTY_PHARMA" | "NIFTY_REALTY";
 
 export default function MarketScanner() {
   const { toast } = useToast();
+  const { setSelectedSymbol } = useAether();
   const [selectedIndices, setSelectedIndices] = useState<IndexType[]>(["NIFTY_50"]);
   const [results, setResults] = useState<any[]>([]);
   const [isScanning, setIsScanning] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const { mode } = useAppModeStore();
-  const isAD = mode === 'AD';
-  const primaryColorClass = isAD ? "text-amber-500" : "text-teal-500";
-  const accentBorderClass = isAD ? "border-amber-500/20" : "border-teal-500/20";
-  const accentBgClass = isAD ? "bg-amber-500/5" : "bg-teal-500/5";
-  
-  const [decisionMode, setDecisionMode] = useState("ai");
-  const [llmModel, setLlmModel] = useState("mistral");
-  const [logicProvider, setLogicProvider] = useState("ollama");
-  const [agentEnabled, setAgentEnabled] = useState(true);
-  const [agentErrorReason, setAgentErrorReason] = useState("");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [llmModel, setLlmModel] = useState("mistral");
+  const [agentEnabled, setAgentEnabled] = useState(true);
 
   const loadSettings = async () => {
     try {
       const settings = await algoApi.getSystemSettings();
-      setDecisionMode(settings.decision_mode || "ai");
       setLlmModel(settings.llm_model || "mistral");
-      setLogicProvider(settings.provider || "ollama");
       setAgentEnabled(String(settings.agent_enabled) === 'True' || settings.agent_enabled === true);
     } catch (e) {}
   };
@@ -58,142 +44,240 @@ export default function MarketScanner() {
       );
       setResults(allResults.flat());
       toast({ title: "SCAN_COMPLETE", description: "RADAR_MATCH_STORED" });
+    } catch (e) {
+      toast({ variant: "destructive", title: "SCAN_ERROR", description: "FAILED_TO_INIT_RADAR" });
     } finally {
       setIsScanning(false);
     }
   };
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background industrial-grid relative">
-      <div className="noise-overlay" />
-      <div className="scanline opacity-10" />
-      <GlobalHeader />
-      <MarketNavbar activeTab="/scanner" />
+    <div className="space-y-8 pb-12">
+      {/* Header Section */}
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-3">
+          <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+          <h1 className="text-3xl font-black uppercase tracking-[0.1em] text-foreground">Discovery_Array</h1>
+        </div>
+        <p className="text-[10px] font-mono text-muted-foreground/40 uppercase tracking-[0.3em]">
+          Sectoral_Radar // Quantum_Pattern_Matching_Active
+        </p>
+      </div>
 
-      <div className="flex-1 flex min-h-0 relative z-10">
-        <div className="flex-1 flex flex-col min-w-0 border-r border-border/20 bg-background/50">
-          
-          {/* Neural Control Strip */}
-           <div className="px-4 py-3 border-b border-border bg-card/5 relative z-20">
-             <div className="flex items-center justify-between">
-               <div className="flex items-center gap-4">
-                 <div className={cn("bg-card/20 p-2 border rounded-sm shadow-xl", accentBorderClass)}>
-                   <Brain className={cn("h-6 w-6", primaryColorClass)} />
-                 </div>
-                 <div>
-                   <h1 className={cn("text-xl font-black font-mono tracking-[0.2em] uppercase", primaryColorClass)}>Neural_Discovery_Kernel</h1>
-                   <div className="flex items-center gap-3 mt-0.5">
-                     <span className="text-[8px] font-mono font-black text-muted-foreground/30 uppercase tracking-[0.2em]">Radar_V4 // QUANT_SYNC</span>
-                     <div className={cn("flex items-center gap-1.5 px-1.5 py-0.5 border bg-background/50", accentBorderClass)}>
-                        <Fingerprint className={cn("w-2.5 h-2.5", agentEnabled ? "text-secondary" : "text-destructive")} />
-                        <span className={cn("text-[7px] font-mono font-black uppercase tracking-widest", agentEnabled ? "text-secondary" : "text-destructive")}>
-                          {agentEnabled ? 'ACTIVE' : 'OFFLINE'}
-                        </span>
-                     </div>
+      {/* Control Strip */}
+      <div className="grid grid-cols-12 gap-6 items-start">
+        <div className="col-span-8 flex flex-col gap-6">
+          <div className="p-6 bg-card/5 border border-border/50 relative overflow-hidden group">
+            <div className="scanline opacity-[0.02]" />
+            <div className="relative z-10 flex items-center justify-between">
+              <div className="flex items-center gap-6">
+                <div className="bg-primary/10 p-4 border border-primary/20">
+                  <Radar className="w-8 h-8 text-primary" />
+                </div>
+                <div>
+                   <h3 className="text-sm font-black uppercase tracking-widest text-foreground">Neural_Scanner_V4</h3>
+                   <div className="flex items-center gap-3 mt-1">
+                      <div className="flex items-center gap-1.5 px-2 py-0.5 bg-secondary/10 border border-secondary/20">
+                         <div className="w-1.5 h-1.5 rounded-full bg-secondary" />
+                         <span className="text-[8px] font-mono font-black text-secondary uppercase">Relay_Active</span>
+                      </div>
+                      <span className="text-[9px] font-mono text-muted-foreground/40">Mistral_7B_Instruct</span>
                    </div>
-                 </div>
-               </div>
-                            <div className="flex items-center gap-3">
-                 <button 
-                   onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-                   className={cn("flex items-center gap-2 px-4 py-1.5 border transition-all font-mono font-black text-[9px] uppercase tracking-[0.2em]", 
-                     isSettingsOpen ? (isAD ? "bg-amber-500 text-black border-amber-500" : "bg-teal-500 text-black border-teal-500") : "border-border text-muted-foreground/40 hover:border-primary/40"
-                   )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                 <button
+                  onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+                  className={cn(
+                    "px-4 py-2 border text-[10px] font-black uppercase tracking-widest transition-all",
+                    isSettingsOpen ? "bg-primary text-black border-primary" : "border-border text-muted-foreground/40 hover:text-foreground"
+                  )}
                  >
-                   <Settings2 className="w-3.5 h-3.5" />
-                   Intel
+                   Configuration
                  </button>
-                 
-                 <button 
-                   onClick={runDiscovery}
-                   disabled={isScanning}
-                   className={cn("px-5 py-1.5 font-mono font-black text-[9px] uppercase tracking-[0.2em] transition-all disabled:opacity-30 flex items-center gap-2", isAD ? "bg-amber-500 text-black hover:bg-white" : "bg-teal-500 text-black hover:bg-white")}
+                 <button
+                  onClick={runDiscovery}
+                  disabled={isScanning}
+                  className="px-6 py-2 bg-primary text-black text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all disabled:opacity-30 flex items-center gap-2"
                  >
                    {isScanning ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />}
-                   SCAN_PULSE
+                   Execute_Pulse
                  </button>
-               </div>
+              </div>
             </div>
 
             <AnimatePresence>
               {isSettingsOpen && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                  <div className="pt-3">
-                    <div className="border border-primary/20 bg-primary/5 p-4 grid grid-cols-12 gap-4">
-                       <div className="col-span-4 border-r border-border/20 pr-4">
-                          <div className="text-[8px] font-mono font-black text-muted-foreground/40 uppercase mb-3">Model_Core</div>
-                          <div className={cn("flex items-center bg-background border p-1", accentBorderClass)}>
-                             <Terminal className={cn("w-3 h-3 ml-1", primaryColorClass, "opacity-40")} />
-                             <input value={llmModel} onChange={(e) => setLlmModel(e.target.value)} className={cn("bg-transparent border-none text-[9px] font-mono font-black w-full p-1 focus:ring-0", primaryColorClass)} />
-                          </div>
-                       </div>
-                      <div className="col-span-8">
-                         <div className="text-[8px] font-mono font-black text-muted-foreground/40 uppercase mb-3">Sectors</div>
-                         <div className="flex flex-wrap gap-2">
-                            {["NIFTY_50", "NIFTY_BANK", "NIFTY_AUTO"].map(s => (
-                              <button key={s} onClick={() => {}} className="px-3 py-1 border border-border text-[8px] font-mono font-black uppercase text-muted-foreground/60 hover:border-primary">{s}</button>
-                            ))}
-                         </div>
-                      </div>
-                    </div>
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden mt-6 pt-6 border-t border-border/20"
+                >
+                  <div className="grid grid-cols-3 gap-8">
+                     <div className="space-y-2">
+                        <label className="text-[8px] font-black uppercase tracking-widest text-muted-foreground/40">Discovery_Indices</label>
+                        <div className="flex flex-wrap gap-2">
+                           {["NIFTY_50", "NIFTY_BANK", "NIFTY_AUTO", "NIFTY_PHARMA"].map(idx => (
+                             <button
+                              key={idx}
+                              onClick={() => {
+                                setSelectedIndices(prev =>
+                                  prev.includes(idx as IndexType)
+                                    ? prev.filter(p => p !== idx)
+                                    : [...prev, idx as IndexType]
+                                )
+                              }}
+                              className={cn(
+                                "px-3 py-1 border text-[9px] font-mono font-black transition-all",
+                                selectedIndices.includes(idx as IndexType) ? "bg-primary/20 border-primary text-primary" : "border-border text-muted-foreground/30"
+                              )}
+                             >
+                               {idx}
+                             </button>
+                           ))}
+                        </div>
+                     </div>
+                     <div className="space-y-2">
+                        <label className="text-[8px] font-black uppercase tracking-widest text-muted-foreground/40">Engine_Model</label>
+                        <div className="bg-background border border-border p-2 flex items-center justify-between">
+                           <span className="text-[10px] font-mono font-black uppercase text-foreground">{llmModel}</span>
+                           <Cpu className="w-3 h-3 text-muted-foreground/20" />
+                        </div>
+                     </div>
+                     <div className="space-y-2">
+                        <label className="text-[8px] font-black uppercase tracking-widest text-muted-foreground/40">Probability_Threshold</label>
+                        <div className="bg-background border border-border p-2">
+                           <div className="h-1 bg-muted relative">
+                              <div className="absolute top-0 left-0 w-3/4 h-full bg-primary" />
+                           </div>
+                           <div className="flex justify-between mt-1 text-[8px] font-mono font-black text-muted-foreground/40">
+                              <span>0%</span>
+                              <span className="text-primary">75%</span>
+                              <span>100%</span>
+                           </div>
+                        </div>
+                     </div>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
 
-          <div className="flex-1 overflow-auto p-3 custom-scrollbar relative z-10">
+          {/* Results Grid */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between px-2">
+               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40">Detected_Signals: {results.length}</span>
+               <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                     <div className="w-2 h-2 bg-secondary" />
+                     <span className="text-[8px] font-mono text-muted-foreground/60 uppercase">High_Prob</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                     <div className="w-2 h-2 bg-primary" />
+                     <span className="text-[8px] font-mono text-muted-foreground/60 uppercase">Standard</span>
+                  </div>
+               </div>
+            </div>
+
             {results.length > 0 ? (
-              <div className="space-y-2">
-                <div className="grid grid-cols-12 gap-4 px-4 py-2 text-[7px] font-mono font-black text-muted-foreground/20 uppercase tracking-[0.2em] border-b border-border/10 sticky top-0 bg-background/80 backdrop-blur-md z-20">
-                  <div className="col-span-3">SYMBOL</div>
-                  <div className="col-span-2 text-center">PROBABILITY</div>
-                  <div className="col-span-2 text-center">RSI</div>
-                  <div className="col-span-5 pl-2 border-l border-border/10">DIAGNOSTICS</div>
-                </div>
-                
-                {results.map((sym, i) => (
-                  <motion.div key={sym.symbol} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="border border-border/10 bg-card/5 p-3 hover:bg-card/10 transition-all group">
-                    <div className="grid grid-cols-12 gap-4 items-center">
-                      <div className="col-span-3">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-1 h-8 ${sym.score > 60 ? "bg-secondary" : "bg-primary"}`} />
-                          <div>
-                            <div className="text-[11px] font-black font-display uppercase group-hover:text-primary transition-colors">{sym.symbol}</div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[9px] font-mono font-black text-foreground/60">₹{sym.price}</span>
-                              <span className={`text-[8px] font-mono font-black ${sym.change >= 0 ? "text-secondary" : "text-destructive"}`}>{sym.change >= 0 ? "+" : ""}{sym.change}%</span>
-                            </div>
-                          </div>
+               <div className="grid grid-cols-1 gap-3">
+                  {results.map((sym, i) => (
+                    <motion.div
+                      key={sym.symbol + i}
+                      onClick={() => setSelectedSymbol(sym.symbol)}
+                      initial={{ x: -20, opacity: 0 }}
+                      animate={{ x: 0, opacity: 1 }}
+                      transition={{ delay: i * 0.05 }}
+                      className="group p-4 bg-card/2 border border-border/30 hover:border-primary/50 transition-all cursor-pointer relative overflow-hidden"
+                    >
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <div className="flex items-center justify-between relative z-10">
+                        <div className="flex items-center gap-6 divide-x divide-border/20">
+                           <div className="flex flex-col min-w-[120px]">
+                              <span className="text-lg font-black tracking-tight group-hover:text-primary transition-colors uppercase">{sym.symbol}</span>
+                              <span className="text-[9px] font-mono text-muted-foreground/40">LTP: ₹{sym.price}</span>
+                           </div>
+                           <div className="px-6 text-center">
+                              <IndustrialValue value={sym.score} suffix="%" className="text-2xl font-black font-display" />
+                              <div className="text-[8px] font-mono font-black text-muted-foreground/20 uppercase">Match</div>
+                           </div>
+                           <div className="px-6 text-center">
+                              <div className="text-lg font-mono font-bold text-foreground/80">{sym.rsi}</div>
+                              <div className="text-[8px] font-mono font-black text-muted-foreground/20 uppercase">RSI_14</div>
+                           </div>
                         </div>
-                      </div>
-                      
-                      <div className="col-span-2 text-center">
-                        <IndustrialValue value={sym.score} suffix="%" className="text-lg font-black font-display text-foreground" />
-                      </div>
 
-                      <div className="col-span-2 text-center">
-                        <div className="text-[10px] font-mono font-black text-foreground/40 border border-border/20 px-2 py-1 inline-block">{sym.rsi}</div>
-                      </div>
+                        <div className="flex-1 px-8">
+                           <div className="p-3 bg-muted/5 border-l-2 border-primary/20 italic">
+                              <p className="text-[10px] font-mono text-muted-foreground/60 leading-relaxed uppercase tracking-tight">
+                                "{sym.ai_reasoning || 'No diagnostics available for this signal cycle.'}"
+                              </p>
+                           </div>
+                        </div>
 
-                       <div className="col-span-5">
-                          <div className={cn("p-2 border-l bg-primary/[0.02]", accentBorderClass)}>
-                             <p className="text-[9px] font-mono font-black text-muted-foreground/60 italic leading-tight">"{sym.ai_reasoning || 'ANALYZING_PHASE_COMPLETE'}"</p>
-                          </div>
-                       </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
+                        <button className="px-4 py-2 border border-primary/20 text-[9px] font-black uppercase tracking-widest text-primary hover:bg-primary hover:text-black transition-all">
+                           Trade_Signal
+                        </button>
+                      </div>
+                    </motion.div>
+                  ))}
+               </div>
             ) : (
-              <div className="h-full flex flex-col items-center justify-center opacity-20 filter grayscale">
-                 <Search className="w-12 h-12 mb-4" />
-                 <span className="text-[9px] font-mono font-black uppercase tracking-[0.4em]">Radar_Standby</span>
-              </div>
+               <div className="py-20 flex flex-col items-center justify-center border border-border/20 bg-card/2 border-dashed">
+                  <div className="w-16 h-16 bg-muted/5 border border-border/20 flex items-center justify-center opacity-20">
+                     <Target className="w-8 h-8" />
+                  </div>
+                  <span className="mt-4 text-[10px] font-mono font-black text-muted-foreground/20 uppercase tracking-[0.4em]">Awaiting_Scan_Sequence</span>
+               </div>
             )}
           </div>
         </div>
-        <RightPanel />
+
+        <div className="col-span-4 space-y-6">
+           {/* Discovery Intelligence Panel */}
+           <div className="p-6 bg-card/5 border border-border/50">
+              <div className="flex items-center gap-3 mb-6">
+                 <Activity className="w-4 h-4 text-primary" />
+                 <h3 className="text-xs font-black uppercase tracking-widest text-foreground">Scan_Telemetry</h3>
+              </div>
+              <div className="space-y-4">
+                 <div className="flex justify-between items-center text-[10px] font-mono">
+                    <span className="text-muted-foreground/40 uppercase">Total_Scan_Time</span>
+                    <span className="font-black">1.2s</span>
+                 </div>
+                 <div className="flex justify-between items-center text-[10px] font-mono">
+                    <span className="text-muted-foreground/40 uppercase">Agents_Deployed</span>
+                    <span className="font-black">4</span>
+                 </div>
+                 <div className="flex justify-between items-center text-[10px] font-mono">
+                    <span className="text-muted-foreground/40 uppercase">Logic_Registry</span>
+                    <span className="font-black text-secondary uppercase">Synced</span>
+                 </div>
+                 <div className="h-[1px] bg-border/20 my-2" />
+                 <div className="p-3 bg-muted/10 border border-border/30">
+                    <div className="text-[8px] font-black uppercase text-primary/60 mb-1">Observation_Log</div>
+                    <p className="text-[9px] font-mono text-muted-foreground/40 leading-tight uppercase">
+                       Sectoral imbalance detected in NIFTY_AUTO. Bullish divergence forming on 3 major counters.
+                    </p>
+                 </div>
+              </div>
+           </div>
+
+           <div className="p-6 bg-primary/5 border border-primary/20 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-16 h-16 bg-primary/20 -mr-8 -mt-8 rotate-45" />
+              <div className="relative z-10">
+                 <div className="flex items-center gap-2 mb-2">
+                    <Fingerprint className="w-4 h-4 text-primary" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Agent_Alpha</span>
+                 </div>
+                 <p className="text-[9px] font-mono text-muted-foreground/60 uppercase leading-snug">
+                    Real-time liquidity analysis is being computed by decentralized nodes. High fidelity patterns will be piped directly.
+                 </p>
+              </div>
+           </div>
+        </div>
       </div>
     </div>
   );
