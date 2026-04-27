@@ -1,0 +1,19 @@
+name: "AetherDesk CodeQL Config"
+
+paths-ignore:
+  - '**/node_modules/**'
+  - '**/venv/**'
+  - '**/.venv/**'
+  - '**/host_venv/**'
+  - '**/scratch/**'
+  - '**/openalgo-upstream/**'
+  - '**/logs/**'
+  - '**/storage/**'
+  - '**/database/**'
+  - '**/magic.mgc'
+  - '**/.agents/**'
+  - '**/.agents_backup/**'
+
+languages:
+  - javascript-typescript
+  - python
