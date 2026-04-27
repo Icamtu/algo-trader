@@ -105,7 +105,7 @@ def run_sync():
     print("Step 4: Triggering engine reconciliation...")
     try:
         engine_url = "http://localhost:18788/api/v1/system/reconcile"
-        headers = {"apikey": os.getenv("API_KEY", "AetherDesk_Unified_Key_2026")}
+        headers = {"apikey": os.environ.get("OPENALGO_API_KEY")}
         reconcile_resp = requests.post(engine_url, headers=headers, timeout=5)
         if reconcile_resp.status_code == 200:
             print("Engine reconciliation triggered successfully.")
