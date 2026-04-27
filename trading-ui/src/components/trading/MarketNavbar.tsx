@@ -59,6 +59,7 @@ export function MarketNavbar({ className }: MarketNavbarProps) {
 
   const navItems = [
     { to: "/", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/execution/command-center", icon: LayoutDashboard, label: "Command_Center" },
     { to: "/audit", icon: ShieldCheck, label: "Audit_Center" },
     { to: "/execution/registry", icon: Cpu, label: "Strategies" },
     { to: "/intelligence", icon: Activity, label: "Intelligence" },
