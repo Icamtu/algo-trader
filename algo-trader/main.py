@@ -92,7 +92,23 @@ async def system_health_monitor(order_manager):
                 }
 
             logger.info(f"Pushing health update: {list(health_update.keys())}")
-            # Push update to API Gateway (Local REST call)
+            # Phase 16: Also store in context for FastAPI routers to access directly
+            from core.context import app_context
+            app_context["latest_health"] = health_update
+
+            # Broadcast risk status periodically for the UI (Phase 16 Sync)
+            if order_manager and order_manager.risk_manager:
+                from fastapi_app import manager as ws_manager
+                import json
+                risk_data = order_manager.risk_manager.get_status()
+                # Use a background task to avoid blocking the health monitor
+                asyncio.create_task(ws_manager.broadcast(json.dumps({
+                    "type": "risk_update",
+                    "payload": risk_data,
+                    "timestamp": time.time()
+                })))
+
+            # Push update to API Gateway (Local REST call for legacy Flask compatibility)
             async with httpx.AsyncClient() as client:
                 await client.post(
                     heartbeat_url,
@@ -174,12 +190,27 @@ async def async_main():
     )
     action_manager.set_order_manager(order_manager)
 
+    # AetherBridge: Native Broker Lifecycle
+    if order_manager.native_broker:
+        logger.info("AetherBridge: Initiating native broker login...")
+        login_task = asyncio.create_task(order_manager.native_broker.login())
+        # We don't block startup for login, but we track it.
+        def on_login_done(t):
+            if t.result():
+                logger.info("AetherBridge: Native Broker login SUCCESS.")
+            else:
+                logger.error("AetherBridge: Native Broker login FAILED.")
+        login_task.add_done_callback(on_login_done)
+
     portfolio_manager = PortfolioManager(
         account_capital=settings.get("portfolio", {}).get("account_capital", 100000.0),
         max_capital_per_trade_pct=settings.get("portfolio", {}).get("max_capital_per_trade_pct", 10.0),
     )
 
     market_stream = MarketDataStream()
+    if order_manager.native_broker:
+        market_stream.set_native_broker(order_manager.native_broker)
+        
     strategy_runner = StrategyRunner(
         market_stream=market_stream,
         order_manager=order_manager,
