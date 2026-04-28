@@ -249,23 +249,21 @@ class OrderManager:
                                 )
                                 native_latency = (time.perf_counter() - start_native) * 1000
                                 native_order_id = native_order.order_id
-                                logger.info(f"[AETHERBRIDGE] Native Latency: {native_latency:.2f}ms | OrderID: {native_order_id}")
-
-                                if not self.shadow_mode:
-                                    response = {
-                                        "status": "success",
-                                        "order_id": native_order_id,
-                                        "price": native_order.price,
-                                        "message": "Executed via AetherBridge Native"
-                                    }
-                                    processed_natively = True
+                                logger.info(f"[AETHERBRIDGE] Native Execution: {native_latency:.2f}ms | OrderID: {native_order_id}")
+                                
+                                response = {
+                                    "status": "success",
+                                    "order_id": native_order_id,
+                                    "price": native_order.price,
+                                    "message": "Executed via AetherBridge Native"
+                                }
                             except Exception as ne:
                                 logger.error(f"Native broker execution failed: {ne}")
-                                if not self.shadow_mode:
-                                    raise ne
+                                raise ne
 
-                        if not processed_natively:
-                            # LEGACY ROUTE (OpenAlgo Fallback or Shadow Mode)
+                        if not response:
+                            # LEGACY FALLBACK (Only if native broker is not configured or failed)
+                            logger.warning(f"Native execution did not provide response. Falling back to legacy OpenAlgo for {symbol}")
                             response = await asyncio.to_thread(
                                 self.client.place_order,
                                 symbol=symbol,
@@ -277,20 +275,6 @@ class OrderManager:
                                 exchange=exchange,
                                 strategy=strategy_name,
                             )
-
-                            # Log comparison in shadow mode
-                            if self.native_broker and self.shadow_mode:
-                                asyncio.create_task(asyncio.to_thread(
-                                    self.trade_logger.log_api_call,
-                                    api_type="AETHERBRIDGE_SHADOW",
-                                    request_data={"symbol": symbol, "action": action, "qty": quantity},
-                                    response_data={
-                                        "legacy_status": response.get("status") if response else "ERROR",
-                                        "native_order_id": native_order_id,
-                                        "native_latency_ms": round(native_latency, 2)
-                                    },
-                                    strategy=strategy_name
-                                ))
 
                         if response:
                             broker_span.set_attribute("broker_status", response.get("status", "unknown"))
