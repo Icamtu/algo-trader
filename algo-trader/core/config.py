@@ -28,6 +28,23 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "ws_url": "",
         "api_key": "",
     },
+    "aetherbridge": {
+        "enabled": os.getenv("AETHERBRIDGE_ENABLED", "false").lower() in {"1", "true", "yes", "on"},
+        "active_broker": os.getenv("ACTIVE_BROKER", "paper"),
+        "shadow_mode": os.getenv("SHADOW_MODE", "false").lower() in {"1", "true", "yes", "on"},
+        "brokers": {
+            "shoonya": {
+                "user_id": os.getenv("SHOONYA_USER_ID", ""),
+                "password": os.getenv("SHOONYA_PASSWORD", ""),
+                "totp_secret": os.getenv("SHOONYA_TOTP_SECRET", ""),
+                "vendor_code": os.getenv("SHOONYA_VENDOR_CODE", ""),
+                "api_key": os.getenv("SHOONYA_API_KEY", ""),
+            },
+            "paper": {
+                "initial_funds": 1000000.0
+            }
+        }
+    },
     "simulation": {
         "enabled": False,
         "tick_interval_seconds": 1.0,
