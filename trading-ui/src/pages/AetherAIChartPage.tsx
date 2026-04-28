@@ -62,7 +62,7 @@ export default function AetherAIChartPage() {
   };
 
   const lastPrice = candles[candles.length - 1]?.close || 0;
-  const { settings } = useTerminalSettings();
+  const { settings, updateSettings } = useTerminalSettings();
 
   const renderChart = () => {
     if (isLoadingChart) {
@@ -196,9 +196,25 @@ export default function AetherAIChartPage() {
                    <span className="text-[8px] font-black text-muted-foreground/20 uppercase tracking-[0.3em]">ATR_14</span>
                    <span className="text-xs font-black text-primary">124.50</span>
                 </div>
-                <div className="flex flex-col items-end">
+                <div className="flex flex-col items-end gap-2">
                    <span className="text-[8px] font-black text-muted-foreground/20 uppercase tracking-[0.3em]">Engine</span>
-                   <span className="text-[9px] font-mono font-black text-primary uppercase">{settings.chartEngine}</span>
+                   <div className="flex bg-card/10 border border-border/50 p-0.5">
+                      {[
+                        { id: 'lightweight', label: 'LW' },
+                        { id: 'tradingview', label: 'TV' }
+                      ].map((eng) => (
+                        <button
+                          key={eng.id}
+                          onClick={() => updateSettings({ chartEngine: eng.id as any })}
+                          className={cn(
+                            "px-2 py-1 text-[8px] font-black uppercase transition-all",
+                            settings.chartEngine === eng.id ? "bg-primary text-black" : "text-muted-foreground/40 hover:text-foreground/60"
+                          )}
+                        >
+                          {eng.label}
+                        </button>
+                      ))}
+                   </div>
                 </div>
             </div>
 

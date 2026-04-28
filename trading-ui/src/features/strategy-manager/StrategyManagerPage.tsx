@@ -1,85 +1,63 @@
 import React, { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { algoApi } from "@/features/openalgo/api/client";
 import { StrategyLibrary } from "./components/StrategyLibrary";
 import { StrategyControlBoard } from "./components/StrategyControlBoard";
 import { StrategyPerformance } from "./components/StrategyPerformance";
 import { LiveOrdersPanel } from "./components/LiveOrdersPanel";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { Shield, Zap, LayoutDashboard, Settings2, BarChart4 } from "lucide-react";
+import { ShieldCheck, Cpu, Terminal, LayoutDashboard, Settings, Globe } from "lucide-react";
 
 const StrategyManagerPage: React.FC = () => {
-  const [selectedStrategy, setSelectedStrategy] = useState<any>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Fetch strategies here to share with children for better sync
+  const { data: strategiesData } = useQuery({
+    queryKey: ["strategies"],
+    queryFn: () => algoApi.getStrategies(),
+    refetchInterval: 5000,
+  });
+
+  const selectedStrategy = strategiesData?.strategies?.find((s: any) => s.id === selectedId);
 
   return (
-    <div className="h-full flex flex-col bg-slate-950 overflow-hidden relative selection:bg-primary/30">
-      {/* Visual background elements */}
-      <div className="absolute inset-0 noise-overlay opacity-10 pointer-events-none" />
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent pointer-events-none" />
+    <div className="h-full flex flex-col bg-background overflow-hidden relative selection:bg-primary/30">
+      {/* Neural Background Aesthetics */}
+      <div className="absolute inset-0 noise-overlay opacity-[0.03] pointer-events-none z-0" />
+      <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-cyan-500/5 blur-[120px] rounded-full pointer-events-none translate-x-1/2 -translate-y-1/2 z-0" />
+      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-error/5 blur-[100px] rounded-full pointer-events-none -translate-x-1/2 translate-y-1/2 z-0" />
+      <div className="absolute inset-0 pointer-events-none opacity-[0.02] bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:32px_32px] z-0" />
+      <div className="absolute inset-0 pointer-events-none scanline-overlay opacity-20 z-0" />
 
-      {/* Header Bar */}
-      <header className="h-14 border-b border-white/5 flex items-center justify-between px-6 bg-black/40 backdrop-blur-xl relative z-20">
-        <div className="flex items-center gap-4">
-          <div className="w-8 h-8 rounded bg-primary/20 border border-primary/30 flex items-center justify-center shadow-[0_0_15px_rgba(0,229,255,0.2)]">
-            <LayoutDashboard className="w-4 h-4 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-sm font-black uppercase tracking-[0.4em] text-foreground">Aether_Command_Center</h1>
-            <p className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest opacity-60">System Version 6.0.4 // Multi-Broker Core</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-6">
-          <div className="hidden md:flex flex-col items-end">
-            <span className="text-[9px] font-black uppercase text-muted-foreground/40 tracking-widest">Global_Status</span>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-mono font-bold text-green-500/80">CORE_SYNC_OK</span>
-              <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
-            </div>
-          </div>
-          <div className="h-8 w-[1px] bg-white/5 mx-2" />
-          <div className="flex items-center gap-2">
-            <Shield className="w-4 h-4 text-primary opacity-50" />
-            <span className="text-[10px] font-black uppercase text-primary tracking-tighter">Institutional_Grade</span>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content Area */}
-      <main className="flex-1 flex min-h-0 relative z-10">
-        {/* Left Panel: Library */}
-        <aside className="w-80 border-r border-white/5 flex flex-col bg-black/20">
+      <div className="flex-1 flex overflow-hidden p-2 gap-2 relative z-10 min-h-0">
+        {/* Panel A: Strategy Library */}
+        <section className="w-1/4 flex flex-col min-w-0">
           <StrategyLibrary
-            selectedId={selectedStrategy?.id}
-            onSelect={setSelectedStrategy}
+            selectedId={selectedId}
+            onSelect={(s) => setSelectedId(s.id)}
+            strategies={strategiesData?.strategies}
           />
-        </aside>
+        </section>
 
-        {/* Center Panel: Control Board */}
-        <section className="flex-1 flex flex-col min-w-0 bg-slate-950/40 overflow-y-auto custom-scrollbar">
-          <div className="p-4 border-b border-white/5 bg-white/5 flex items-center gap-2">
-            <Settings2 className="w-3.5 h-3.5 text-muted-foreground" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Execution_Control_Board</span>
-          </div>
+        {/* Panel B: Active Strategy Control */}
+        <section className="w-2/5 flex flex-col min-w-0">
           <StrategyControlBoard strategy={selectedStrategy} />
         </section>
 
-        {/* Right Panel: Performance */}
-        <aside className="w-96 border-l border-white/5 flex flex-col bg-black/20">
-          <div className="p-4 border-b border-white/5 bg-white/5 flex items-center gap-2">
-            <BarChart4 className="w-3.5 h-3.5 text-muted-foreground" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">Live_Analytics_Telemetry</span>
-          </div>
-          <StrategyPerformance strategyId={selectedStrategy?.id} />
-        </aside>
-      </main>
+        {/* Panel C: Performance Dashboard */}
+        <section className="flex-1 flex flex-col min-w-0">
+          <StrategyPerformance
+            strategyId={selectedId}
+            capitalAllocation={selectedStrategy?.params?.capital}
+          />
+        </section>
+      </div>
 
-      {/* Bottom Panel: Live Orders */}
-      <footer className="h-64 relative z-20">
-        <LiveOrdersPanel strategyId={selectedStrategy?.id} />
-      </footer>
-
-      {/* Grid Overlay for aesthetic */}
-      <div className="absolute inset-0 pointer-events-none opacity-[0.03] bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:40px_40px]" />
+      {/* Bottom Panel: Live Order Table */}
+      <section className="h-56 shrink-0 relative z-20">
+        <LiveOrdersPanel strategyId={selectedId} />
+      </section>
     </div>
   );
 };

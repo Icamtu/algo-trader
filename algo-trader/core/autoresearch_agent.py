@@ -210,6 +210,10 @@ async def run_iteration_api(code: str = None, strategy_name: str = None, symbol:
     last_perf = {}
     save_path = None
 
+    # Initialize research output directory
+    research_dir = os.path.join(strat_dir, 'AutoResearch')
+    os.makedirs(research_dir, exist_ok=True)
+
     for i in range(1, total_iterations + 1):
         if check_cancel and check_cancel():
             logger.info("AutoResearch task manually cancelled.")
@@ -322,8 +326,10 @@ Based on the metrics and the directive, output an IMPROVED version of the above 
 
     # Cleanup temp file if needed
     if code and "temp_ar_" in file_path:
-        try: os.remove(file_path)
-        except: pass
+        try:
+            os.remove(file_path)
+        except OSError as e:
+            logger.warning(f"Failed to cleanup temp file {file_path}: {e}")
 
     return {
         "metrics": last_perf,

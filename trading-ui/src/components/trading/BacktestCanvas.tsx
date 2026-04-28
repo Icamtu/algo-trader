@@ -8,7 +8,11 @@ import { cn } from "@/lib/utils";
 import { BacktestD3Chart } from "./charts/BacktestD3Chart";
 
 
-export function BacktestCanvas() {
+interface BacktestCanvasProps {
+  latestResult?: any;
+}
+
+export function BacktestCanvas({ latestResult }: BacktestCanvasProps = {}) {
   const [dbResults, setDbResults] = useState<any[]>([]);
   const [availableStrategies, setAvailableStrategies] = useState<any[]>([]);
   const [availableSymbols, setAvailableSymbols] = useState<any[]>([]);
@@ -45,6 +49,26 @@ export function BacktestCanvas() {
     };
     init();
   }, []);
+
+  // When parent passes a fresh result (from Editor run), prepend it
+  useEffect(() => {
+    if (!latestResult) return;
+    const mapped = {
+      id: latestResult.strategy_id || latestResult.strategy || Date.now().toString(),
+      name: latestResult.strategy_id || latestResult.strategy || "Editor Run",
+      date: new Date().toISOString().split("T")[0],
+      cagr: latestResult.metrics?.cagr || latestResult.cagr || 0,
+      sharpe: latestResult.metrics?.sharpe_ratio || latestResult.sharpe_ratio || 0,
+      sortino: latestResult.metrics?.sortino_ratio || latestResult.sortino_ratio || 0,
+      maxDD: latestResult.metrics?.max_drawdown_pct || latestResult.max_drawdown_pct || 0,
+      winRate: latestResult.metrics?.win_rate_pct || latestResult.win_rate_pct || 0,
+      pf: latestResult.metrics?.profit_factor || latestResult.profit_factor || 0,
+      tradesCount: latestResult.metrics?.total_trades || latestResult.total_trades || 0,
+      trades: latestResult.trades || [],
+      equityCurve: latestResult.metrics?.equity_curve || latestResult.equityCurve || [],
+    };
+    setDbResults((prev) => [mapped, ...prev.filter((r) => r.id !== mapped.id)]);
+  }, [latestResult]);
 
   const fetchSymbols = async () => {
     try {

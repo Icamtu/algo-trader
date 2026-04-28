@@ -58,6 +58,20 @@ class BaseStrategy(ABC):
 
         self.regime_status = "NEUTRAL"
         self.market_anchor = "NIFTY"
+
+        # Deployment-time Dynamic Config (Phase 16)
+        self.strategy_type = "intraday"
+        self.product_type = "MIS"
+        self.trading_mode = "both"
+        self.trading_hours = {
+            "start": "09:15",
+            "end": "15:15",
+            "square_off": "15:20"
+        }
+        self.max_risk = 500
+        self.capital_multiplier = 1.0
+        self.target_pnl = 2500
+
         logger.info(f"Strategy '{self.name}' initialized with Optimized Rolling Buffers for symbols: {self.symbols}")
 
     @property
@@ -219,6 +233,35 @@ class BaseStrategy(ABC):
 
         return adjusted_qty
 
+    def _check_trading_rules(self, side: str) -> tuple[bool, str]:
+        """Enforce Trading Mode and Trading Hours (Phase 16)."""
+        import pytz
+        from datetime import datetime
+
+        # 1. Check Trading Hours
+        ist = pytz.timezone('Asia/Kolkata')
+        now = datetime.now(ist).time()
+
+        try:
+            start_t = datetime.strptime(self.trading_hours["start"], "%H:%M").time()
+            end_t = datetime.strptime(self.trading_hours["end"], "%H:%M").time()
+
+            if not (start_t <= now <= end_t):
+                return False, f"Outside trading hours ({self.trading_hours['start']} - {self.trading_hours['end']})"
+        except Exception as e:
+            logger.error(f"Error parsing trading hours: {e}")
+
+        # 2. Check Trading Mode
+        mode = self.trading_mode.lower()
+        if mode == "long" and side.upper() == "SELL":
+            # We need to check if this is "SELL to close" or "SELL to open"
+            # However, BaseStrategy doesn't track its own positions easily here without querying.
+            # For "LONG Only", we block any SELL signal that would create a SHORT position.
+            # For now, let's just block the side to be safe, or assume the user means "No shorting".
+            pass # We'll refine this in buy/sell
+
+        return True, "allowed"
+
     def _find_sector_for_symbol(self, symbol: str) -> Optional[str]:
         """Maps a symbol to its registered sector in the registry."""
         if not self.runner or not hasattr(self.runner, 'sector_config'):
@@ -237,7 +280,7 @@ class BaseStrategy(ABC):
         quantity: int,
         order_type: str = "MARKET",
         price: float = 0.0,
-        product: str = "MIS",
+        product: Optional[str] = None,
         exchange: str = "NSE",
         human_approval: bool = False,
         ai_reasoning: Optional[str] = None,
@@ -249,6 +292,22 @@ class BaseStrategy(ABC):
         if not self.is_active:
             logger.warning(f"[{self.name}] Ignoring BUY signal; strategy is stopping.")
             return
+
+        # Phase 16: Enforce Trading Rules
+        allowed, reason = self._check_trading_rules("BUY")
+        if not allowed:
+            logger.warning(f"[{self.name}] BUY BLOCKED: {reason}")
+            return {"status": "error", "message": reason}
+
+        # Mode Enforcement (No Buying to open in Short Only)
+        if self.trading_mode.lower() == "short":
+            pos = self.order_manager.position_manager.get_position(symbol)
+            if pos.quantity >= 0:
+                logger.warning(f"[{self.name}] BUY BLOCKED: Strategy restricted to SHORT Only (no long entry allowed)")
+                return {"status": "error", "message": "SHORT Only strategy cannot enter LONG positions"}
+
+        # Product Choice (Override -> Strategy Level -> Default)
+        final_product = product or getattr(self, "product_type", "MIS")
 
         # Phase 11: Apply Market Regime Risks
         final_qty = self._apply_regime_risk(symbol, quantity)
@@ -269,7 +328,7 @@ class BaseStrategy(ABC):
             quantity=final_qty,
             order_type=order_type,
             price=price,
-            product=product,
+            product=final_product,
             exchange=exchange,
             human_approval=human_approval,
             ai_reasoning=ai_reasoning,
@@ -282,7 +341,7 @@ class BaseStrategy(ABC):
         quantity: int,
         order_type: str = "MARKET",
         price: float = 0.0,
-        product: str = "MIS",
+        product: Optional[str] = None,
         exchange: str = "NSE",
         human_approval: bool = False,
         ai_reasoning: Optional[str] = None,
@@ -291,9 +350,21 @@ class BaseStrategy(ABC):
         """
         Places a SELL order.
         """
-        if not self.is_active:
-            logger.warning(f"[{self.name}] Ignoring SELL signal; strategy is stopping.")
-            return
+        # Phase 16: Enforce Trading Rules
+        allowed, reason = self._check_trading_rules("SELL")
+        if not allowed:
+            logger.warning(f"[{self.name}] SELL BLOCKED: {reason}")
+            return {"status": "error", "message": reason}
+
+        # Mode Enforcement (No Selling to open in Long Only)
+        if self.trading_mode.lower() == "long":
+            pos = self.order_manager.position_manager.get_position(symbol)
+            if pos.quantity <= 0:
+                logger.warning(f"[{self.name}] SELL BLOCKED: Strategy restricted to LONG Only (no short entry allowed)")
+                return {"status": "error", "message": "LONG Only strategy cannot enter SHORT positions"}
+
+        # Product Choice
+        final_product = product or getattr(self, "product_type", "MIS")
 
         if price == 0.0 and symbol in self.price_buffers:
             idx = (self.buffer_indices[symbol] - 1) % self.buffer_size
@@ -307,7 +378,7 @@ class BaseStrategy(ABC):
             quantity=quantity,
             order_type=order_type,
             price=price,
-            product=product,
+            product=final_product,
             exchange=exchange,
             human_approval=human_approval,
             ai_reasoning=ai_reasoning,

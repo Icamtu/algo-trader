@@ -57,18 +57,27 @@ class OrderManager:
         self.risk_manager = risk_manager or RiskManager()
         self.telemetry_callback = telemetry_callback
         self.action_manager = action_manager
-        
+
         # AetherBridge: Native Execution Core (Phase 6)
         self.native_broker = None
         self.shadow_mode = settings.get("aetherbridge", {}).get("shadow_mode", False)
-        
+
         if settings.get("aetherbridge", {}).get("enabled", False):
             from brokers.factory import BrokerFactory
             broker_name = settings.get("aetherbridge", {}).get("active_broker", "paper")
-            broker_config = settings.get("aetherbridge", {}).get("brokers", {}).get(broker_name, {})
+
+            # Merge with DB config
+            db_config = self.trade_logger.get_broker_config().get(broker_name, {})
+            broker_config = settings.get("aetherbridge", {}).get("brokers", {}).get(broker_name, {}).copy()
+            broker_config.update(db_config)
+
+            # Pass shadow_mode as dry_run to the native broker
+            if self.shadow_mode:
+                broker_config["dry_run"] = True
+
             try:
                 self.native_broker = BrokerFactory.get_broker(broker_name, broker_config)
-                logger.info("AetherBridge: Native Broker [%s] initialized (Shadow Mode: %s)", 
+                logger.info("AetherBridge: Native Broker [%s] initialized (Shadow Mode: %s)",
                             broker_name.upper(), self.shadow_mode)
             except Exception as e:
                 logger.error("AetherBridge: Failed to initialize native broker: %s", e)
@@ -132,7 +141,7 @@ class OrderManager:
             span.set_attribute("symbol", symbol)
             span.set_attribute("action", action)
             span.set_attribute("strategy", strategy_name)
-            
+
             async with await latency_tracker.measure_async(f"OrderExecution:{symbol}", threshold_ms=10.0):
                 action = action.upper()
                 effective_mode = (mode or self.mode).lower()
@@ -199,6 +208,11 @@ class OrderManager:
 
                 # 2. Call broker (WITH RATE LIMITING)
                 start_broker = time.perf_counter()
+                processed_natively = False
+                native_latency = 0
+                native_order_id = None
+                response = None
+
                 try:
                     # Wait for token before calling broker for Live orders
                     if effective_mode == "live":
@@ -206,28 +220,21 @@ class OrderManager:
 
                     with tracer.start_as_current_span("broker_api_call") as broker_span:
                         broker_span.set_attribute("broker_mode", effective_mode)
-                        # LEGACY ROUTE (OpenAlgo)
-                        response = await asyncio.to_thread(
-                            self.client.place_order,
-                            symbol=symbol,
-                            action=action,
-                            quantity=quantity,
-                            product=product,
-                            order_type=order_type,
-                            price=price,
-                            exchange=exchange,
-                            strategy=strategy_name,
-                        )
-                        
-                        # AETHERBRIDGE ROUTE (Native)
+
+                        # AETHERBRIDGE ROUTE (Native First)
                         if self.native_broker:
                             try:
                                 from brokers.models import OrderAction, OrderType, ProductType
-                                # Map legacy strings to Enum models
                                 n_action = OrderAction.BUY if action == "BUY" else OrderAction.SELL
-                                n_type = getattr(OrderType, order_type, OrderType.MARKET)
-                                n_product = getattr(ProductType, product, ProductType.MIS)
-                                
+                                try:
+                                    n_type = getattr(OrderType, order_type.upper(), OrderType.MARKET)
+                                except:
+                                    n_type = OrderType.MARKET
+                                try:
+                                    n_product = getattr(ProductType, product.upper(), ProductType.MIS)
+                                except:
+                                    n_product = ProductType.MIS
+
                                 start_native = time.perf_counter()
                                 native_order = await self.native_broker.place_order(
                                     symbol=symbol,
@@ -241,39 +248,54 @@ class OrderManager:
                                     **kwargs
                                 )
                                 native_latency = (time.perf_counter() - start_native) * 1000
-                                logger.info(f"[SHADOW] Native Latency: {native_latency:.2f}ms | OrderID: {native_order.order_id}")
-                                
-                                # Log comparison to special audit table
-                                if self.shadow_mode:
-                                    asyncio.create_task(self.trade_logger.log_api_call(
-                                        api_type="AETHERBRIDGE_SHADOW",
-                                        request_data={"symbol": symbol, "action": action, "qty": quantity},
-                                        response_data={
-                                            "legacy_latency_ms": round(broker_latency, 2) if 'broker_latency' in locals() else 0,
-                                            "native_latency_ms": round(native_latency, 2),
-                                            "native_order_id": native_order.order_id,
-                                            "match": (response and response.get('status') == 'success')
-                                        },
-                                        strategy=strategy_name
-                                    ))
-                                
-                                # If NOT in shadow mode (Direct Native), we would replace response here.
-                                # But for Phase 4 we keep Legacy as the source of truth.
+                                native_order_id = native_order.order_id
+                                logger.info(f"[AETHERBRIDGE] Native Latency: {native_latency:.2f}ms | OrderID: {native_order_id}")
+
                                 if not self.shadow_mode:
-                                    # Override response for Direct Native Execution
                                     response = {
-                                        "status": "success" if native_order.status.value == "complete" or native_order.status.value == "pending" else "error",
-                                        "order_id": native_order.order_id,
-                                        "message": "Executed via AetherBridge Native",
-                                        "price": native_order.price
+                                        "status": "success",
+                                        "order_id": native_order_id,
+                                        "price": native_order.price,
+                                        "message": "Executed via AetherBridge Native"
                                     }
+                                    processed_natively = True
                             except Exception as ne:
-                                logger.error(f"AetherBridge execution fault: {ne}")
+                                logger.error(f"Native broker execution failed: {ne}")
                                 if not self.shadow_mode:
-                                    return {"status": "error", "message": f"Native Execution Failed: {ne}"}
+                                    raise ne
+
+                        if not processed_natively:
+                            # LEGACY ROUTE (OpenAlgo Fallback or Shadow Mode)
+                            response = await asyncio.to_thread(
+                                self.client.place_order,
+                                symbol=symbol,
+                                action=action,
+                                quantity=quantity,
+                                product=product,
+                                order_type=order_type,
+                                price=price,
+                                exchange=exchange,
+                                strategy=strategy_name,
+                            )
+
+                            # Log comparison in shadow mode
+                            if self.native_broker and self.shadow_mode:
+                                asyncio.create_task(asyncio.to_thread(
+                                    self.trade_logger.log_api_call,
+                                    api_type="AETHERBRIDGE_SHADOW",
+                                    request_data={"symbol": symbol, "action": action, "qty": quantity},
+                                    response_data={
+                                        "legacy_status": response.get("status") if response else "ERROR",
+                                        "native_order_id": native_order_id,
+                                        "native_latency_ms": round(native_latency, 2)
+                                    },
+                                    strategy=strategy_name
+                                ))
+
                         if response:
                             broker_span.set_attribute("broker_status", response.get("status", "unknown"))
                             broker_span.set_attribute("order_id", str(response.get("order_id", "N/A")))
+
                     broker_latency = (time.perf_counter() - start_broker) * 1000
                     logger.info(f"[AUDIT] Broker Latency for {symbol} {action}: {broker_latency:.2f}ms")
                 except Exception as e:
@@ -319,14 +341,11 @@ class OrderManager:
                 if is_filled:
                     try:
                         asset_type = "OPTIONS" if any(idx in symbol for idx in ["NIFTY", "BANKNIFTY", "FINNIFTY"]) and any(c.isdigit() for c in symbol) else "EQUITY"
+                        from services.charges_service import get_charges_service
                         charges_service = get_charges_service()
                         charge_data = charges_service.calculate(
                             symbol=symbol,
-                            side=action,
-                            quantity=quantity,
-                            price=execution_price,
-                            product=product,
-                            asset_type=asset_type
+                            side=action, quantity=quantity, price=execution_price, product=product, asset_type=asset_type
                         )
                         est_charges = charge_data["total"]
                     except Exception as ce:
@@ -374,6 +393,7 @@ class OrderManager:
                             self.risk_dispatcher.broadcast_risk(self.risk_manager.get_status())
 
                 return response
+
     async def place_smart_order(
         self,
         strategy_name: str,
@@ -391,7 +411,7 @@ class OrderManager:
             span.set_attribute("symbol", symbol)
             span.set_attribute("action", action)
             span.set_attribute("strategy", strategy_name)
-            
+
             action = action.upper()
             logger.info(
                 "[%s] SmartOrder >> %s %s qty=%d pos_size=%d",
@@ -421,7 +441,7 @@ class OrderManager:
         with tracer.start_as_current_span("place_basket_order") as span:
             span.set_attribute("order_count", len(orders))
             span.set_attribute("strategy", strategy_name)
-            
+
             logger.info("[%s] BasketOrder >> %d orders", strategy_name, len(orders))
             try:
                 response = await asyncio.to_thread(
@@ -577,6 +597,15 @@ class OrderManager:
     # ------------------------------------------------------------------
 
     async def get_positions(self):
+        """Fetches active positions from the broker."""
+        if self.native_broker:
+            try:
+                positions = await self.native_broker.get_positions()
+                return [p.dict() for p in positions]
+            except Exception as e:
+                logger.error(f"Native get_positions failed: {e}")
+                if not self.shadow_mode: return []
+
         return await asyncio.to_thread(self.client.get_positions)
 
     async def get_open_positions_dict(self) -> Dict[str, int]:
@@ -610,12 +639,29 @@ class OrderManager:
         return await asyncio.to_thread(self.client.get_holdings)
 
     async def get_orders(self):
+        """Fetches order book from the broker."""
+        if self.native_broker:
+            try:
+                orders = await self.native_broker.get_orders()
+                return [o.dict() for o in orders]
+            except Exception as e:
+                logger.error(f"Native get_orders failed: {e}")
+                if not self.shadow_mode: return []
+
         return await asyncio.to_thread(self.client.get_orders)
 
     async def get_trades(self):
         return await asyncio.to_thread(self.client.get_trades)
 
     async def get_funds(self):
+        if self.native_broker:
+            try:
+                funds = await self.native_broker.get_funds()
+                return funds
+            except Exception as e:
+                logger.error(f"Native get_funds failed: {e}")
+                if not self.shadow_mode: return {"status": "error", "message": str(e)}
+
         return await asyncio.to_thread(self.client.get_funds)
 
     async def get_history(
@@ -679,7 +725,7 @@ class OrderManager:
             broker_positions = await self.get_positions()
             if isinstance(broker_positions, dict):
                 broker_positions = broker_positions.get("data", [])
-            
+
             # Simple check: do we have the same symbols and quantities?
             for pos in (broker_positions or []):
                 symbol = pos.get("symbol")
@@ -688,14 +734,14 @@ class OrderManager:
                 local_qty = self.position_manager.get_quantity(symbol)
                 if local_qty != net_qty:
                     return True
-            
+
             # Also check if we have local positions that don't exist in broker
             local_snapshot = self.position_manager.all_positions()
             broker_symbols = {p.get("symbol") for p in (broker_positions or []) if p.get("symbol")}
             for symbol, pos in local_snapshot.items():
                 if pos.quantity != 0 and symbol not in broker_symbols:
                     return True
-                    
+
             return False
         except Exception as e:
             logger.error(f"Drift check failed: {e}")

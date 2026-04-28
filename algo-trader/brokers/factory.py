@@ -39,18 +39,34 @@ class BrokerFactory:
         adapter_class = cls._registry.get(broker_name)
         if not adapter_class:
             raise ValueError(f"Unsupported broker: {broker_name}")
-        
+
         return adapter_class(broker_name, config)
 
 # Global helper for quick instantiation from environment
 def get_active_broker() -> BaseBroker:
-    broker_name = os.getenv("ACTIVE_BROKER", "shoonya").lower()
-    # Configuration should be pulled from secure env or DB
-    config = {
-        "user_id": os.getenv("SHOONYA_USER_ID"),
-        "password": os.getenv("SHOONYA_PASSWORD"),
-        "totp_secret": os.getenv("SHOONYA_TOTP_SECRET"),
-        "api_key": os.getenv("SHOONYA_API_KEY"),
-        "vendor_code": os.getenv("SHOONYA_VENDOR_CODE"),
-    }
+    broker_name = os.getenv("AETHERBRIDGE_ACTIVE_BROKER", "shoonya").lower()
+
+    shadow_mode = os.getenv("AETHERBRIDGE_SHADOW_MODE", "false").lower() == "true"
+
+    # Configuration pulled from environment
+    if broker_name == "zerodha":
+        config = {
+            "user_id": os.getenv("AETHERBRIDGE_BROKERS_ZERODHA_USER_ID"),
+            "api_key": os.getenv("AETHERBRIDGE_BROKERS_ZERODHA_API_KEY"),
+            "api_secret": os.getenv("AETHERBRIDGE_BROKERS_ZERODHA_API_SECRET"),
+            "access_token": os.getenv("AETHERBRIDGE_BROKERS_ZERODHA_ACCESS_TOKEN"),
+            "dry_run": shadow_mode
+        }
+    else:
+        # Default to Shoonya
+        config = {
+            "user_id": os.getenv("AETHERBRIDGE_BROKERS_SHOONYA_USER_ID"),
+            "password": os.getenv("AETHERBRIDGE_BROKERS_SHOONYA_PASSWORD"),
+            "totp_secret": os.getenv("AETHERBRIDGE_BROKERS_SHOONYA_TOTP_SECRET"),
+            "api_key": os.getenv("AETHERBRIDGE_BROKERS_SHOONYA_API_KEY"),
+            "vendor_code": os.getenv("AETHERBRIDGE_BROKERS_SHOONYA_VENDOR_CODE"),
+            "imei": os.getenv("AETHERBRIDGE_BROKERS_SHOONYA_IMEI", "MAC_ADDRESS"),
+            "dry_run": shadow_mode
+        }
+
     return BrokerFactory.get_broker(broker_name, config)

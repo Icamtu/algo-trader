@@ -13,6 +13,16 @@ from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from fastapi.middleware.wsgi import WSGIMiddleware
 import uvicorn
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+from fastapi import Response
+
+# OpenTelemetry
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.sdk.resources import Resource
 
 # AetherDesk Modules
 from core.config import settings
@@ -30,9 +40,24 @@ from routers.analytics import router as analytics_router
 from routers.action_center import router as action_center_router
 from routers.intel import router as intel_router
 from routers.system import router as system_router
+from routers.orders import router as orders_router
+from routers.portfolio import router as portfolio_router
+from routers.risk import router as risk_router
+from routers.auth import router as auth_router
+from routers.strategies import router as strategies_router
+from routers.backtest import router as backtest_router
+from routers.vault import router as vault_router
+from routers.webhooks import router as webhooks_router
+from routers.stat_arb import router as stat_arb_router
+from routers.sentiment import router as sentiment_router
+from routers.indicators import router as indicators_router
 
 # Security constants
 JWT_SECRET = os.environ.get("JWT_SECRET")
+
+# --- Prometheus Metrics ---
+ORDER_COUNTER = Counter("algo_orders_total", "Total orders placed", ["symbol", "action", "strategy"])
+LATENCY_HISTOGRAM = Histogram("algo_latency_seconds", "Execution latency in seconds", ["operation"])
 
 logger = logging.getLogger(__name__)
 
@@ -58,13 +83,12 @@ _memory_log_handler = MemoryLogHandler()
 _memory_log_handler.setFormatter(logging.Formatter('%(message)s'))
 logging.getLogger().addHandler(_memory_log_handler)
 
-# Global logging handler
-_memory_log_handler = MemoryLogHandler()
-
 # --- WebSocket Connection Manager ---
 class ConnectionManager:
     def __init__(self):
         self.active_connections: set[WebSocket] = set()
+        self.connection_locks: Dict[WebSocket, asyncio.Lock] = {}
+        self.last_active: Dict[WebSocket, float] = {}  # Tracks last pong/message
         self.tick_buffer: Dict[str, Any] = {}
         self.tick_lock = asyncio.Lock()
 
@@ -85,32 +109,47 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.add(websocket)
+        self.connection_locks[websocket] = asyncio.Lock()
+        self.last_active[websocket] = time.time()
         logger.info(f"WebSocket client connected. Total: {len(self.active_connections)}")
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
+            self.connection_locks.pop(websocket, None)
+            self.last_active.pop(websocket, None)
             logger.info(f"WebSocket client disconnected. Total: {len(self.active_connections)}")
 
-    async def broadcast(self, message: str):
-        # We use a list to avoid "set changed size during iteration" errors
-        stale_connections = []
-        for connection in list(self.active_connections):
-            try:
-                await connection.send_text(message)
-            except Exception as e:
-                logger.debug(f"Broadcast failed for a connection (likely closed): {e}")
-                stale_connections.append(connection)
-
-        for stale in stale_connections:
-            self.disconnect(stale)
 
     async def send_json(self, websocket: WebSocket, data: dict):
         try:
-            await websocket.send_text(json.dumps(data))
+            lock = self.connection_locks.get(websocket)
+            if lock:
+                async with lock:
+                    await websocket.send_text(json.dumps(data))
+            else:
+                await websocket.send_text(json.dumps(data))
         except Exception as e:
             logger.debug(f"Send JSON failed: {e}")
             self.disconnect(websocket)
+
+    async def broadcast(self, message: str):
+        """Send a message to all active connections."""
+        disconnected = []
+        for connection in list(self.active_connections):
+            try:
+                lock = self.connection_locks.get(connection)
+                if lock:
+                    async with lock:
+                        await connection.send_text(message)
+                else:
+                    await connection.send_text(message)
+            except Exception as e:
+                logger.debug(f"Broadcast to connection failed: {e}")
+                disconnected.append(connection)
+
+        for conn in disconnected:
+            self.disconnect(conn)
 
     async def handle_auth(self, websocket: WebSocket) -> bool:
         try:
@@ -146,6 +185,19 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# --- OpenTelemetry Setup ---
+def setup_tracing(app: FastAPI):
+    resource = Resource.create({"service.name": "algo_engine"})
+    provider = TracerProvider(resource=resource)
+
+    # Use OTLP exporter (Jaeger)
+    otlp_exporter = OTLPSpanExporter(endpoint="http://jaeger:4317", insecure=True)
+    provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+
+    trace.set_tracer_provider(provider)
+    FastAPIInstrumentor.instrument_app(app)
+    logger.info("OpenTelemetry Tracing initialized (OTLP -> Jaeger)")
+
 # --- Lifespan Manager ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -161,6 +213,7 @@ async def lifespan(app: FastAPI):
 
     # Start background tasks
     dispatcher_task = asyncio.create_task(tick_dispatcher())
+    log_task = asyncio.create_task(log_dispatcher())
     reaper_task = asyncio.create_task(zombie_reaper())
 
     yield
@@ -173,17 +226,34 @@ async def lifespan(app: FastAPI):
 
 # --- Connection Maintenance ---
 async def zombie_reaper():
-    """Background task to prune dead WebSocket connections every 60 seconds."""
+    """Background task to prune dead WebSocket connections every 30 seconds."""
     while True:
         try:
-            await asyncio.sleep(60)
+            await asyncio.sleep(30)
             if not manager.active_connections:
                 continue
 
             logger.debug(f"Reaper: Auditing {len(manager.active_connections)} connections...")
-            ping_msg = json.dumps({"type": "ping", "server_ts": time.time()})
+            now = time.time()
+            stale_connections = []
 
-            # Use broadcast logic which already prunes on failure
+            # Identify zombies (no pong for > 65s)
+            for ws in list(manager.active_connections):
+                last_active = manager.last_active.get(ws, now)
+                if now - last_active > 65:
+                    stale_connections.append(ws)
+
+            # Close and remove zombies
+            for ws in stale_connections:
+                logger.warning("Reaper: Disconnecting zombie WebSocket client (heartbeat timeout).")
+                try:
+                    await ws.close(code=1000, reason="Heartbeat timeout")
+                except Exception:
+                    pass
+                manager.disconnect(ws)
+
+            # Ping remaining healthy connections
+            ping_msg = json.dumps({"type": "ping", "server_ts": now})
             await manager.broadcast(ping_msg)
 
         except asyncio.CancelledError:
@@ -216,8 +286,33 @@ async def tick_dispatcher():
         except Exception as e:
             logger.error(f"FastAPI Tick Dispatcher error: {e}")
 
+async def log_dispatcher():
+    """Background task to dispatch latest engine logs every 1s."""
+    last_count = 0
+    while True:
+        try:
+            await asyncio.sleep(1.0)
+            if not manager.active_connections:
+                continue
+
+            logs = _memory_log_handler.get_logs()
+            if len(logs) != last_count:
+                # We only send if there are new logs to save bandwidth
+                msg = json.dumps({
+                    "type": "logs",
+                    "data": logs[-20:] # Send last 20 for tail view
+                })
+                await manager.broadcast(msg)
+                last_count = len(logs)
+
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"FastAPI Log Dispatcher error: {e}")
+
 # --- API Application ---
 app = FastAPI(title="AetherDesk Algo Engine", version="1.2.0", lifespan=lifespan)
+setup_tracing(app)
 
 # CORS
 allowed_origins = os.getenv("CORS_ALLOWED_ORIGINS", "*").split(",")
@@ -228,6 +323,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Rate Limiting (Phase 1: C3)
+from middleware.rate_limiter import RateLimiterMiddleware
+app.add_middleware(RateLimiterMiddleware)
 
 # --- WebSocket Endpoint (PRE-MOUNT) ---
 @app.websocket("/ws")
@@ -257,13 +356,22 @@ async def websocket_endpoint(websocket: WebSocket):
 
         while True:
             # We use receive_text and parse manually for better control
-            msg_text = await websocket.receive_text()
-            data = json.loads(msg_text)
+            # Add timeout to allow checking connection health even if client is quiet
+            msg_text = await asyncio.wait_for(websocket.receive_text(), timeout=35.0)
+            manager.last_active[websocket] = time.time()
 
-            if data.get("type") == "ping":
-                await manager.send_json(websocket, {"type": "pong", "timestamp": time.time()})
-            continue
+            try:
+                data = json.loads(msg_text)
+                if data.get("type") == "ping":
+                    await manager.send_json(websocket, {"type": "pong", "timestamp": time.time()})
+                elif data.get("type") == "pong":
+                    pass # Handled by last_active update above
+            except json.JSONDecodeError:
+                pass
 
+    except asyncio.TimeoutError:
+        # Expected if client sends nothing, zombie_reaper handles actual timeout logic
+        pass
     except WebSocketDisconnect:
         manager.disconnect(websocket)
     except Exception as e:
@@ -275,6 +383,19 @@ app.include_router(analytics_router)
 app.include_router(action_center_router)
 app.include_router(intel_router)
 app.include_router(system_router)
+app.include_router(orders_router)
+app.include_router(portfolio_router)
+app.include_router(risk_router)
+app.include_router(auth_router)
+app.include_router(strategies_router)
+app.include_router(backtest_router)
+app.include_router(vault_router)
+app.include_router(webhooks_router)
+
+@app.get("/metrics")
+async def metrics():
+    """Exposes Prometheus metrics."""
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 # NOTE: Removed redundant routes to allow Flask mount to handle rich telemetry/health logic.

@@ -17,7 +17,7 @@ const strategies = ["Momentum Alpha", "Mean Reversion", "Stat Arb", "Pairs Tradi
 export function NewOrderModal({ isOpen, onClose, prefilledSymbol = "" }: NewOrderModalProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  
+
   const [form, setForm] = useState({
     symbol: prefilledSymbol,
     side: "BUY" as "BUY" | "SELL",
@@ -36,7 +36,13 @@ export function NewOrderModal({ isOpen, onClose, prefilledSymbol = "" }: NewOrde
   }, [prefilledSymbol]);
 
   // Symbol autocomplete
-  const [symbolSuggestions, setSymbolSuggestions] = useState<{ symbol: string; exchange: string }[]>([]);
+  const [symbolSuggestions, setSymbolSuggestions] = useState<{
+    symbol: string;
+    exchange: string;
+    expiry?: string;
+    strike?: number;
+    name?: string;
+  }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -66,7 +72,7 @@ export function NewOrderModal({ isOpen, onClose, prefilledSymbol = "" }: NewOrde
         if (e.key === "Escape") onClose();
         return;
       }
-      
+
       switch(e.key.toLowerCase()) {
         case "b":
           setForm(prev => ({ ...prev, side: "BUY" }));
@@ -96,7 +102,7 @@ export function NewOrderModal({ isOpen, onClose, prefilledSymbol = "" }: NewOrde
     }
 
     setLoading(true);
-    
+
     try {
       const orderPayload = {
         symbol: form.symbol.trim().toUpperCase(),
@@ -133,7 +139,7 @@ export function NewOrderModal({ isOpen, onClose, prefilledSymbol = "" }: NewOrde
         title: "ORDER_EXECUTED",
         description: `SIGNAL_SENT::${form.side}_${form.qty}_${form.symbol}`,
       });
-      
+
       onClose();
       setForm({
         symbol: "",
@@ -173,7 +179,7 @@ export function NewOrderModal({ isOpen, onClose, prefilledSymbol = "" }: NewOrde
             className="fixed inset-0 bg-background/60 backdrop-blur-xl z-[150] industrial-grid"
             onClick={onClose}
           />
-          
+
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -182,7 +188,7 @@ export function NewOrderModal({ isOpen, onClose, prefilledSymbol = "" }: NewOrde
           >
             <div className="scanline opacity-10" />
             <div className="absolute inset-0 bg-card/10 pointer-events-none" />
-            
+
             {/* Master Header */}
             <div className="flex items-center justify-between p-5 border-b-2 border-border/60 bg-card/20 relative">
               <div className="flex items-center gap-4">
@@ -212,22 +218,39 @@ export function NewOrderModal({ isOpen, onClose, prefilledSymbol = "" }: NewOrde
                   />
                   <AnimatePresence>
                     {showSuggestions && symbolSuggestions.length > 0 && (
-                       <motion.div 
+                       <motion.div
                         initial={{ opacity: 0, y: 5 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="absolute top-full left-0 right-0 mt-2 border-2 border-border bg-background z-50 shadow-2xl p-1"
+                        exit={{ opacity: 0, y: 5 }}
+                        className="absolute top-full left-0 right-0 mt-2 border-2 border-border bg-background z-[200] shadow-[0_10px_40px_rgba(0,0,0,0.6)] p-1 max-h-[300px] overflow-y-auto custom-scrollbar"
                        >
-                          {symbolSuggestions.map(s => (
-                             <button 
-                               key={s.symbol}
+                          <div className="p-2 border-b border-border/40 mb-1">
+                            <span className="text-[8px] font-mono text-muted-foreground/40 uppercase tracking-[0.2em]">Master_Contract_Results ({symbolSuggestions.length})</span>
+                          </div>
+                          {symbolSuggestions.map((s, idx) => (
+                             <button
+                               key={`${s.symbol}-${idx}`}
                                onMouseDown={() => {
                                  setForm(prev => ({ ...prev, symbol: s.symbol }));
                                  setShowSuggestions(false);
                                }}
-                               className="w-full px-4 py-3 text-left hover:bg-primary/5 flex justify-between items-center group transition-all border border-transparent hover:border-primary/20"
+                               className="w-full px-4 py-3 text-left hover:bg-primary/10 flex justify-between items-center group transition-all border border-transparent hover:border-primary/20 mb-0.5"
                              >
-                                <span className="text-[11px] font-mono font-black text-foreground group-hover:text-primary tracking-widest">{s.symbol}</span>
-                                <span className="text-[8px] font-mono text-muted-foreground/30 uppercase tracking-[0.2em]">{s.exchange}_BUS</span>
+                                <div className="flex flex-col gap-0.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[11px] font-mono font-black text-foreground group-hover:text-primary tracking-widest">{s.symbol}</span>
+                                    {s.expiry && (
+                                      <span className="text-[9px] font-mono text-secondary bg-secondary/10 px-1.5 py-0.5 font-bold uppercase">{s.expiry}</span>
+                                    )}
+                                  </div>
+                                  <span className="text-[9px] font-mono text-muted-foreground/40 uppercase truncate max-w-[200px]">{s.name || 'UNNAMED_ASSET'}</span>
+                                </div>
+                                <div className="flex flex-col items-end gap-1">
+                                  <span className="text-[8px] font-mono text-muted-foreground/30 uppercase tracking-[0.2em]">{s.exchange}_BUS</span>
+                                  {s.strike && s.strike > 0 && (
+                                    <span className="text-[9px] font-mono text-primary/60 font-bold italic">@{s.strike}</span>
+                                  )}
+                                </div>
                              </button>
                           ))}
                        </motion.div>
@@ -241,13 +264,13 @@ export function NewOrderModal({ isOpen, onClose, prefilledSymbol = "" }: NewOrde
                 <div className="space-y-3">
                   <label className="text-[10px] font-black font-mono uppercase tracking-[0.3em] text-primary/40 px-1">Signal_Polarity</label>
                   <div className="flex border-2 border-border/40 p-1 bg-card/5">
-                    <button 
+                    <button
                       onClick={() => setForm({...form, side: 'BUY'})}
                       className={`flex-1 py-2 text-[11px] font-mono font-black transition-all ${form.side === 'BUY' ? 'bg-secondary text-black shadow-[0_0_15px_rgba(0,245,255,0.3)]' : 'text-muted-foreground/30 hover:text-foreground'}`}
                     >
                       LONG_SIGNAL
                     </button>
-                    <button 
+                    <button
                       onClick={() => setForm({...form, side: 'SELL'})}
                       className={`flex-1 py-2 text-[11px] font-mono font-black transition-all ${form.side === 'SELL' ? 'bg-destructive text-white shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'text-muted-foreground/30 hover:text-foreground'}`}
                     >
@@ -257,7 +280,7 @@ export function NewOrderModal({ isOpen, onClose, prefilledSymbol = "" }: NewOrde
                 </div>
                 <div className="space-y-3">
                   <label className="text-[10px] font-black font-mono uppercase tracking-[0.3em] text-primary/40 px-1">Execution_Kernel</label>
-                  <select 
+                  <select
                     value={form.orderType}
                     onChange={(e) => setForm({...form, orderType: e.target.value as any})}
                     className="w-full bg-card/10 border-2 border-border/40 px-4 py-2.5 text-[11px] font-mono font-black text-foreground outline-none focus:border-primary transition-all appearance-none uppercase tracking-widest"
@@ -335,7 +358,7 @@ export function NewOrderModal({ isOpen, onClose, prefilledSymbol = "" }: NewOrde
 
             {/* Master Action Strip */}
             <div className="p-6 border-t-2 border-border/60 bg-card/20 flex gap-4">
-              <button 
+              <button
                 onClick={onClose}
                 className="px-8 py-3 text-[11px] font-mono font-black uppercase tracking-[0.2em] text-muted-foreground/40 hover:text-destructive hover:bg-destructive/5 border-2 border-border/40 transition-all"
               >
@@ -345,8 +368,8 @@ export function NewOrderModal({ isOpen, onClose, prefilledSymbol = "" }: NewOrde
                 onClick={() => handleSubmit('place')}
                 disabled={!isValid || loading}
                 className={`flex-1 py-3 text-[11px] font-mono font-black uppercase tracking-[0.3em] transition-all flex items-center justify-center gap-3 relative overflow-hidden ${
-                  isValid && !loading 
-                    ? "bg-primary text-black shadow-[0_0_40px_rgba(255,176,0,0.3)] hover:scale-[1.02] active:scale-98" 
+                  isValid && !loading
+                    ? "bg-primary text-black shadow-[0_0_40px_rgba(255,176,0,0.3)] hover:scale-[1.02] active:scale-98"
                     : "bg-card border-2 border-border/20 text-muted-foreground/20 cursor-not-allowed"
                 }`}
               >
@@ -355,7 +378,7 @@ export function NewOrderModal({ isOpen, onClose, prefilledSymbol = "" }: NewOrde
                 {loading ? "TRANSMITTING..." : "EXECUTE_INSTRUCTION"}
               </button>
             </div>
-            
+
             {/* System Telemetry Log */}
             <div className="p-2 px-5 bg-primary/10 flex justify-between items-center border-t border-primary/20">
                <div className="flex gap-4">

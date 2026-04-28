@@ -2,7 +2,8 @@ import logging
 import asyncio
 import os
 import json
-from datetime import datetime
+import time
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any
 from database.trade_logger import get_trade_logger
 from execution.signal_store import get_signal_store
@@ -24,7 +25,7 @@ class ActionManager:
         self.loop = None
         self.auto_execute = False # Phase 13: Allow toggling auto-route vs hitl
         self.risk_lock = False    # Phase 13: System-wide execution lock
-        self.last_audit_ts = datetime.utcnow().isoformat()
+        self.last_audit_ts = datetime.now(timezone.utc).isoformat()
         try:
             self.loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -52,8 +53,7 @@ class ActionManager:
         """Removes pending signals that have expired without approval."""
         try:
             pending = self.store.get_pending()
-            from datetime import datetime, timedelta
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
 
             expired_ids = []
             for order in pending:
@@ -76,9 +76,8 @@ class ActionManager:
 
     def queue_for_approval(self, order_data: dict) -> Optional[int]:
         """Queues an order for human approval and broadcasts via telemetry."""
-        from datetime import datetime
         if 'timestamp' not in order_data:
-            order_data['timestamp'] = datetime.utcnow().isoformat()
+            order_data['timestamp'] = datetime.now(timezone.utc).isoformat()
 
         # Risk Lock Check - Institutional Override
         if self.risk_lock:
@@ -150,7 +149,7 @@ class ActionManager:
             "audit_protocol": "Aether-HITL-v2",
             "latency_ms": round(latency_tracker.get_avg_latency("ActionApproval") or 2, 2),
             "engine_latency_ms": round(latency_tracker.get_avg_latency("OrderExecution") or 5, 2),
-            "last_audit_ts": datetime.utcnow().isoformat(),
+            "last_audit_ts": datetime.now(timezone.utc).isoformat(),
             "auto_execute": self.auto_execute,
             "risk_lock": self.risk_lock
         }
@@ -316,6 +315,34 @@ class ActionManager:
         results = await asyncio.gather(*tasks)
         success_count = sum(1 for r in results if r)
         return {"total": len(order_ids), "success": success_count, "failed": len(order_ids) - success_count}
+
+    async def cancel_all_signals(self) -> Dict[str, Any]:
+        """
+        Purges all pending signals from the Action Center and cancels all active broker orders.
+        """
+        logger.warning("AUDIT: Cancel All Signals & Orders initiated")
+
+        # 1. Purge all pending in the store (L1 Redis)
+        pending = self.store.get_pending()
+        for order in pending:
+            self.store.resolve_signal(order['id'], 'cancelled', reason="Global Cancel All")
+
+        # 2. Update status in SQLite (L2)
+        self.sqlite.cancel_all_pending_signals()
+
+        # 3. Cancel all orders at the broker
+        broker_result = None
+        if self.order_manager:
+            broker_result = await self.order_manager.cancel_all_orders()
+
+        if self.telemetry_callback:
+            asyncio.create_task(self.telemetry_callback("hitl_purge", {"status": "all_cancelled"}))
+
+        return {
+            "status": "success",
+            "signals_cancelled": len(pending),
+            "broker_response": broker_result
+        }
 
     def reject_order(self, order_id: Any, reason: Optional[str] = None) -> bool:
         """Rejects a queued order and broadcasts rejection."""

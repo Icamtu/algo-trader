@@ -15,6 +15,13 @@ from core.strategy_registry import build_strategy_snapshots, discover_strategy_d
 from core.strategy_runner import StrategyRunner
 from backtesting.runner import BacktestRunner
 from execution.paper_broker import PaperBroker
+from data import historify_db
+
+
+# Patch DuckDB path for tests to avoid permission issues
+TEST_DB_DIR = tempfile.mkdtemp()
+historify_db.HISTORIFY_DB_PATH = os.path.join(TEST_DB_DIR, "test_historify.duckdb")
+historify_db.init_database()
 
 
 class DummyMarketStream:
@@ -33,6 +40,10 @@ class DummyMarketStream:
 
 
 class DummyOrderManager:
+    pass
+
+
+class DummyPortfolioManager:
     pass
 
 
@@ -81,6 +92,7 @@ class StrategyConfigTests(unittest.TestCase):
         runner = StrategyRunner(
             market_stream=DummyMarketStream(),
             order_manager=DummyOrderManager(),
+            portfolio_manager=DummyPortfolioManager(),
             config={
                 "strategies": {
                     "intraday": True,
@@ -103,6 +115,7 @@ class StrategyControlTests(unittest.IsolatedAsyncioTestCase):
         runner = StrategyRunner(
             market_stream=market_stream,
             order_manager=DummyOrderManager(),
+            portfolio_manager=DummyPortfolioManager(),
             config={"strategies": {}},
         )
         runner._discover_strategies()
@@ -118,6 +131,7 @@ class StrategyControlTests(unittest.IsolatedAsyncioTestCase):
         runner = StrategyRunner(
             market_stream=market_stream,
             order_manager=DummyOrderManager(),
+            portfolio_manager=DummyPortfolioManager(),
             config={"strategies": {}},
         )
         runner._discover_strategies()
@@ -157,6 +171,7 @@ class BacktestRunnerTests(unittest.TestCase):
         snapshots = build_strategy_snapshots(
             config={"strategies": {"intraday": True, "swing": False, "long_term": False, "sample": True}},
             order_manager=DummyOrderManager(),
+            portfolio_manager=DummyPortfolioManager(),
         )
 
         enabled_by_key = {snapshot.config_key: snapshot.enabled for snapshot in snapshots}

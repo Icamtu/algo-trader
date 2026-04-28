@@ -50,7 +50,7 @@ export default function LandingDashboard() {
   const isLoading = tickerSymbols.length === 0;
 
   return (
-    <div className="relative space-y-6 pb-12 overflow-hidden">
+    <div className="relative space-y-6 pb-12">
       {/* Decorative Neural Flow */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] neural-flow-bg opacity-30 animate-neural-pulse" />
       <div className="absolute bottom-0 left-0 w-[400px] h-[400px] neural-flow-bg opacity-20 animate-neural-pulse" style={{ animationDelay: '1s' }} />
@@ -186,7 +186,7 @@ export default function LandingDashboard() {
                     }}
                     initial="initial"
                     animate="animate"
-                    className="grid grid-cols-1 gap-2 h-[450px] overflow-auto custom-scrollbar pr-2"
+                    className="grid grid-cols-1 gap-2 pr-2"
                  >
                    {movers?.map((mover) => (
                      <motion.div

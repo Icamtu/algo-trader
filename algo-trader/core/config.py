@@ -30,8 +30,8 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     },
     "aetherbridge": {
         "enabled": os.getenv("AETHERBRIDGE_ENABLED", "false").lower() in {"1", "true", "yes", "on"},
-        "active_broker": os.getenv("ACTIVE_BROKER", "paper"),
-        "shadow_mode": os.getenv("SHADOW_MODE", "false").lower() in {"1", "true", "yes", "on"},
+        "active_broker": os.getenv("AETHERBRIDGE_ACTIVE_BROKER", "paper"),
+        "shadow_mode": os.getenv("AETHERBRIDGE_SHADOW_MODE", "false").lower() in {"1", "true", "yes", "on"},
         "brokers": {
             "shoonya": {
                 "user_id": os.getenv("SHOONYA_USER_ID", ""),

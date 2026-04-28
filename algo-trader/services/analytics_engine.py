@@ -161,3 +161,53 @@ class AnalyticsEngine:
             "status": "success",
             "smile": smile
         }
+    def calculate_chain_greeks(self, chain_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Compute full Greeks (Delta, Gamma, Theta, Vega, Rho) across the option chain.
+        """
+        spot_price = chain_data.get("spot_price", 0)
+        chain = chain_data.get("chain", [])
+        expiry_date = chain_data.get("expiry_date", "")
+
+        try:
+            from datetime import datetime
+            expiry = datetime.strptime(expiry_date, "%d%b%y")
+            now = datetime.now()
+            T = max(0.00001, (expiry - now).total_seconds() / (365 * 24 * 3600))
+        except:
+            T = 0.01
+
+        greeks_results = []
+
+        for item in chain:
+            strike = item["strike"]
+            ce = item["ce"]
+            pe = item["pe"]
+
+            ce_metrics = {}
+            if ce and ce.get("ltp", 0) > 0:
+                iv = self.bs_engine.estimate_iv(ce["ltp"], spot_price, strike, T, self.rf_rate, "CE")
+                ce_metrics = self.bs_engine.calculate_greeks(spot_price, strike, T, self.rf_rate, iv, "CE")
+                ce_metrics["iv"] = round(iv * 100, 2)
+                ce_metrics["ltp"] = ce["ltp"]
+
+            pe_metrics = {}
+            if pe and pe.get("ltp", 0) > 0:
+                iv = self.bs_engine.estimate_iv(pe["ltp"], spot_price, strike, T, self.rf_rate, "PE")
+                pe_metrics = self.bs_engine.calculate_greeks(spot_price, strike, T, self.rf_rate, iv, "PE")
+                pe_metrics["iv"] = round(iv * 100, 2)
+                pe_metrics["ltp"] = pe["ltp"]
+
+            greeks_results.append({
+                "strike": strike,
+                "ce": ce_metrics,
+                "pe": pe_metrics
+            })
+
+        return {
+            "status": "success",
+            "underlying": chain_data.get("underlying"),
+            "spot_price": spot_price,
+            "expiry": expiry_date,
+            "chain": greeks_results
+        }

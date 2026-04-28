@@ -192,12 +192,12 @@ class RiskManager:
         """
         self._maybe_reset_daily()
 
-        # 0. Global Halt Check
-        if self.global_halt:
+        # 0. Global Halt Check (Bypassed by EMERGENCY_PANIC)
+        if self.global_halt and strategy_id != "EMERGENCY_PANIC":
             return RiskCheckResult(False, "PORTFOLIO-WIDE GLOBAL HALT ACTIVE. All trading is frozen.")
 
-        # 0.5 Strategy Safeguard Check (Manual/Auto Kill-Switch)
-        if strategy_id in self._breached_strategies:
+        # 0.5 Strategy Safeguard Check (Bypassed by EMERGENCY_PANIC)
+        if strategy_id in self._breached_strategies and strategy_id != "EMERGENCY_PANIC":
             return RiskCheckResult(False, f"strategy '{strategy_id}' is HALTED due to risk breach or manual stop.")
 
         # 1. Basic sanity

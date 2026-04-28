@@ -297,7 +297,7 @@ export const TradesPage: React.FC = () => {
                 {/* Header */}
                 <div className="p-4 border-b border-white/10 bg-secondary/5 flex items-center justify-between">
                   <div className="flex flex-col">
-                    <span className="text-[12px] font-black font-mono text-secondary uppercase tracking-tighter">AUDIT_{selectedTrade.orderid.substring(0,12)}</span>
+                    <span className="text-[12px] font-black font-mono text-secondary uppercase tracking-tighter">AUDIT_{String(selectedTrade.orderid || '').substring(0,12)}</span>
                     <span className="text-[8px] font-mono text-muted-foreground/40 uppercase tracking-widest">POST_EXEC_FORENSICS</span>
                   </div>
                   <Button

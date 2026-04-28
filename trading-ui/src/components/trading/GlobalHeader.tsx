@@ -154,8 +154,8 @@ export const GlobalHeader = memo(function GlobalHeader() {
             </div>
           </div>
           <div className="flex flex-col leading-none">
-            <span className="text-[12px] font-black tracking-[0.2em] text-foreground font-display uppercase">Aether_Prime</span>
-            <span className="text-[7px] font-mono font-black text-primary/60 tracking-[0.3em] uppercase mt-0.5">Kernel_v2.5</span>
+            <span className="text-[14px] font-black tracking-[-0.05em] text-cyan-400 font-display uppercase">AlgoDesk</span>
+            <span className="text-[7px] font-mono font-black text-slate-500 tracking-[0.3em] uppercase mt-0.5">STRAT_OS // v6.0.4</span>
           </div>
         </div>
 
@@ -206,11 +206,13 @@ export const GlobalHeader = memo(function GlobalHeader() {
         <div className="flex items-center h-full px-2 gap-2 border-r border-white/10 shrink-0 bg-black/40">
           <button
             onClick={toggleEngine}
+            aria-label={engineLive ? "Stop trading engine" : "Start trading engine"}
+            aria-pressed={engineLive}
             className={cn(
-              "flex items-center gap-1.5 px-3 h-7 transition-all shrink-0 border uppercase font-mono tracking-widest text-[9px] font-black group/power relative overflow-hidden",
+              "flex items-center gap-1.5 px-3 h-8 min-w-[80px] transition-all shrink-0 border uppercase font-mono tracking-widest text-[9px] font-black group/power relative overflow-hidden focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:ring-offset-black",
               engineLive
-                ? "bg-secondary/10 border-secondary/40 text-secondary shadow-[0_0_15px_rgba(34,197,94,0.1)]"
-                : "bg-destructive/10 border-destructive/40 text-destructive grayscale brightness-50"
+                ? "bg-secondary/10 border-secondary/40 text-secondary shadow-[0_0_15px_rgba(34,197,94,0.1)] focus-visible:ring-secondary/60"
+                : "bg-destructive/10 border-destructive/40 text-destructive grayscale brightness-50 focus-visible:ring-destructive/60"
             )}
           >
             <div className="absolute inset-0 bg-white/5 opacity-0 group-hover/power:opacity-100 animate-scan-fast" />
@@ -223,18 +225,33 @@ export const GlobalHeader = memo(function GlobalHeader() {
                <span className="text-[9px] font-black tracking-widest uppercase text-foreground">{user?.user_metadata?.full_name || 'OPERATOR'}</span>
                <span className="text-[7px] font-mono font-black text-muted-foreground/50 tracking-widest">{user?.email || 'OFFLINE_MODE'}</span>
              </div>
-             <div className="w-7 h-7 bg-white/5 border border-white/10 flex items-center justify-center font-mono text-[10px] font-black text-foreground cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-all">
+             <button
+               aria-label={`User menu for ${user?.user_metadata?.full_name || user?.email || 'Operator'}`}
+               aria-haspopup="menu"
+               className="w-8 h-8 bg-white/5 border border-white/10 flex items-center justify-center font-mono text-[10px] font-black text-foreground cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 focus-visible:ring-offset-1 focus-visible:ring-offset-black"
+             >
                {initials}
-             </div>
+             </button>
 
-             {/* USER DROPDOWN (existing logic) */}
-             <div className="absolute top-full right-0 mt-1 w-48 bg-[#0A0A0A] border border-white/10 hidden group-hover/user:flex flex-col p-1 z-[100] shadow-[0_10px_50px_rgba(0,0,0,0.9)] backdrop-blur-3xl">
-               <Link to="/profile" className="px-3 py-2.5 text-[9px] font-black uppercase tracking-widest hover:bg-white/5 flex items-center gap-2 group/u1 transition-all">
+             {/* USER DROPDOWN — keyboard accessible via focus-within */}
+             <div
+               role="menu"
+               className="absolute top-full right-0 mt-1 w-48 bg-[#0A0A0A] border border-white/10 hidden group-hover/user:flex group-focus-within/user:flex flex-col p-1 z-[100] shadow-[0_10px_50px_rgba(0,0,0,0.9)] backdrop-blur-3xl"
+             >
+               <Link
+                 to="/profile"
+                 role="menuitem"
+                 className="px-3 py-2.5 text-[9px] font-black uppercase tracking-widest hover:bg-white/5 flex items-center gap-2 group/u1 transition-all focus-visible:outline-none focus-visible:bg-white/5"
+               >
                   <Brain className="w-3.5 h-3.5 text-primary group-hover/u1:scale-110 transition-transform" />
                   Neural_Identity
                </Link>
                <div className="h-[1px] bg-white/5 my-1 mx-2" />
-               <button onClick={signOut} className="px-3 py-2.5 text-[9px] font-black uppercase tracking-widest text-destructive hover:bg-destructive/10 flex items-center gap-2 text-left group/u3 transition-all">
+               <button
+                 role="menuitem"
+                 onClick={signOut}
+                 className="px-3 py-2.5 text-[9px] font-black uppercase tracking-widest text-destructive hover:bg-destructive/10 flex items-center gap-2 text-left group/u3 transition-all focus-visible:outline-none focus-visible:bg-destructive/10"
+               >
                   <LogOut className="w-3.5 h-3.5 group-hover/u3:translate-x-1 transition-transform" />
                   Eject_Session
                </button>

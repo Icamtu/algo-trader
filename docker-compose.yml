@@ -64,40 +64,6 @@ services:
       retries: 3
 
   # --- TRADING PLATFORM ---
-  openalgo:
-    image: marketcalls/openalgo:latest # marketcalls doesn't provide semantic versions consistently
-    container_name: openalgo-web
-    ports:
-      - "5000:5000"
-      - "8765:8765"
-    env_file: .env
-    shm_size: '512m'
-    volumes:
-      - ./openalgo/db:/app/db
-      - ./openalgo/shoonya_data_patched.py:/app/broker/shoonya/api/data.py:ro
-      - openalgo_log:/app/log
-      - openalgo_strategies:/app/strategies
-      - openalgo_keys:/app/keys
-      - .env:/app/.env:ro
-    entrypoint: ["/app/start.sh"]
-    restart: always
-    networks:
-      - trading_net
-    mem_limit: 1.5GB
-    cpu_shares: 1024
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    security_opt:
-      - no-new-privileges:true
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/')"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
 
   # --- TRADING ENGINE ---
   algo-trader:
@@ -111,8 +77,6 @@ services:
     env_file: .env
     depends_on:
       redis:
-        condition: service_healthy
-      openalgo:
         condition: service_healthy
       timescaledb:
         condition: service_healthy
@@ -134,9 +98,9 @@ services:
       - RISK_MAX_DAILY_TRADES=200
       - TAILSCALE_AUTH_KEY=${TAILSCALE_AUTH_KEY}
       - SIMULATION_ENABLED=false
-      - OPENALGO_WS_URL=ws://openalgo-web:8765
+      - OPENALGO_WS_URL=ws://localhost:18788/ws
       - OPENALGO_API_KEY=${API_KEY}
-      - DEBUG_AUTH=true
+      - DEBUG_AUTH=${DEBUG_AUTH:-false}
     networks:
       - trading_net
     mem_limit: 1.5GB
@@ -151,7 +115,7 @@ services:
     devices:
       - /dev/net/tun:/dev/net/tun
     security_opt:
-      - no-new-privileges:false
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:18788/health')"]
       interval: 10s
@@ -165,7 +129,7 @@ services:
     image: supabase/postgres:15.1.1.78
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
     healthcheck:
-      test: pg_isready -U postgres -h localhost
+      test: ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -220,7 +184,7 @@ services:
       PGRST_DB_SCHEMAS: public,storage,graphql_public
       PGRST_JWT_SECRET: ${JWT_SECRET}
     healthcheck:
-      test: ["CMD-SHELL", "sh -c 'ps -A | grep [p]ostgrest'"]
+      test: ["CMD-SHELL", "ps -A | grep [p]ostgrest"]
       interval: 15s
       timeout: 10s
       retries: 3
@@ -338,6 +302,7 @@ services:
       - VITE_SUPABASE_ANON_KEY=${ANON_KEY}
       - VITE_API_HOST=${TAILSCALE_IP}
       - TAILSCALE_IP=${TAILSCALE_IP}
+      - VITE_OPENALGO_API_KEY=${API_KEY}
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:80/ || exit 1"]
       interval: 30s
@@ -360,11 +325,9 @@ services:
     security_opt:
       - no-new-privileges:true
 
-  # Zero-Touch Sync Engine: Monitors src/ and builds to dist/ automatically
   ui-builder:
     image: oven/bun:1.1.0
     container_name: ui-builder
-    # Use root to avoid permission issues with host-mounted volumes during build
     user: "0:0"
     working_dir: /app
     env_file: .env
@@ -373,6 +336,7 @@ services:
       - VITE_SUPABASE_ANON_KEY=${ANON_KEY}
       - VITE_API_HOST=${TAILSCALE_IP}
       - TAILSCALE_IP=${TAILSCALE_IP}
+      - VITE_OPENALGO_API_KEY=${API_KEY}
     volumes:
       - ./trading-ui:/app
     command: ["sh", "-c", "bun install && bun x vite build && bun x vite build --watch"]
@@ -424,8 +388,8 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - OPENCLAW_GATEWAY_CONTROL_UI_DANGEROUSLY_DISABLE_SECURE_CONTEXT_CHECK=true
-      - OPENALGO_API_URL=http://openalgo-web:5000
-      - DB_PATH=/app/db/openalgo.db
+      - OPENALGO_API_URL=http://algo_engine:18788
+      - DB_PATH=/app/db/trades.db
       - OLLAMA_BASE_URL=http://local_ollama:11434
       - LOCAL_LLM_MODEL=qwen3.5-claude:latest
       - OPENCLAW_AI_MODEL=ollama/qwen3.5-claude:latest
@@ -438,7 +402,7 @@ services:
       - 8.8.8.8
       - 1.1.1.1
     volumes:
-      - ./openalgo/db:/app/db:ro
+      - ./algo-trader/storage:/app/db:ro
       - openalgo_log:/app/log:ro
       - openalgo_strategies:/app/strategies:ro
       - ./openclaw:/home/node/.openclaw:rw
@@ -459,45 +423,65 @@ services:
       retries: 5
       start_period: 30s
 
-  # --- CLAUDE CODE CLI ---
-  claude-code:
-    build:
-      context: ./claude-code
-      dockerfile: Dockerfile
-    container_name: claude-code
-    depends_on:
-      ollama_engine:
-        condition: service_started
-    ports:
-      - "8080:8080"
-    env_file: .env
-    environment:
-      - OLLAMA_BASE_URL=http://ollama_engine:11434
-      - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-      - LLM_PROVIDER=${LLM_PROVIDER:-auto}
-      - PREFER_LOCAL=${PREFER_LOCAL:-true}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - ANTHROPIC_BASE_URL=http://ollama_engine:11434
-      - ANTHROPIC_AUTH_TOKEN=ollama
-      - ANTHROPIC_API_KEY=${OLLAMA_API_KEY}
+  # --- OBSERVABILITY STACK ---
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: prometheus
+    restart: always
     volumes:
-      - .:/workspace:rw
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
     networks:
       - trading_net
+
+  grafana:
+    image: grafana/grafana:10.0.0
+    container_name: grafana
     restart: always
-    tty: true
-    stdin_open: true
-    healthcheck:
-      test: ["CMD", "node", "-v"] # Simple healthcheck for the node runtime
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    mem_limit: 1GB
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    ports:
+      - "3002:3000"
+    volumes:
+      - ./observability/grafana:/var/lib/grafana
+    networks:
+      - trading_net
+
+  loki:
+    image: grafana/loki:2.8.2
+    container_name: loki
+    restart: always
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - trading_net
+
+  promtail:
+    image: grafana/promtail:2.8.2
+    container_name: promtail
+    restart: always
+    volumes:
+      - /var/log:/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./observability/loki/promtail-config.yml:/etc/promtail/config.yml:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - trading_net
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.47
+    container_name: jaeger
+    restart: always
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - trading_net
 
 networks:
   trading_net:

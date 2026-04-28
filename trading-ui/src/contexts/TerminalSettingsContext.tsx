@@ -8,6 +8,7 @@ interface TerminalSettings {
   enableGlint: boolean;
   chartEngine: "recharts" | "lightweight" | "tradingview";
   perfProfile: "low" | "balanced" | "ultra";
+  showWatermark: boolean;
 }
 
 interface TerminalSettingsContextValue {
@@ -27,6 +28,7 @@ const defaultSettings: TerminalSettings = {
   enableGlint: true,
   chartEngine: "lightweight",
   perfProfile: "balanced",
+  showWatermark: true,
 };
 
 export function TerminalSettingsProvider({ children }: { children: React.ReactNode }) {
@@ -40,13 +42,13 @@ export function TerminalSettingsProvider({ children }: { children: React.ReactNo
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-    
+
     // Apply settings to Document Root CSS Variables
     const root = document.documentElement;
     root.style.setProperty("--visual-grid-opacity", (settings.gridOpacity / 100).toString());
     root.style.setProperty("--visual-noise-opacity", (settings.noiseOpacity / 100).toString());
     root.style.setProperty("--visual-scanline-opacity", (settings.scanlineIntensity / 100).toString());
-    
+
     // Update Theme Colors
     if (settings.accentColor === "amber") {
       root.style.setProperty("--primary", "41 100% 50%");

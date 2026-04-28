@@ -1,231 +1,265 @@
-import React, { useState, useEffect } from "react";
-import { Outlet, useLocation } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  ChevronLeft,
-  ChevronRight,
-  LayoutGrid,
-  Activity,
-  PieChart,
-  Layers,
-  Terminal,
-  Search
-} from "lucide-react";
-import { cn } from "@/lib/utils";
-import { algoApi } from "@/features/openalgo/api/client";
+import { useState, memo } from "react";
+import { Outlet, Link, useLocation } from "react-router-dom";
 import { GlobalHeader } from "../trading/GlobalHeader";
 import { MarketNavbar } from "../trading/MarketNavbar";
-import { OrderEntryTerminal } from "../trading/OrderEntryTerminal";
-import { useAether } from "@/contexts/AetherContext";
-import { useAuth } from "@/contexts/AuthContext";
+import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  ChevronRight,
+  ChevronLeft,
+  LayoutDashboard,
+  ShieldAlert,
+  Settings,
+  Database,
+  Activity,
+  BarChart3,
+  Cpu,
+  Fingerprint,
+  Beaker
+} from "lucide-react";
 
-export function AetherAppShell() {
+const SidebarItem = ({ icon: Icon, label, to, collapsed }: { icon: any, label: string, to: string, collapsed: boolean }) => {
   const location = useLocation();
-  const { user, signOut } = useAuth();
-  const initials = user?.user_metadata?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() || user?.email?.slice(0, 2).toUpperCase() || "?";
-  const { selectedSymbol, setSelectedSymbol, ticks, tickerSymbols } = useAether();
-  const [leftOpen, setLeftOpen] = useState(false);
-  const [rightOpen, setRightOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-
-  const displaySymbols = tickerSymbols.map(sym => {
-    const live = ticks[sym];
-    const current_ltp = live?.ltp || 0;
-    const current_chg = parseFloat(live?.chg_pct || "0");
-    return {
-      s: sym,
-      p: current_ltp.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
-      c: live?.chg_pct ? `${live.chg_pct}%` : "0.00%",
-      up: current_chg >= 0
-    };
-  });
-
-  // Auto-open right panel when a symbol is selected
-  useEffect(() => {
-    if (selectedSymbol) {
-      setRightOpen(true);
-    }
-  }, [selectedSymbol]);
+  const isActive = location.pathname === to;
 
   return (
-    <div className="flex flex-col h-screen w-full bg-black overflow-hidden font-sans selection:bg-primary/30 relative">
-      {/* Global Aesthetics */}
-      <div className="absolute top-0 right-0 w-[800px] h-[800px] neural-flow-bg opacity-10 pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[600px] h-[600px] neural-flow-bg opacity-10 pointer-events-none rotate-180" />
-      <div className="noise-overlay pointer-events-none" />
-      <div className="scanline-overlay pointer-events-none" />
+    <Link
+      to={to}
+      aria-label={collapsed ? label : undefined}
+      aria-current={isActive ? "page" : undefined}
+      className={cn(
+        "flex items-center gap-3 px-3 py-2.5 rounded transition-all duration-200 group relative min-h-[40px]",
+        isActive
+          ? "bg-primary/10 text-primary shadow-[inset_0_0_10px_rgba(0,245,255,0.05)]"
+          : "text-slate-500 hover:text-slate-300 hover:bg-white/[0.02]",
+        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 focus-visible:ring-offset-1 focus-visible:ring-offset-black"
+      )}
+    >
+      <Icon className={cn("w-4 h-4 shrink-0 transition-transform duration-300", isActive && "scale-110")} />
+      {!collapsed && <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>}
+      {isActive && (
+        <motion.div
+          layoutId="active-sidebar-pill"
+          className="absolute left-0 top-1/4 bottom-1/4 w-[2px] bg-primary shadow-[0_0_8px_rgba(0,245,255,0.5)]"
+        />
+      )}
+      {collapsed && (
+        <div className="absolute left-14 bg-slate-900 border border-slate-800 px-2 py-1 rounded text-[8px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
+          {label}
+        </div>
+      )}
+    </Link>
+  );
+};
 
+export const AetherAppShell = memo(function AetherAppShell() {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
+
+  return (
+    <div className="h-screen w-screen bg-[#020617] text-slate-300 flex flex-col overflow-hidden select-none">
       <GlobalHeader />
-      <MarketNavbar />
 
-      <main className="flex-1 flex overflow-hidden relative z-10">
-        {/* LEFT COLUMN: MarketWatch */}
+      <main className="flex-1 flex min-h-0 relative">
+        {/* Navigation Sidebar (Left) */}
         <motion.aside
           initial={false}
-          animate={{ width: leftOpen ? 300 : 0, opacity: leftOpen ? 1 : 0 }}
+          animate={{ width: sidebarCollapsed ? 64 : 220 }}
           className={cn(
-            "h-full border-r border-white/5 bg-white/[0.01] backdrop-blur-3xl z-30 transition-all overflow-hidden relative flex flex-col",
-            !leftOpen && "border-none"
+            "bg-[#050505] border-r border-white/5 flex flex-col transition-all relative z-40 shadow-2xl",
+            sidebarCollapsed ? "w-16" : "w-[220px]"
           )}
         >
-          <div className="w-[300px] p-6 flex flex-col h-full bg-gradient-to-b from-white/[0.02] to-transparent">
-             <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                   <div className="w-2 h-2 bg-primary rounded-full animate-pulse shadow-[0_0_8px_rgba(0,245,255,0.4)]" />
-                   <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-foreground">Market_Watch</h3>
-                </div>
-                <div className="flex gap-1.5">
-                   {[1, 2, 3].map(i => (
-                     <div key={i} className={cn(
-                        "w-6 h-6 border border-white/10 flex items-center justify-center text-[10px] font-mono cursor-pointer hover:bg-white/5 transition-all hover:border-primary/40",
-                        i === 1 ? "bg-primary text-black border-primary" : "text-muted-foreground/30"
-                     )}>
-                        {i}
-                     </div>
-                   ))}
-                </div>
-             </div>
+          <div className="p-4 border-b border-white/5 flex items-center justify-between bg-black/20">
+            {!sidebarCollapsed && (
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                <span className="text-[9px] font-black text-slate-500 tracking-[0.2em] uppercase">Control_OS</span>
+              </div>
+            )}
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              aria-label={sidebarCollapsed ? "Expand navigation sidebar" : "Collapse navigation sidebar"}
+              aria-expanded={!sidebarCollapsed}
+              className="w-8 h-8 flex items-center justify-center rounded border border-white/5 bg-white/2 hover:bg-white/5 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60"
+            >
+              {sidebarCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
+            </button>
+          </div>
 
-             <div className="relative mb-6">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/20" />
-                <input
-                   placeholder="SEARCH_SYMBOLS..."
-                   value={searchQuery}
-                   onChange={(e) => setSearchQuery(e.target.value)}
-                   className="w-full bg-white/[0.03] border border-white/10 px-10 py-2.5 text-[10px] uppercase font-mono tracking-widest outline-none focus:border-primary/40 focus:bg-white/[0.05] transition-all rounded-sm placeholder:text-muted-foreground/10"
-                />
-             </div>
+          <div className="flex-1 flex flex-col p-3 gap-1 overflow-y-auto custom-scrollbar">
+            <SidebarItem icon={LayoutDashboard} label="Dashboard" to="/" collapsed={sidebarCollapsed} />
+            <SidebarItem icon={Cpu} label="Command_Center" to="/execution/command-center" collapsed={sidebarCollapsed} />
+            <SidebarItem icon={Database} label="Infrastructure" to="/governance" collapsed={sidebarCollapsed} />
+            <SidebarItem icon={ShieldAlert} label="Risk_Manager" to="/risk" collapsed={sidebarCollapsed} />
+            <SidebarItem icon={BarChart3} label="PnL_Tracker" to="/pnl-tracker" collapsed={sidebarCollapsed} />
+            <SidebarItem icon={Activity} label="Audit_Center" to="/audit" collapsed={sidebarCollapsed} />
+            <SidebarItem icon={Beaker} label="Indicator_Factory" to="/intelligence/indicator-factory" collapsed={sidebarCollapsed} />
 
-             <div className="flex-1 overflow-y-auto px-4 custom-scrollbar">
-                {displaySymbols.filter(i => i.s.toLowerCase().includes(searchQuery.toLowerCase())).map((item, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    onClick={() => setSelectedSymbol(item.s)}
-                    className={cn(
-                      "p-4 border transition-all flex items-center justify-between group cursor-pointer relative overflow-hidden",
-                      selectedSymbol === item.s ? "bg-primary/10 border-primary/40" : "bg-white/[0.02] border-white/5 hover:border-white/20 active:scale-[0.98]"
-                    )}
-                  >
-                    <div className="flex flex-col relative z-10">
-                       <span className="text-xs font-black uppercase tracking-tight group-hover:text-primary transition-colors">{item.s}</span>
-                       <span className="text-[8px] text-muted-foreground/20 font-mono uppercase tracking-widest mt-1">NSE:EQ // LOT: 1</span>
-                    </div>
-                    <div className="text-right relative z-10">
-                       <div className="text-xs font-mono font-bold tabular-nums text-foreground group-hover:text-primary transition-colors">{item.p}</div>
-                       <div className={cn("text-[9px] font-mono font-black mt-1 flex items-center justify-end gap-1",
-                         item.up ? "text-secondary" : "text-destructive")}>
-                          {item.up ? "▲" : "▼"} {item.c}
-                       </div>
-                    </div>
-                    {selectedSymbol === item.s && (
-                      <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-transparent pointer-events-none" />
-                    )}
-                  </motion.div>
-                ))}
-             </div>
+            <div className="my-4 h-px bg-white/5" />
+
+            <SidebarItem icon={BarChart3} label="Trade_Journal" to="/journal" collapsed={sidebarCollapsed} />
+            <SidebarItem icon={Fingerprint} label="Security_Ops" to="/openalgo/health" collapsed={sidebarCollapsed} />
+            <SidebarItem icon={Settings} label="System_Prefs" to="/profile" collapsed={sidebarCollapsed} />
+          </div>
+
+          <div className="p-4 border-t border-white/5 bg-black/40">
+            {!sidebarCollapsed ? (
+              <div className="space-y-3">
+                <div className="flex justify-between items-center text-[8px] font-mono text-slate-500 uppercase">
+                  <span>Kernel_Load</span>
+                  <span className="text-secondary">12.4%</span>
+                </div>
+                <div className="h-1 w-full bg-slate-900 rounded-full overflow-hidden">
+                  <div className="h-full w-[12.4%] bg-secondary shadow-[0_0_8px_rgba(var(--secondary),0.4)]" />
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-2 h-2 rounded-full border border-secondary/40 flex items-center justify-center">
+                  <div className="w-0.5 h-0.5 rounded-full bg-secondary" />
+                </div>
+              </div>
+            )}
           </div>
         </motion.aside>
 
-        {/* TOGGLE BUTTONS */}
-        <button
-          onClick={() => setLeftOpen(!leftOpen)}
-          className="absolute left-0 top-1/2 -translate-y-1/2 z-40 w-4 h-16 flex items-center justify-center bg-black border border-white/5 border-l-0 hover:bg-white/5 hover:border-primary/40 transition-all rounded-r-sm group"
-        >
-          {leftOpen ? <ChevronLeft className="w-3.5 h-3.5 text-muted-foreground/20 group-hover:text-primary" /> : <ChevronRight className="w-3.5 h-3.5 text-primary" />}
-        </button>
+        {/* Content Area */}
+        <section className="flex-1 flex flex-col min-w-0 bg-[#020617] relative">
+          <MarketNavbar />
+          <div className="flex-1 overflow-hidden relative z-10 flex">
+            <div className="flex-1 overflow-y-auto relative custom-scrollbar">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={window.location.pathname}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="h-full w-full"
+                >
+                  <Outlet />
+                </motion.div>
+              </AnimatePresence>
+            </div>
 
-        {/* CENTER COLUMN: Main Workspace */}
-        <section className="flex-1 overflow-y-auto custom-scrollbar relative industrial-grid bg-background/50 backdrop-blur-sm">
-           <Outlet />
+            {/* Global Telemetry Sidebar (Right) */}
+            <AnimatePresence>
+              {rightSidebarOpen && (
+                <motion.aside
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ width: 280, opacity: 1 }}
+                  exit={{ width: 0, opacity: 0 }}
+                  className="bg-[#050505] border-l border-white/5 flex flex-col shadow-2xl relative z-30"
+                >
+                  <div className="p-4 border-b border-white/5 flex items-center justify-between bg-black/20">
+                    <div className="flex items-center gap-2">
+                      <Activity className="w-3 h-3 text-secondary" />
+                      <span className="text-[9px] font-black text-slate-500 tracking-[0.2em] uppercase">Live_Telemetry</span>
+                    </div>
+                    <button
+                      onClick={() => setRightSidebarOpen(false)}
+                      aria-label="Close telemetry panel"
+                      className="w-8 h-8 flex items-center justify-center text-slate-600 hover:text-slate-400 rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 transition-colors"
+                    >
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+                    {/* Real-time Account Summary */}
+                    <div className="space-y-4">
+                      <h4 className="text-[8px] font-black text-primary uppercase tracking-[0.3em]">Account_Alpha</h4>
+                      <div className="grid grid-cols-1 gap-2">
+                        <div className="p-3 bg-white/[0.02] border border-white/5 rounded">
+                          <span className="text-[7px] text-slate-500 uppercase block mb-1">Total_Capital</span>
+                          <span className="text-sm font-mono font-black text-slate-200">₹4,25,000.00</span>
+                        </div>
+                        <div className="p-3 bg-white/[0.02] border border-white/5 rounded">
+                          <span className="text-[7px] text-slate-500 uppercase block mb-1">Exposure_Usage</span>
+                          <div className="flex items-end justify-between">
+                            <span className="text-sm font-mono font-black text-secondary">₹1,12,450.00</span>
+                            <span className="text-[9px] font-mono text-slate-500">26.4%</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Active Strategy Matrix */}
+                    <div className="space-y-4 pt-4 border-t border-white/5">
+                      <h4 className="text-[8px] font-black text-primary uppercase tracking-[0.3em]">Active_Kernels</h4>
+                      <div className="space-y-2">
+                        {[
+                          { name: "AetherScalper", pnl: 4250.20, status: "RUN" },
+                          { name: "SwingCore_V2", pnl: -1240.00, status: "RUN" },
+                          { name: "Neutral_Grid", pnl: 890.50, status: "IDLE" },
+                        ].map((s, i) => (
+                          <div key={i} className="flex items-center justify-between p-2 hover:bg-white/2 transition-colors rounded border border-transparent hover:border-white/5">
+                            <div className="flex items-center gap-2">
+                              <div className={cn("w-1 h-1 rounded-full", s.status === 'RUN' ? "bg-secondary animate-pulse" : "bg-slate-700")} />
+                              <span className="text-[10px] font-black tracking-tight">{s.name}</span>
+                            </div>
+                            <span className={cn("text-[10px] font-mono font-bold", s.pnl >= 0 ? "text-secondary" : "text-error")}>
+                              {s.pnl >= 0 ? '+' : ''}{s.pnl.toFixed(1)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Global Risk Dial */}
+                    <div className="space-y-4 pt-4 border-t border-white/5">
+                      <h4 className="text-[8px] font-black text-primary uppercase tracking-[0.3em]">Risk_Vitals</h4>
+                      <div className="p-4 bg-primary/5 border border-primary/10 flex flex-col items-center text-center">
+                        <div className="text-xs font-black text-primary mb-1">NOMINAL</div>
+                        <div className="text-[7px] text-slate-500 uppercase tracking-widest leading-relaxed">
+                          Overall system risk is within defined parameters. Drawdown lock is inactive.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 border-t border-white/5 bg-black/40">
+                    <button className="w-full py-2 bg-error/10 border border-error/20 text-error text-[8px] font-black uppercase tracking-[0.3em] hover:bg-error hover:text-white transition-all">
+                      PANIC_LIQUIDATE_ALL
+                    </button>
+                  </div>
+                </motion.aside>
+              )}
+            </AnimatePresence>
+          </div>
         </section>
-
-        {/* RIGHT COLUMN: Order Terminal */}
-        <button
-          onClick={() => setRightOpen(!rightOpen)}
-          className="absolute right-0 top-1/2 -translate-y-1/2 z-40 w-4 h-16 flex items-center justify-center bg-black border border-white/5 border-r-0 hover:bg-white/5 hover:border-primary/40 transition-all rounded-l-sm group"
-        >
-          {rightOpen ? <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/20 group-hover:text-primary" /> : <ChevronLeft className="w-3.5 h-3.5 text-primary" />}
-        </button>
-
-        <motion.aside
-          initial={false}
-          animate={{ width: rightOpen ? 320 : 0, opacity: rightOpen ? 1 : 0 }}
-          className={cn(
-            "h-full border-l border-white/5 bg-white/[0.01] backdrop-blur-3xl z-30 transition-all overflow-hidden relative flex flex-col",
-            !rightOpen && "border-none"
-          )}
-        >
-          <div className="w-[320px] flex flex-col h-full bg-gradient-to-b from-white/[0.02] to-transparent">
-             <div className="p-6 border-b border-white/5 bg-white/[0.03] flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                   <div className="w-8 h-8 bg-primary/10 border border-primary/20 flex items-center justify-center">
-                      <Terminal className="w-4 h-4 text-primary" />
-                   </div>
-                   <div>
-                      <h3 className="text-xs font-black uppercase tracking-[0.2em] text-foreground">Aether_Gate</h3>
-                      <span className="text-[8px] font-black font-mono text-muted-foreground/20 uppercase">Core_Execution // v4.0.0</span>
-                   </div>
-                </div>
-                <div className="w-2 h-2 bg-secondary rounded-full animate-pulse" />
-             </div>
-
-             <div className="flex-1 overflow-y-auto custom-scrollbar">
-                <OrderEntryTerminal selectedSymbol={selectedSymbol} />
-             </div>
-
-             {/* Intelligence Feed snippet at bottom of sidebar */}
-             <div className="p-6 border-t border-white/5 bg-black/40 backdrop-blur-md">
-                <div className="flex items-center gap-3 mb-4">
-                   <Activity className="w-3.5 h-3.5 text-secondary" />
-                   <span className="text-[10px] font-black uppercase tracking-widest text-secondary">Neural_Advisory</span>
-                </div>
-                <p className="text-[11px] font-mono leading-relaxed text-foreground/70 uppercase">
-                   <span className="text-primary opacity-50">#SENSE_LOG:</span> System detecting strong mean-reversion signature. Adjusting risk weights to <span className="text-secondary">0.85x</span>.
-                </p>
-             </div>
-          </div>
-        </motion.aside>
       </main>
 
-      {/* FOOTER BAR */}
-      <footer className="h-9 bg-black border-t border-white/5 flex items-center justify-between px-6 z-40 backdrop-blur-md">
-         <div className="flex items-center gap-8">
-            <div className="flex items-center gap-2.5">
-               <div className="w-2 h-2 rounded-full bg-secondary shadow-[0_0_8px_rgba(0,245,255,0.4)] animate-pulse" />
-               <span className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 underline decoration-primary/20 underline-offset-4">ORD:CONNECTED</span>
-            </div>
-            <div className="flex items-center gap-2.5">
-               <div className="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_rgba(0,245,255,0.4)] animate-pulse" />
-               <span className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/60">TICK:LIVE_42MS</span>
-            </div>
-            <div className="h-4 w-[1px] bg-white/5" />
-            <div className="flex items-center gap-2.5">
-               <div className="w-2 h-2 rounded-full bg-white/5" />
-               <span className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/20 italic">SIM:STANDBY</span>
-            </div>
-         </div>
+      {/* Right Sidebar Toggle Button (Float) */}
+      {!rightSidebarOpen && (
+        <button
+          onClick={() => setRightSidebarOpen(true)}
+          aria-label="Open telemetry panel"
+          className="fixed right-0 top-1/2 -translate-y-1/2 w-8 h-14 bg-primary/10 border border-primary/20 border-r-0 flex items-center justify-center rounded-l-md hover:bg-primary/20 transition-all z-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60"
+        >
+          <ChevronLeft className="w-3 h-3 text-primary" />
+        </button>
+      )}
 
-         <div className="flex items-center h-full">
-            <div className="flex items-center gap-8 px-8 border-x border-white/5 h-full">
-               <div className="flex items-center gap-2.5 cursor-pointer hover:text-primary transition-all text-muted-foreground/40 group">
-                  <LayoutGrid className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                  <span className="text-[9px] font-black uppercase tracking-widest">DSK::NODE_01</span>
-               </div>
-               <div className="flex items-center gap-2.5 cursor-pointer hover:text-primary transition-all text-muted-foreground/40 group">
-                  <Layers className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                  <span className="text-[9px] font-black uppercase tracking-widest">LAYER_VIEW</span>
-               </div>
-            </div>
-            <div className="pl-8 flex items-center gap-4">
-               <div className="px-5 py-1.5 border border-primary/20 bg-primary/5 rounded-sm">
-                  <span className="text-[10px] font-black font-mono text-primary tracking-[0.3em]">AETHER::PRIME_KERNEL_ACTIVE</span>
-               </div>
-            </div>
-         </div>
+      {/* Status Bar */}
+      <footer className="h-6 bg-slate-950 border-t border-slate-800 px-4 flex items-center justify-between text-[10px] text-slate-500 font-mono relative z-50">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.4)] animate-pulse" />
+            <span>SERVER: MUM-DC-12 (4ms)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+             <div className="w-1.5 h-1.5 bg-cyan-500 rounded-full" />
+             <span>BROKER: SHOONYA (CONNECTED)</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-4 uppercase tracking-widest">
+          <span className="opacity-40">AlgoDesk STRAT_OS v6.0.4</span>
+          <div className="h-3 w-[1px] bg-slate-800 mx-2" />
+          <span className="text-cyan-600 font-bold">Strategy Aware Environment Enabled</span>
+        </div>
       </footer>
     </div>
   );
-}
+});

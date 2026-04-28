@@ -1,14 +1,14 @@
 import React from "react";
-import { 
-  Sheet, 
-  SheetContent, 
-  SheetHeader, 
-  SheetTitle, 
-  SheetDescription 
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Settings, Shield, Palette, Cpu, Brain, Lock, 
+import {
+  Settings, Shield, Palette, Cpu, Brain, Lock,
   Terminal, Activity, Monitor, Layers, Zap,
   Gauge, Boxes
 } from "lucide-react";
@@ -27,7 +27,7 @@ export function UnifiedSettings({ isOpen, onClose }: { isOpen: boolean; onClose:
     <Sheet open={isOpen} onOpenChange={onClose}>
       <SheetContent className="w-[420px] sm:w-[420px] p-0 bg-black/95 border-l border-primary/20 industrial-grid overflow-hidden flex flex-col">
         <div className="scanline opacity-10" />
-        
+
         <SheetHeader className="p-6 border-b border-white/10 bg-card/20 relative">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-primary/10 border border-primary/20 relative group">
@@ -71,9 +71,9 @@ export function UnifiedSettings({ isOpen, onClose }: { isOpen: boolean; onClose:
                       <h3 className="text-[10px] font-black uppercase tracking-[0.3em]">Core_Visualization_Engine</h3>
                     </div>
 
-                    <RadioGroup 
-                      value={settings.chartEngine} 
-                      onValueChange={(val: any) => updateSettings({ chartEngine: val })} 
+                    <RadioGroup
+                      value={settings.chartEngine}
+                      onValueChange={(val: any) => updateSettings({ chartEngine: val })}
                       className="grid grid-cols-1 gap-3"
                     >
                       {[
@@ -81,11 +81,11 @@ export function UnifiedSettings({ isOpen, onClose }: { isOpen: boolean; onClose:
                         { id: 'lightweight', label: 'LIGHTWEIGHT // PERFORMANCE', desc: 'High-speed tick engine. Optimal for day trading.', icon: Zap },
                         { id: 'tradingview', label: 'TRADINGVIEW // ADVANCED', desc: 'Full institutional suite via external bridge.', icon: Boxes }
                       ].map((item) => (
-                        <div 
+                        <div
                           key={item.id}
                           className={`group p-4 border transition-all cursor-pointer relative overflow-hidden ${
-                            settings.chartEngine === item.id 
-                              ? 'bg-primary/10 border-primary shadow-[0_0_20px_rgba(255,176,0,0.1)]' 
+                            settings.chartEngine === item.id
+                              ? 'bg-primary/10 border-primary shadow-[0_0_20px_rgba(255,176,0,0.1)]'
                               : 'bg-card/50 border-white/5 hover:border-white/20'
                           }`}
                           onClick={() => updateSettings({ chartEngine: item.id as any })}
@@ -115,13 +115,13 @@ export function UnifiedSettings({ isOpen, onClose }: { isOpen: boolean; onClose:
                       <Activity className="w-4 h-4 text-secondary" />
                       <h3 className="text-[10px] font-black uppercase tracking-[0.3em]">Execution_Profile</h3>
                     </div>
-                    <RadioGroup 
-                      value={settings.perfProfile} 
+                    <RadioGroup
+                      value={settings.perfProfile}
                       onValueChange={(val: any) => updateSettings({ perfProfile: val })}
                       className="grid grid-cols-3 gap-2"
                     >
                       {['low', 'balanced', 'ultra'].map((p) => (
-                        <div 
+                        <div
                           key={p}
                           className={`p-3 border text-center transition-all cursor-pointer ${
                             settings.perfProfile === p ? 'bg-secondary/20 border-secondary' : 'bg-card/50 border-white/5'
@@ -147,7 +147,7 @@ export function UnifiedSettings({ isOpen, onClose }: { isOpen: boolean; onClose:
                       <Layers className="w-4 h-4 text-primary" />
                       <h3 className="text-[10px] font-black uppercase tracking-[0.3em]">Optics_Config</h3>
                     </div>
-                    
+
                     {[
                       { key: 'gridOpacity', label: 'Grid_Density', icon: Gauge, max: 10 },
                       { key: 'noiseOpacity', label: 'ATMOS_Saturation', icon: Activity, max: 10 },
@@ -164,6 +164,14 @@ export function UnifiedSettings({ isOpen, onClose }: { isOpen: boolean; onClose:
                         <Slider value={[(settings as any)[s.key]]} max={s.max} step={1} onValueChange={([val]) => updateSettings({ [s.key]: val })} />
                       </div>
                     ))}
+
+                    <div className="flex items-center justify-between p-4 bg-card/20 border border-white/5">
+                      <div className="space-y-1">
+                        <Label className="text-[9px] font-black uppercase tracking-widest">Global_Watermark</Label>
+                        <p className="text-[7px] text-muted-foreground uppercase">Show "OPENALGO" on charts</p>
+                      </div>
+                      <Switch checked={settings.showWatermark} onCheckedChange={(val) => updateSettings({ showWatermark: val })} />
+                    </div>
 
                     <div className="flex items-center justify-between p-4 bg-card/20 border border-white/5">
                       <div className="space-y-1">
@@ -192,7 +200,7 @@ export function UnifiedSettings({ isOpen, onClose }: { isOpen: boolean; onClose:
           </div>
 
           <div className="p-6 border-t border-white/10 bg-black/40 mt-auto">
-            <button 
+            <button
               onClick={onClose}
               className="w-full h-12 bg-primary hover:bg-black hover:text-primary border border-primary transition-all flex items-center justify-center gap-3 text-black font-black font-mono tracking-[0.4em] uppercase shadow-[0_0_30px_rgba(255,176,0,0.1)]"
             >

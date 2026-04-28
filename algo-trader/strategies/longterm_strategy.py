@@ -51,6 +51,7 @@ class LongTermStrategy(BaseStrategy):
         # ====================== USER INPUT END ======================
 
         super().__init__(name, symbols, order_manager, portfolio_manager)
+        self.strategy_type = "positional"
         self.price_history: Dict[str, List[float]] = {symbol: [] for symbol in self.symbols}
         self.positions: Dict[str, int] = {symbol: 0 for symbol in self.symbols}
 
@@ -74,10 +75,10 @@ class LongTermStrategy(BaseStrategy):
         # ===================== USER INPUT START =====================
         current_position = self.positions.get(tick.symbol, 0)
         if signal == "BUY" and current_position == 0:
-            await self.buy(tick.symbol, self.trade_quantity, product="CNC")
+            await self.buy(tick.symbol, self.trade_quantity)
             self.positions[tick.symbol] = self.trade_quantity
         elif signal == "SELL" and current_position > 0:
-            await self.sell(tick.symbol, current_position, product="CNC")
+            await self.sell(tick.symbol, current_position)
             self.positions[tick.symbol] = 0
         # ====================== USER INPUT END ======================
 

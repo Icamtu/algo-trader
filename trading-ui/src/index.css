@@ -1,5 +1,22 @@
 @import "tailwindcss";
+@config "../tailwind.config.ts";
 @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
+
+@theme {
+  /* M3 Surface Tokens */
+  --color-surface-container:         hsl(240 10% 6%);
+  --color-surface-container-low:     hsl(240 10% 4%);
+  --color-surface-container-high:    hsl(240 10% 8%);
+  --color-surface-container-highest: hsl(240 10% 10%);
+  --color-surface-container-lowest:  hsl(240 10% 2%);
+  --color-surface-dim:               hsl(240 10% 4%);
+  --color-on-surface:                hsl(210 40% 98%);
+  /* Semantic Tokens */
+  --color-error:                     hsl(0 84% 60%);
+  --color-error-container:           hsl(0 30% 20%);
+  --color-tertiary:                  hsl(270 60% 70%);
+  --color-tertiary-container:        hsl(270 30% 25%);
+}
 
 
 @layer base {
@@ -451,4 +468,11 @@
     pointer-events: none;
     z-index: -1;
   }
+}
+
+@layer utilities {
+  .font-h2        { font-weight: 700; letter-spacing: -0.02em; }
+  .text-h2        { font-size: var(--h2); }
+  .font-mono-label { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.65rem; }
+  .mono-numbers   { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
 }

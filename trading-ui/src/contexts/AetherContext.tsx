@@ -14,6 +14,13 @@ interface Tick {
   chg_pct?: string;
 }
 
+interface EngineLog {
+  time: string;
+  level: string;
+  module: string;
+  msg: string;
+}
+
 interface AetherContextType {
   selectedSymbol: string;
   setSelectedSymbol: (symbol: string) => void;
@@ -32,6 +39,7 @@ interface AetherContextType {
   tickerSymbols: string[];
   riskStatus: any;
   strategyMatrix: any[];
+  logs: EngineLog[];
 }
 
 const AetherContext = createContext<AetherContextType | undefined>(undefined);
@@ -51,6 +59,7 @@ export function AetherProvider({ children }: { children: ReactNode }) {
   const [latency, setLatency] = useState(0);
   const [riskStatus, setRiskStatus] = useState<any>(null);
   const [strategyMatrix, setStrategyMatrix] = useState<any[]>([]);
+  const [logs, setLogs] = useState<EngineLog[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<"connected" | "disconnected" | "connecting" | "error">("disconnected");
 
   const { session } = useAuth();
@@ -80,33 +89,52 @@ export function AetherProvider({ children }: { children: ReactNode }) {
 
     socket.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
+        const rawData: string = event.data;
 
-        if (data.type === "auth_success") {
-          console.log("AetherEngine Auth Successful.");
-          setConnectionStatus("connected");
+        // Split on newline boundaries first (newline-delimited JSON from engine),
+        // then fall back to the whole frame. This handles both single and batched frames
+        // without fragile brace counting.
+        const messages: string[] = rawData
+          .split(/\n/)
+          .map((s) => s.trim())
+          .filter((s) => s.startsWith("{") && s.endsWith("}"));
 
-          // Subscription moved to a dedicated useEffect to handle dynamic config
-        } else if (data.type === "pong") {
-          const rtt = Date.now() - (data.client_ts || lastPingTS.current);
-          setLatency(rtt);
-        } else if (data.type === "regime_update") {
-          setTelemetry(prev => ({ ...prev, ...data.payload }));
-        } else if (data.type === "tick_batch") {
-          setTicks((prev) => {
-            const next = { ...prev };
-            data.payload.forEach((tick: Tick) => {
-              next[tick.symbol] = tick;
-            });
-            return next;
-          });
-        } else if (data.type === "risk_update") {
-          setRiskStatus(data.payload);
-        } else if (data.type === "matrix_update") {
-          setStrategyMatrix(data.payload.strategies);
-        }
+        if (messages.length === 0) messages.push(rawData.trim());
+
+        messages.forEach(msg => {
+          try {
+            const data = JSON.parse(msg.trim());
+            if (!data) return;
+
+            if (data.type === "auth_success") {
+              console.log("AetherEngine Auth Successful.");
+              setConnectionStatus("connected");
+            } else if (data.type === "pong") {
+              const rtt = Date.now() - (data.client_ts || lastPingTS.current);
+              setLatency(rtt);
+            } else if (data.type === "regime_update") {
+              setTelemetry(prev => ({ ...prev, ...data.payload }));
+            } else if (data.type === "tick_batch") {
+              setTicks((prev) => {
+                const next = { ...prev };
+                data.payload.forEach((tick: Tick) => {
+                  next[tick.symbol] = tick;
+                });
+                return next;
+              });
+            } else if (data.type === "risk_update") {
+              setRiskStatus(data.payload);
+            } else if (data.type === "matrix_update") {
+              setStrategyMatrix(data.payload.strategies);
+            } else if (data.type === "logs") {
+              setLogs(data.data);
+            }
+          } catch (e) {
+            console.warn("Fragmented JSON chunk skipped:", msg.substring(0, 50));
+          }
+        });
       } catch (err) {
-        console.error("Error parsing WS message:", err);
+        console.error("Critical WS logic failure:", err);
       }
     };
 
@@ -205,7 +233,8 @@ export function AetherProvider({ children }: { children: ReactNode }) {
       subscribe,
       tickerSymbols,
       riskStatus,
-      strategyMatrix
+      strategyMatrix,
+      logs
     }}>
       {children}
     </AetherContext.Provider>

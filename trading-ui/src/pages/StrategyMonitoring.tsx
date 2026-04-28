@@ -146,7 +146,7 @@ const StrategyMonitoring = () => {
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-background relative selection:bg-primary/30">
+    <div className="min-h-full flex flex-col bg-background relative selection:bg-primary/30">
       <div className="noise-overlay" />
       <div className="scanline" />
 

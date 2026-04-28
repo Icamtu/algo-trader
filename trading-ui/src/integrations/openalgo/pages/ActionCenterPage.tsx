@@ -289,6 +289,28 @@ export const ActionCenterPage = () => {
   const handleReject = (id: string) => setRejectModal({ isOpen: true, ids: [id] });
   const handleRejectSelected = () => setRejectModal({ isOpen: true, ids: Array.from(selectedIds) });
 
+  const handleCancelAll = async () => {
+    setConfirmModal({
+      isOpen: true,
+      title: "GLOBAL_PURGE_PROTOCOL",
+      description: "CRITICAL: THIS WILL CANCEL ALL PENDING SIGNALS IN THE ACTION CENTER AND ALL ACTIVE ORDERS AT THE BROKER. PROCEED WITH EXTREME CAUTION.",
+      type: 'danger',
+      metadata: { "SCOPE": "GLOBAL", "RISK": "HIGH" },
+      onAction: async () => {
+        setIsLoading(true);
+        try {
+          await tradingService.cancelAllActionOrders();
+          toast({ title: "SIGNAL::GLOBAL_PURGE", description: "All signals and broker orders cancelled successfully." });
+          fetchData();
+        } catch (error) {
+          toast({ variant: "destructive", title: "FAULT::PURGE_ERROR", description: "Failed to execute global cancel." });
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    });
+  };
+
   // Strategy Actions
   const handleToggleStrategy = async (name: string, isHalted: boolean) => {
     setIsActionLoading(name);
@@ -412,6 +434,7 @@ export const ActionCenterPage = () => {
   // Table Columns
   const columns = [
     {
+      key: "select",
       header: <div onClick={toggleAll} className="cursor-pointer p-2 hover:bg-white/5 transition-all">{selectedIds.size === filteredOrders.length ? <CheckSquare className="w-4 h-4 text-primary" /> : <SquareIcon className="w-4 h-4 text-muted-foreground/30" />}</div>,
       accessor: "select",
       width: 60,
@@ -426,6 +449,7 @@ export const ActionCenterPage = () => {
       )
     },
     {
+      key: "timestamp",
       header: "SIGNAL_TIMESTAMP",
       accessor: "timestamp",
       width: 180,
@@ -439,6 +463,7 @@ export const ActionCenterPage = () => {
       )
     },
     {
+      key: "action_type",
       header: "PROTOCOL_TYPE",
       accessor: "action_type",
       width: 220,
@@ -455,6 +480,7 @@ export const ActionCenterPage = () => {
       )
     },
     {
+      key: "value",
       header: "EXPOSURE_VAL",
       accessor: "value",
       width: 150,
@@ -465,6 +491,7 @@ export const ActionCenterPage = () => {
       )
     },
     {
+       key: "status",
        header: "STATUS_VECTOR",
        accessor: "status",
        width: 160,
@@ -490,6 +517,7 @@ export const ActionCenterPage = () => {
        }
     },
     {
+      key: "actions",
       header: (viewMode === 'table' ? "AUTH_CORE" : ""),
       accessor: "actions",
       width: 150,
@@ -633,6 +661,15 @@ export const ActionCenterPage = () => {
                  <BarChart3 className="w-4 h-4 rotate-90" />
                </Button>
             </div>
+            <Button
+              variant="outline"
+              onClick={handleCancelAll}
+              disabled={isLoading}
+              className="h-12 border-rose-500/20 hover:bg-rose-500/10 text-rose-500 font-black text-[10px] tracking-[0.2em] rounded-none px-6 transition-all"
+            >
+              <ZapOff className="w-4 h-4 mr-2" />
+              CANCEL_ALL
+            </Button>
             <Button
               variant="outline"
               onClick={() => fetchData()}

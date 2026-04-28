@@ -128,7 +128,7 @@ export const OrderBookPage: React.FC = () => {
             {order.symbol}
             {selectedOrder?.orderid === order.orderid && <span className="ml-2 text-[8px] animate-pulse">◀</span>}
           </span>
-          <span className="text-[7px] text-muted-foreground/40 uppercase tracking-widest leading-none italic">{order.exchange} // {order.orderid.substring(0,8)}</span>
+          <span className="text-[7px] text-muted-foreground/40 uppercase tracking-widest leading-none italic">{order.exchange} // {String(order.orderid || '').substring(0,8)}</span>
         </div>
       )
     },
@@ -325,7 +325,7 @@ export const OrderBookPage: React.FC = () => {
                 {/* Header */}
                 <div className="p-4 border-b border-white/10 bg-primary/5 flex items-center justify-between">
                   <div className="flex flex-col">
-                    <span className="text-[12px] font-black font-mono text-primary uppercase tracking-tighter">ORDER_{selectedOrder.orderid.substring(0,12)}</span>
+                    <span className="text-[12px] font-black font-mono text-primary uppercase tracking-tighter">ORDER_{String(selectedOrder.orderid || '').substring(0,12)}</span>
                     <span className="text-[8px] font-mono text-muted-foreground/40 uppercase tracking-widest">LIFECYCLE_FORENSICS</span>
                   </div>
                   <Button

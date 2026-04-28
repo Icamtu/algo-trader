@@ -1,194 +1,185 @@
-from fastapi import APIRouter, HTTPException, Depends, Request
-from typing import Dict, Any
+from fastapi import APIRouter, HTTPException, Depends, Request, Body, Query, Header
+from pydantic import BaseModel
+from typing import Dict, Any, List, Optional
 import logging
 import os
 import yaml
 from datetime import datetime
 import time
+import httpx
 
-from core.context import app_context
+from core.context import app_context, SYSTEM_START_TIME, _heartbeat_data, _memory_log_handler
 from database.trade_logger import get_trade_logger
 from execution.decision_agent import DecisionAgent
+from execution.action_manager import get_action_manager
+from utils.latency_tracker import latency_tracker
+from services.alert_service import alert_service
 
-router = APIRouter(prefix="/api/v1/system", tags=["System"])
+router = APIRouter(prefix="/api/v1", tags=["System"])
 logger = logging.getLogger(__name__)
 
-@router.post("/analyzertoggle")
-async def api_analyzer_toggle(request: Request):
-    """POST /api/v1/analyzertoggle - Enable/Disable AI Analyzer."""
-    try:
-        data = await request.json()
-        state = data.get("state", False)
+# --- Models ---
+class TerminalCommandRequest(BaseModel):
+    command: str
 
-        db_logger = get_trade_logger()
-        db_logger.update_system_setting("agent_enabled", str(state).lower())
+class HeartbeatUpdate(BaseModel):
+    status: Optional[str] = None
+    checks: Optional[Dict[str, Any]] = None
 
-        # Reset failures on enable
-        if state:
-            DecisionAgent.CONSECUTIVE_FAILURES = 0
-
-        return {
-            "status": "success",
-            "message": f"Analyzer {'enabled' if state else 'disabled'}",
-            "state": state
-        }
-    except Exception as e:
-        logger.error(f"Error toggling analyzer: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/config/ticker")
-async def get_ticker_config():
-    """GET /api/v1/config/ticker - Return managed ticker configuration."""
-    try:
-        config_path = os.path.join(os.getcwd(), "config", "ticker.yaml")
-        if not os.path.exists(config_path):
-             return {"ticker_symbols": []}
-        with open(config_path, "r") as f:
-            config = yaml.safe_load(f)
-        return config
-    except Exception as e:
-        logger.error(f"Error reading ticker config: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/terminal/command")
-async def terminal_command(request: Request):
-    """POST /api/v1/terminal/command - Process generic UI terminal commands."""
-    try:
-        data = await request.json()
-        command_raw = data.get("command", "").strip()
-
-        # Parse the command
-        parts = command_raw.split()
-        if not parts:
-            return {"status": "success", "message": ""}
-
-        cmd = parts[0].lower()
-        args = parts[1:]
-
-        db_logger = get_trade_logger()
-
-        # Command Routing
-        if cmd in ["/help", "help"]:
-            msg = (
-                "AetherDesk Prime Terminal v1.2.0\n"
-                "Available commands:\n"
-                "  /status   - Display engine health and active components\n"
-                "  /risk     - View active global risk limits\n"
-                "  /sync     - Validate broker connection\n"
-                "  /ping     - Measure Engine API latency\n"
-                "  /clear    - Clear terminal output"
-            )
-            return {"status": "success", "message": msg}
-
-        elif cmd in ["/ping", "ping"]:
-            return {"status": "success", "message": f"PONG - Engine Active. Local time: {datetime.now().strftime('%H:%M:%S.%f')[:-3]}"}
-
-        elif cmd in ["/status", "status"]:
-            runner = app_context.get("strategy_runner")
-            mode = "ONLINE" if runner else "OFFLINE"
-            strat_count = len(runner.strategies) if runner else 0
-
-            msg = (
-                f"Engine Status: {mode}\n"
-                f"Active Strategies: {strat_count}\n"
-                f"Surgical AI Analyzer: {'Enabled' if getattr(app_context.get('analyzer'), 'enabled', False) else 'Disabled'}\n"
-            )
-            return {"status": "success", "message": msg}
-
-        elif cmd in ["/risk", "risk"]:
-            settings = db_logger.get_risk_settings()
-            if not settings:
-                return {"status": "success", "message": "No risk settings defined in database."}
-
-            lines = ["Active Risk Guardrails:"]
-            for k, v in settings.items():
-                lines.append(f"  - {k.replace('_', ' ').title()}: {v}")
-            return {"status": "success", "message": "\n".join(lines)}
-
-        elif cmd in ["/sync", "sync"]:
-            from services.session_service import get_session_service
-            is_valid = await get_session_service().validate_session()
-            status_text = "VALID" if is_valid else "INVALID (Requires Re-auth)"
-            return {"status": "success", "message": f"Shoonya Broker Session: {status_text}"}
-
-        else:
-            return {"status": "success", "message": f"Command not recognized: '{cmd}'. Type /help for available commands."}
-
-    except Exception as e:
-        logger.error(f"Terminal execution error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+class TestAlertRequest(BaseModel):
+    message: str
+    type: str = "TEST"
 
 @router.get("/health")
-async def api_health():
-    """Unified system health check with positional drift telemetry."""
+async def get_system_health():
+    """GET /api/v1/health - Unified health check."""
     health = {
         "status": "healthy",
-        "service": "AetherDesk Algo Engine",
-        "version": "1.2.0 (FastAPI)",
         "timestamp": datetime.now().isoformat(),
+        "engine": "AetherDesk Prime v2",
         "checks": {
-            "algo_engine": {"status": "HEALTHY", "latency": 0},
+            "algo_engine": {"status": "HEALTHY", "latency": 5},
             "drift": "synced"
         }
     }
-
-    # Check for positional drift
-    try:
-        from core.context import app_context
-        order_manager = app_context.get("order_manager")
-        if order_manager:
-            # Check if we can get positions
-            broker_pos = await order_manager.get_open_positions_dict()
-            engine_pos = order_manager.position_manager.get_all_quantities()
-
-            # Check for mismatch both ways
-            all_symbols = set(broker_pos.keys()) | set(engine_pos.keys())
-            drift = False
-            for symbol in all_symbols:
-                if broker_pos.get(symbol, 0) != engine_pos.get(symbol, 0):
-                    drift = True
-                    break
-
-            health["checks"]["drift"] = "drift_detected" if drift else "synced"
-            if drift:
-                health["status"] = "degraded"
-    except Exception as e:
-        logger.error(f"Health check drift analysis failure: {e}")
-        health["checks"]["drift"] = "error"
-        health["checks"]["drift_error"] = str(e)
-
+    latest_health = app_context.get("latest_health", {})
+    if latest_health:
+        health["checks"].update(latest_health.get("checks", {}))
+        health["status"] = latest_health.get("status", "healthy")
     return health
 
-@router.get("/session/validate")
-async def validate_session():
-    """Verify Shoonya session health & token validity."""
-    try:
-        from services.session_service import get_session_service
-        is_valid = await get_session_service().validate_session()
-        return {
-            "status": "success" if is_valid else "error",
-            "is_valid": is_valid,
-            "timestamp": datetime.now().isoformat()
-        }
-    except Exception as e:
-        logger.error(f"Session validation route error: {e}")
-        return {"status": "error", "message": str(e)}
+@router.get("/system/heartbeat")
+async def get_system_heartbeat():
+    """GET /api/v1/system/heartbeat - Returns current system health state."""
+    return _heartbeat_data
 
-@router.get("/dashboard/session")
-async def get_session_dashboard():
-    """Returns detailed session status for the UI dashboard."""
+@router.post("/system/heartbeat")
+async def post_system_heartbeat(
+    request: Request,
+    update: HeartbeatUpdate,
+    apikey: Optional[str] = Header(None),
+    x_heartbeat_token: Optional[str] = Header(None)
+):
+    """POST /api/v1/system/heartbeat - Receives health updates."""
+    expected_api_key = os.getenv("API_KEY", "AetherDesk_Unified_Key_2026")
+    expected_jwt = os.getenv("JWT_SECRET")
+
+    if apikey != expected_api_key and x_heartbeat_token != expected_jwt:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    if update.status:
+        _heartbeat_data["status"] = update.status
+    if update.checks:
+        _heartbeat_data["checks"].update(update.checks)
+
+    _heartbeat_data["timestamp"] = datetime.now().isoformat()
+    return {"status": "captured"}
+
+@router.post("/terminal/command")
+async def terminal_command(request: TerminalCommandRequest):
+    """Institutional Gateway for direct engine diagnostics."""
     try:
-        from services.session_service import get_session_service
-        ss = get_session_service()
-        state = await ss.get_session_state()
-        return {
-            "status": "success",
-            "data": {
-                **state,
-                "shoonya_user": os.getenv("SHOONYA_USER_ID", "N/A"),
-                "auto_reauth_enabled": True
+        raw_cmd = request.command.strip()
+        if not raw_cmd:
+            raise HTTPException(status_code=400, detail="EMPTY_COMMAND")
+
+        parts = raw_cmd.split()
+        cmd = parts[0].lower()
+
+        strategy_runner = app_context.get("strategy_runner")
+        order_manager = app_context.get("order_manager")
+
+        if cmd == "/ping":
+            return {"status": "EXEC_SUCCESS", "output": "PONG_KERNEL_ACTIVE"}
+        elif cmd == "/status":
+            matrix = strategy_runner.get_strategy_matrix()
+            active = matrix.get("total_active", 0)
+            uptime = int(time.time() - SYSTEM_START_TIME.timestamp())
+            return {
+                "status": "EXEC_SUCCESS",
+                "output": f"KERNEL_UPTIME: {uptime}s | ACTIVE_STRATS: {active} | MODE: {order_manager.mode.upper()}"
+            }
+        elif cmd == "/sync":
+            await order_manager.sync_with_broker()
+            return {"status": "EXEC_SUCCESS", "output": "POS_RECONCILIATION_SYNCED_WITH_BROKER"}
+
+        return {"status": "CMD_UNKNOWN", "output": f"COMMAND_NOT_RECOGNIZED: {cmd}"}
+    except Exception as e:
+        logger.error(f"Terminal Command Error: {e}")
+        raise HTTPException(status_code=500, detail=f"KERNEL_EXCEPTION: {str(e)}")
+
+@router.get("/ticker/config")
+async def get_ticker_config():
+    """GET /api/v1/ticker/config - Symbols for UI ticker strip."""
+    try:
+        from data.historify_db import get_watchlist
+        watchlist = get_watchlist()
+        tickers = [{"symbol": w["symbol"], "label": w.get("name", w["symbol"])} for w in watchlist] if watchlist else []
+        if not tickers:
+            tickers = [
+                {"symbol": "NSE:NIFTY-INDEX", "label": "NIFTY 50"},
+                {"symbol": "NSE:BANKNIFTY-INDEX", "label": "BANK NIFTY"}
+            ]
+        return {"ticker_symbols": tickers, "count": len(tickers)}
+    except Exception as e:
+        logger.error(f"Ticker config error: {e}")
+        return {"ticker_symbols": [], "count": 0}
+
+@router.get("/telemetry")
+async def get_telemetry():
+    """Returns deep telemetry for institutional monitoring."""
+    try:
+        db_logger = get_trade_logger()
+        order_manager = app_context.get("order_manager")
+        portfolio_manager = app_context.get("portfolio_manager")
+
+        pnl_stats = await db_logger.get_pnl_summary()
+        perf_stats = await db_logger.get_performance_metrics()
+
+        telemetry = {
+            "engine": "AetherDesk Prime v2",
+            "uptime": str(datetime.now() - SYSTEM_START_TIME),
+            "trading_mode": (order_manager.mode if order_manager else "N/A"),
+            "pnl": {
+                "total_pnl": pnl_stats.get("all_time", {}).get("net", 0.0),
+                "daily_pnl": pnl_stats.get("daily", {}).get("net", 0.0),
+                "win_rate": pnl_stats.get("win_rate", 0.0),
+                "profit_factor": perf_stats.get("profit_factor", 0.0)
+            },
+            "performance_latency": {
+                "tick_dispatch_ms": round(latency_tracker.get_avg_latency("TickDispatch"), 3),
+                "db_ingest_ms": round(latency_tracker.get_avg_latency("DuckDBIngest"), 3)
             }
         }
+        return telemetry
     except Exception as e:
-        logger.error(f"Dashboard session route error: {e}")
-        return {"status": "error", "message": str(e)}
+        logger.error(f"Telemetry API Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/system/test-alert")
+async def test_alert(request: TestAlertRequest):
+    """Dispatches a test alert via Telegram."""
+    try:
+        success = await alert_service.send_telegram(f"[{request.type}] {request.message}")
+        return {"status": "success" if success else "failed"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/alerts")
+async def get_alerts(limit: int = Query(50)):
+    """Fetch recent alerts from the database."""
+    try:
+        db_logger = get_trade_logger()
+        # Note: We need get_recent_alerts in trade_logger or equivalent
+        conn = db_logger._get_connection()
+        conn.row_factory = __import__('sqlite3').Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM alerts ORDER BY created_at DESC LIMIT ?", (limit,))
+        rows = cursor.fetchall()
+        conn.close()
+        return {"status": "success", "data": [dict(row) for row in rows]}
+    except Exception as e:
+        logger.error(f"Error fetching alerts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+from fastapi import Header

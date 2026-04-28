@@ -56,7 +56,7 @@ export default function TradeJournal() {
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-background relative">
+    <div className="min-h-full flex flex-col bg-background relative">
       <div className="noise-overlay" />
       <div className="scanline opacity-10" />
 
@@ -104,8 +104,8 @@ export default function TradeJournal() {
         </div>
       </div>
 
-      <div className="flex-1 flex min-h-0 relative z-10">
-        <div className="flex-1 overflow-auto p-4 custom-scrollbar">
+      <div className="flex relative z-10 p-4 pb-12 gap-4">
+        <div className="flex-1">
           {activeTab === "Log" && (
             <div className="space-y-2">
               {isLoading && (

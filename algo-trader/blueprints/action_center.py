@@ -151,6 +151,17 @@ def toggle_auto_execution():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@action_center_bp.route("/api/v1/actioncenter/orders/all", methods=["DELETE", "POST"])
+@require_auth
+async def cancel_all_action_orders():
+    """Emergency route to cancel all pending signals and all broker orders."""
+    try:
+        result = await action_manager.cancel_all_signals()
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"ActionCenter Cancel All Error: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @action_center_bp.route("/api/v1/action/audit/lock", methods=["POST"])
 @require_auth
 def toggle_risk_lock():
@@ -162,3 +173,29 @@ def toggle_risk_lock():
         return jsonify({"status": "success", "risk_lock": action_manager.risk_lock}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+@action_center_bp.route("/api/v1/hitl/signals", methods=["GET"])
+@require_auth
+def hitl_get_signals():
+    """Alias for action center pending queue."""
+    orders = action_manager.get_pending_queue()
+    return jsonify({"status": "success", "data": orders}), 200
+
+@action_center_bp.route("/api/v1/hitl/approve", methods=["POST"])
+@require_auth
+async def hitl_approve():
+    """Alias for action center approval."""
+    data = request.json or {}
+    order_id = data.get("id")
+    if not order_id:
+        return jsonify({"status": "error", "message": "Missing ID"}), 400
+    success = await action_manager.approve_order(int(order_id))
+    return jsonify({"status": "success" if success else "error"}), 200 if success else 500
+
+@action_center_bp.route("/api/v1/hitl/reject", methods=["POST"])
+@require_auth
+def hitl_reject():
+    """Alias for action center rejection."""
+    data = request.json or {}
+    order_id = data.get("id")
+    success = action_manager.reject_order(int(order_id), reason=data.get("reason"))
+    return jsonify({"status": "success" if success else "error"}), 200 if success else 500

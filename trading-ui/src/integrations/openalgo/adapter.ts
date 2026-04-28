@@ -142,22 +142,22 @@ export class OpenAlgoAdapter {
     return response.data;
   }
 
-  async approveActionCenterOrder(id: number) {
+  async approveActionCenterOrder(id: string | number) {
     const response = await webClient.post(`/action-center/approve/${id}`, {});
     return response.data;
   }
 
-  async rejectActionCenterOrder(id: number, reason: string = 'Rejected by user') {
+  async rejectActionCenterOrder(id: string | number, reason: string = 'Rejected by user') {
     const response = await webClient.post(`/action-center/reject/${id}`, { reason });
     return response.data;
   }
 
-  async deleteActionCenterOrder(id: number) {
+  async deleteActionCenterOrder(id: string | number) {
     const response = await webClient.delete(`/action-center/delete/${id}`);
     return response.data;
   }
 
-  async retryActionCenterOrder(id: number) {
+  async retryActionCenterOrder(id: string | number) {
     const response = await webClient.post('/api/v1/actioncenter/retry', { id });
     return response.data;
   }
@@ -167,13 +167,54 @@ export class OpenAlgoAdapter {
     return response.data;
   }
 
-  async approveSelectedActionCenterOrders(ids: number[]) {
+  async approveSelectedActionCenterOrders(ids: (string | number)[]) {
     const response = await webClient.post('/api/v1/actioncenter/approve', { ids });
     return response.data;
   }
 
-  async rejectSelectedActionCenterOrders(ids: number[], reason: string = 'Bulk rejection') {
+  async rejectSelectedActionCenterOrders(ids: (string | number)[], reason: string = 'Bulk rejection') {
     const response = await webClient.post('/api/v1/actioncenter/reject', { ids, reason });
+    return response.data;
+  }
+
+  async cancelAllActionOrders() {
+    const response = await webClient.delete('/api/v1/actioncenter/orders/all');
+    return response.data;
+  }
+
+  // Strategy Management
+  async getAllStrategiesStatus() {
+    const response = await webClient.get('/api/v1/strategies/status');
+    return response.data;
+  }
+
+  async haltStrategy(strategy: string) {
+    const response = await webClient.post('/api/v1/strategies/halt', { strategy });
+    return response.data;
+  }
+
+  async unhaltStrategy(strategy: string) {
+    const response = await webClient.post('/api/v1/strategies/unhalt', { strategy });
+    return response.data;
+  }
+
+  async initializeStrategy(strategy: string) {
+    const response = await webClient.post('/api/v1/strategies/initialize', { strategy });
+    return response.data;
+  }
+
+  async liquidateStrategy(strategy: string) {
+    const response = await webClient.post('/api/v1/strategies/liquidate', { strategy });
+    return response.data;
+  }
+
+  async getStrategySafeguards(strategy_id: string) {
+    const response = await webClient.get(`/api/v1/strategies/safeguards/${strategy_id}`);
+    return response.data;
+  }
+
+  async updateStrategySafeguards(strategy_id: string, safeguards: any) {
+    const response = await webClient.post(`/api/v1/strategies/safeguards/${strategy_id}`, safeguards);
     return response.data;
   }
 
@@ -347,6 +388,22 @@ export class OpenAlgoAdapter {
 
   async getStraddleChartData(params: { underlying: string; exchange: string; expiry_date: string; days: number }) {
     const response = await webClient.get('/straddle-chart/api/data', { params });
+    return response.data;
+  }
+
+  // Aether Unified Telemetry
+  async getTelemetry() {
+    const response = await webClient.get('/api/v1/telemetry');
+    return response.data;
+  }
+
+  async getTelemetryPnL() {
+    const response = await webClient.get('/api/v1/telemetry/pnl');
+    return response.data;
+  }
+
+  async getTelemetryPerformance() {
+    const response = await webClient.get('/api/v1/telemetry/performance');
     return response.data;
   }
 }

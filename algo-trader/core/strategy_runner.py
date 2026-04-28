@@ -99,6 +99,7 @@ class StrategyRunner:
             if strategy_instance is None:
                 continue
 
+            self._strategies_by_key[strategy_key] = strategy_instance
             logger.info(
                 "Instantiated strategy: %s (%s)",
                 strategy_instance.name,
@@ -190,9 +191,13 @@ class StrategyRunner:
         asyncio.create_task(self._sector_sentiment_loop())
         logger.info("Multi-Sector Sentiment Intelligence cluster started.")
 
+        # Start Trading Hours Monitor (Phase 16)
+        asyncio.create_task(self._trading_hours_monitor_loop())
+        logger.info("Institutional Trading Hours & Square-off monitor started.")
+
         await self.start_strategies(self._strategies_by_key.keys())
 
-    async def start_strategies(self, strategy_keys: Iterable[str]):
+    async def start_strategies(self, strategy_keys: Iterable[str], config: Dict[str, Any] = None):
         """Start one or more selected strategies without duplicating subscriptions."""
         startup_pairs: List[tuple[str, BaseStrategy]] = []
 
@@ -209,6 +214,21 @@ class StrategyRunner:
                 self._strategies_by_key[strategy_key] = strategy_instance
 
             strategy_instance.is_active = True
+
+            # Apply dynamic configuration from deployment form
+            if config:
+                strategy_instance.max_risk = config.get("max_risk", getattr(strategy_instance, "max_risk", 500))
+                strategy_instance.capital_multiplier = config.get("capital_multiplier", getattr(strategy_instance, "capital_multiplier", 1.0))
+                strategy_instance.target_pnl = config.get("target_pnl", getattr(strategy_instance, "target_pnl", 2500))
+                strategy_instance.strategy_type = config.get("strategy_type", "intraday")
+                strategy_instance.product_type = config.get("product_type", getattr(strategy_instance, "product_type", "MIS"))
+                strategy_instance.trading_mode = config.get("trading_mode", "both")
+                strategy_instance.trading_hours = config.get("trading_hours", {
+                    "start": "09:15",
+                    "end": "15:15",
+                    "square_off": "15:20"
+                })
+                logger.info(f"Applied deployment config to {strategy_key}: {config}")
 
             # Wrap on_tick to inject telemetry heartbeats (Phase 16: Time-gated to avoid flooding)
             strategy_instance._last_telem_ts = 0
@@ -395,6 +415,47 @@ class StrategyRunner:
             except Exception as e:
                 logger.error(f"Safeguard Loop Error: {e}")
                 await asyncio.sleep(30)
+
+    async def _trading_hours_monitor_loop(self):
+        """
+        Background task to monitor strategy trading hours and trigger square-offs.
+        """
+        import pytz
+        from datetime import datetime
+        ist = pytz.timezone('Asia/Kolkata')
+
+        while True:
+            try:
+                await asyncio.sleep(60) # Check every minute
+                now = datetime.now(ist).time()
+
+                for strategy_id, strategy in list(self._strategies_by_key.items()):
+                    if not strategy.is_active or strategy.strategy_type not in ["intraday", "scalping"]:
+                        continue
+
+                    try:
+                        sq_off_t = datetime.strptime(strategy.trading_hours["square_off"], "%H:%M").time()
+                        if now >= sq_off_t:
+                            logger.warning(f"SQUARE_OFF >> {strategy_id} square-off time reached ({sq_off_t}). Liquidating and stopping...")
+
+                            # Execute liquidation and stop sequentially
+                            try:
+                                await self.order_manager.liquidate_strategy(strategy_id)
+                                await self.stop_strategies([strategy_id])
+                            except Exception as exec_err:
+                                logger.error(f"Failed to execute auto square-off for {strategy_id}: {exec_err}")
+
+                            if self.telemetry_callback:
+                                asyncio.create_task(self.telemetry_callback("auto_square_off", {
+                                    "strategy": strategy_id,
+                                    "time": str(sq_off_t),
+                                    "action": "LIQUIDATE_AND_STOP"
+                                }))
+                    except Exception as parse_err:
+                        logger.error(f"Error checking square-off for {strategy_id}: {parse_err}")
+
+            except Exception as e:
+                logger.error(f"Trading Hours Loop Error: {e}")
 
     async def _market_regime_loop(self):
         """

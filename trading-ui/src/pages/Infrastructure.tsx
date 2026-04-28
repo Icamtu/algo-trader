@@ -46,8 +46,8 @@ export default function Infrastructure() {
     setIsLoading(true);
     try {
       const response = await algoApi.getSystemStatus();
-      // Safely unwrap data if it follows the { status, data } pattern
-      const healthData = response?.data || response;
+      // Phase 16: Extract 'checks' which contains the multi-component health data
+      const healthData = response?.checks || response?.data?.checks || response;
       setHealth(healthData);
       setLastCheck(new Date());
     } catch (error) {
@@ -132,7 +132,7 @@ export default function Infrastructure() {
                 </div>
               ) : (
                 <>
-                  <div className="grid grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <StatusNode name="Aether_Core" id="ENGINE_01" icon={CpuIcon} status={health.algo_engine} description="Trading execution & strategy runtime." />
                     <StatusNode name="Shoonya_IF" id="BROKER_01" icon={Globe} status={health.broker} description="Finvasia WebSocket & REST gateway." />
                     <StatusNode name="Nexus_Bridge" id="PROTOCOL_01" icon={Network} status={health.openalgo} description="OpenAlgo kernel interface layer." />

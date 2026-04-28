@@ -243,7 +243,7 @@ const StrategyRegistryPage = () => {
                                                         <div className="flex items-center gap-2 mt-1">
                                                             <Fingerprint className="w-3 h-3 opacity-20" />
                                                             <span className="text-[9px] font-mono text-muted-foreground/30 uppercase tracking-[0.2em]">
-                                                                ID::{strategy.id?.substring(0, 12) || "NULL_STUB"}
+                                                                ID::{String(strategy.id || '').substring(0, 12) || "NULL_STUB"}
                                                             </span>
                                                         </div>
                                                     </div>

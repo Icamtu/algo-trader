@@ -3,6 +3,7 @@ import { Layers, ShieldAlert, Zap, BarChart2, AlertTriangle, RefreshCw } from "l
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { tradingService } from "@/services/tradingService";
+import { OrderBookBento } from "./OrderBookBento";
 
 export function LiveDeployment() {
   const [orders, setOrders] = useState<any[]>([]);
@@ -21,7 +22,17 @@ export function LiveDeployment() {
           tradingService.getTrades(apiKey),
           tradingService.getPositions(apiKey)
         ]);
-        if (o?.status === 'success') setOrders(o.data || []);
+        if (o?.status === 'success') {
+          // Normalize broker fields to OrderBookBento schema
+          const normalized = (o.data || []).map((ord: any) => ({
+            ...ord,
+            action: (ord.action || ord.transaction_type || "BUY").toUpperCase() as 'BUY' | 'SELL',
+            order_status: ord.order_status || ord.status || "PENDING",
+            orderid: ord.orderid || ord.order_id || ord.id || "",
+            timestamp: ord.timestamp || ord.order_time || "",
+          }));
+          setOrders(normalized);
+        }
         if (t?.status === 'success') setTrades(t.data || []);
         if (p?.status === 'success') setPositions(p.data || []);
       }
@@ -91,22 +102,21 @@ export function LiveDeployment() {
         <div className="grid grid-cols-12 gap-4">
 
           {/* Active Strategies Module */}
-          <section className="col-span-12 xl:col-span-8 bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex flex-col h-fit shadow-xl">
+          <section className="col-span-12 xl:col-span-7 bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex flex-col h-fit shadow-xl">
             <div className="px-4 py-3 bg-slate-950/50 flex justify-between items-center border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <Layers className="w-4 h-4 text-blue-400" />
-                <h2 className="font-semibold text-sm uppercase tracking-wider text-white">ACTIVE_STRATEGIES</h2>
+                <h2 className="font-semibold text-xs uppercase tracking-wider text-white">ACTIVE_STRATEGIES</h2>
               </div>
-              <span className="text-[10px] font-mono font-medium text-slate-500 tracking-widest">THREADS_ACTIVE: 04</span>
+              <span className="text-[10px] font-mono font-medium text-slate-500 tracking-widest uppercase">THREADS_ACTIVE: 04</span>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-[11px] border-collapse min-w-[600px]">
+              <table className="w-full text-left text-[11px] border-collapse min-w-[500px]">
                 <thead>
                   <tr className="bg-slate-800/30 text-slate-500 font-mono border-b border-slate-800">
                     <th className="px-4 py-2 font-medium tracking-widest">STRATEGY_ID</th>
                     <th className="px-4 py-2 font-medium tracking-widest">STATUS</th>
                     <th className="px-4 py-2 font-medium text-right tracking-widest">REALIZED_PNL</th>
-                    <th className="px-4 py-2 font-medium text-right tracking-widest">UNREALIZED</th>
                     <th className="px-4 py-2 font-medium text-right tracking-widest">UPTIME</th>
                   </tr>
                 </thead>
@@ -119,11 +129,10 @@ export function LiveDeployment() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded text-[9px] font-bold tracking-widest">ACTIVE</span>
+                      <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded text-[9px] font-bold tracking-widest uppercase">ACTIVE</span>
                     </td>
                     <td className="px-4 py-3 text-right font-mono font-bold text-emerald-400 text-xs">+₹142,500.00</td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-emerald-400 text-xs">+₹12,400.00</td>
-                    <td className="px-4 py-3 text-right font-mono text-slate-400">00:58:12</td>
+                    <td className="px-4 py-3 text-right font-mono text-slate-400 uppercase">00:58:12</td>
                   </tr>
                   <tr className="hover:bg-blue-500/5 transition-colors group">
                     <td className="px-4 py-3">
@@ -133,30 +142,28 @@ export function LiveDeployment() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded text-[9px] font-bold tracking-widest">ACTIVE</span>
+                      <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded text-[9px] font-bold tracking-widest uppercase">ACTIVE</span>
                     </td>
                     <td className="px-4 py-3 text-right font-mono font-bold text-emerald-400 text-xs">+₹239,500.00</td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-red-400 text-xs">-₹4,200.00</td>
-                    <td className="px-4 py-3 text-right font-mono text-slate-400">01:04:45</td>
-                  </tr>
-                  <tr className="hover:bg-blue-500/5 transition-colors group opacity-60">
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col">
-                        <span className="font-bold text-slate-200 text-xs">Arb_Liquidity_Shield</span>
-                        <span className="text-[9px] text-slate-500 font-mono tracking-widest">TAG: CASH_FUTURE</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 bg-slate-800 text-slate-400 border border-slate-700 rounded text-[9px] font-bold tracking-widest">PAUSED</span>
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono font-medium text-slate-500 text-xs">₹0.00</td>
-                    <td className="px-4 py-3 text-right font-mono font-medium text-slate-500 text-xs">₹0.00</td>
-                    <td className="px-4 py-3 text-right font-mono text-slate-400">--:--:--</td>
+                    <td className="px-4 py-3 text-right font-mono text-slate-400 uppercase">01:04:45</td>
                   </tr>
                 </tbody>
               </table>
             </div>
           </section>
+
+          {/* Order Book Bento */}
+          <OrderBookBento
+            orders={orders}
+            className="col-span-12 xl:col-span-5 h-[280px]"
+            onAbort={(id) => {
+               tradingService.cancelOrder(id).then(() => fetchData());
+            }}
+            onAbortAll={() => {
+               const pending = orders.filter(o => !['complete', 'cancelled', 'rejected'].includes(o.order_status?.toLowerCase()));
+               Promise.all(pending.map(o => tradingService.cancelOrder(o.orderid))).then(() => fetchData());
+            }}
+          />
 
           {/* Risk Oversight Panel */}
           <section className="col-span-12 xl:col-span-4 bg-slate-900 border border-slate-800 rounded-lg flex flex-col shadow-xl">

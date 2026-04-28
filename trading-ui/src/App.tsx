@@ -64,7 +64,7 @@ const MarketRegime = lazy(() => import("./pages/MarketRegimePage"));
 const StrategyManagerPage = lazy(() => import("./features/strategy-manager/StrategyManagerPage"));
 const PnLTracker = lazy(() => import("./pages/PnLTracker"));
 
-
+const IndicatorFactory = lazy(() => import("./pages/IndicatorFactory"));
 const IntelligenceHubPage = lazy(() => import("./pages/IntelligenceHubPage"));
 
 // Synchronous core components
@@ -132,6 +132,7 @@ const App = () => (
                       <Route path="/intelligence/option-chain" element={<OptionChainPage />} />
                       <Route path="/intelligence/max-pain" element={<MaxPainPage />} />
                       <Route path="/intelligence/straddle-lab" element={<StraddleLabPage />} />
+                      <Route path="/intelligence/indicator-factory" element={<IndicatorFactory />} />
                       <Route path="/governance" element={<Infrastructure />} />
                       <Route path="/risk" element={<Risk />} />
                       <Route path="/pnl-tracker" element={<PnLTracker />} />

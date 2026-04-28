@@ -31,13 +31,24 @@ export const tradingService = {
 
   // Action Center
   getActionCenterData: (status?: string) => openAlgoAdapter.getActionCenterData(status),
-  approveActionCenterOrder: (id: number) => openAlgoAdapter.approveActionCenterOrder(id),
-  rejectActionCenterOrder: (id: number, reason?: string) => openAlgoAdapter.rejectActionCenterOrder(id, reason),
-  deleteActionCenterOrder: (id: number) => openAlgoAdapter.deleteActionCenterOrder(id),
-  retryActionCenterOrder: (id: number) => openAlgoAdapter.retryActionCenterOrder(id),
+  approveActionCenterOrder: (id: string | number) => openAlgoAdapter.approveActionCenterOrder(id),
+  rejectActionCenterOrder: (id: string | number, reason?: string) => openAlgoAdapter.rejectActionCenterOrder(id, reason),
+  deleteActionCenterOrder: (id: string | number) => openAlgoAdapter.deleteActionCenterOrder(id),
+  retryActionCenterOrder: (id: string | number) => openAlgoAdapter.retryActionCenterOrder(id),
   approveAllActionCenterOrders: () => openAlgoAdapter.approveAllActionCenterOrders(),
-  approveSelectedActionCenterOrders: (ids: number[]) => openAlgoAdapter.approveSelectedActionCenterOrders(ids),
-  rejectSelectedActionCenterOrders: (ids: number[], reason?: string) => openAlgoAdapter.rejectSelectedActionCenterOrders(ids, reason),
+  approveSelectedActionCenterOrders: (ids: (string | number)[]) => openAlgoAdapter.approveSelectedActionCenterOrders(ids),
+  rejectSelectedActionCenterOrders: (ids: (string | number)[], reason?: string) => openAlgoAdapter.rejectSelectedActionCenterOrders(ids, reason),
+  cancelAllActionOrders: () => openAlgoAdapter.cancelAllActionOrders(),
+  getActionCenterOrders: (pendingOnly: boolean = true) => openAlgoAdapter.getActionCenterData(pendingOnly ? 'pending' : 'all'),
+
+  // Strategy Management
+  getAllStrategiesStatus: () => openAlgoAdapter.getAllStrategiesStatus(),
+  haltStrategy: (strategy: string) => openAlgoAdapter.haltStrategy(strategy),
+  unhaltStrategy: (strategy: string) => openAlgoAdapter.unhaltStrategy(strategy),
+  initializeStrategy: (strategy: string) => openAlgoAdapter.initializeStrategy(strategy),
+  liquidateStrategy: (strategy: string) => openAlgoAdapter.liquidateStrategy(strategy),
+  getStrategySafeguards: (strategy_id: string) => openAlgoAdapter.getStrategySafeguards(strategy_id),
+  updateStrategySafeguards: (strategy_id: string, safeguards: any) => openAlgoAdapter.updateStrategySafeguards(strategy_id, safeguards),
 
   // OI Profile & Search
   getOIProfileData: (params: any) => openAlgoAdapter.getOIProfileData(params),
@@ -105,4 +116,7 @@ export const tradingService = {
   // Strategy Labs
   getMaxPainData: (params: any) => openAlgoAdapter.getMaxPainData(params),
   getStraddleChartData: (params: any) => openAlgoAdapter.getStraddleChartData(params),
+  getTelemetry: () => openAlgoAdapter.getTelemetry(),
+  getTelemetryPnL: () => openAlgoAdapter.getTelemetryPnL(),
+  getTelemetryPerformance: () => openAlgoAdapter.getTelemetryPerformance(),
 };

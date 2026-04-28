@@ -21,19 +21,6 @@ import { AetherTerminal } from "@/components/terminal/AetherTerminal";
 
 const pageTabs = ["Editor", "Backtest", "Compare", "Equity Curve", "Returns", "Analyzer", "Live", "Risk Analytics", "Data Explorer"] as const;
 
-const strategies = [
-  { name: "AetherScalper", sharpe: 2.85, sortino: 3.42, cagr: 45.2, maxDD: -4.2, trades: 1547 },
-  { name: "AetherSwing", sharpe: 2.15, sortino: 2.85, cagr: 28.9, maxDD: -6.1, trades: 456 },
-  { name: "AetherVault", sharpe: 1.95, sortino: 2.25, cagr: 18.4, maxDD: -12.5, trades: 42 },
-  { name: "ML Regime", sharpe: 3.12, sortino: 4.23, cagr: 52.4, maxDD: -6.7, trades: 1567 },
-];
-
-const equityData = Array.from({ length: 30 }, (_, i) => ({
-  day: i + 1,
-  momentum: 100000 + (i * 3500) + Math.random() * 10000,
-  meanRev: 100000 + (i * 2200) + Math.random() * 8000,
-  statArb: 100000 + (i * 4200) + Math.random() * 12000,
-}));
 
 const DEFAULT_CODE = `class AetherSwing(BaseStrategy):
     def __init__(self):
@@ -61,6 +48,7 @@ export default function StrategyLab() {
   const [code, setCode] = useState(DEFAULT_CODE);
   const [isSaving, setIsSaving] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
+  const [lastBacktestResult, setLastBacktestResult] = useState<any>(null);
   const [backtestSymbol, setBacktestSymbol] = useState("RELIANCE");
   const [slippage, setSlippage] = useState(0.0005);
   const [currentFile, setCurrentFile] = useState<string | null>(null);
@@ -73,23 +61,10 @@ export default function StrategyLab() {
       try {
         const res = await algoApi.getStrategies();
         if (!res || !res.strategies) throw new Error("Invalid response format");
-
-        // Merge with stats if they exist
-        const merged = res.strategies.map((s: any) => {
-           const stat = strategies.find(stat => stat.name === s.name);
-           return {
-             ...s,
-             sharpe: stat?.sharpe || 0.0,
-             sortino: stat?.sortino || 0.0,
-             cagr: stat?.cagr || 0.0,
-             maxDD: stat?.maxDD || 0.0,
-             trades: stat?.trades || 0
-           };
-        });
-        setDynamicStrategies(merged);
+        setDynamicStrategies(res.strategies);
       } catch (err) {
         console.error("Failed to fetch strategies", err);
-        setDynamicStrategies(strategies); // Fallback to hardcoded
+        setDynamicStrategies([]);
       } finally {
         setIsLoading(false);
       }
@@ -122,8 +97,12 @@ export default function StrategyLab() {
     if (!currentFile) return;
     setIsSaving(true);
     try {
-      // Logic for deployment: Ensure it's saved and active
+      // Step 1: persist file
       await algoApi.saveStrategyFile(currentFile, code);
+      // Step 2: derive strategy id (strip .py, use filename stem as key)
+      const stratId = currentFile.replace(/\.py$/, "");
+      // Step 3: activate on engine
+      await algoApi.activateStrategy(stratId);
       toast({
         title: "DEPLOY_SUCCESS",
         description: `${currentFile.toUpperCase()}_LIVE_ON_ENGINE`,
@@ -150,9 +129,10 @@ export default function StrategyLab() {
         slippage: slippage
       });
 
+      setLastBacktestResult(res);
       toast({
         title: "SIM_COMPLETE",
-        description: `KERNEL_RETURNED_${res.total_trades}_TRADES | SHARPE: ${res.performance.sharpe_ratio.toFixed(2)}`
+        description: `KERNEL_RETURNED_${res.total_trades}_TRADES | SHARPE: ${res.performance?.sharpe_ratio?.toFixed(2) ?? "N/A"}`
       });
       setActiveTab("Backtest");
     } catch (err) {
@@ -313,6 +293,7 @@ export default function StrategyLab() {
                   }}
                 />
               </div>
+              <AetherTerminal />
             </motion.div>
           )}
 
@@ -324,7 +305,7 @@ export default function StrategyLab() {
               exit={{ opacity: 0, x: -20 }}
               className="flex-1 flex flex-col min-h-0 border border-white/5 glass-card overflow-hidden"
             >
-              <BacktestCanvas />
+              <BacktestCanvas latestResult={lastBacktestResult} />
             </motion.div>
           )}
 
@@ -348,31 +329,33 @@ export default function StrategyLab() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-white/5 bg-white/[0.01]">
-                        {["Strategy", "Sharpe", "Sortino", "CAGR", "Max DD", "Trades"].map(h => (
+                        {["Strategy", "Sharpe", "Sortino", "CAGR", "Max DD", "PnL (Today)"].map(h => (
                           <th key={h} className="px-4 py-3 text-left text-[8px] font-mono font-black uppercase tracking-[0.2em] text-muted-foreground/40">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/[0.03]">
-                      {dynamicStrategies.map((s) => (
-                        <tr key={s.name} className="group hover:bg-white/[0.02] transition-all cursor-crosshair">
+                      {dynamicStrategies.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground/30 font-mono text-[10px] uppercase tracking-widest italic">
+                            No strategies registered — deploy one from the Editor tab
+                          </td>
+                        </tr>
+                      ) : dynamicStrategies.map((s) => (
+                        <tr key={s.id || s.name} className="group hover:bg-white/[0.02] transition-all cursor-crosshair">
                           <td className="px-4 py-3 text-[11px] font-black font-mono text-foreground/80 group-hover:text-primary transition-colors tracking-tighter">
                             <span className="opacity-20 mr-2 group-hover:opacity-100 transition-opacity">/</span>
                             {s.name}
                           </td>
-                          <td className="px-4 py-3">
-                            <IndustrialValue value={s.sharpe} className={cn("text-[11px] font-black tabular-nums", primaryColorClass)} />
+                          <td className="px-4 py-3 text-[11px] font-black tabular-nums text-muted-foreground/40">--</td>
+                          <td className="px-4 py-3 text-[11px] font-black tabular-nums text-muted-foreground/40">--</td>
+                          <td className="px-4 py-3 text-[11px] font-black tabular-nums text-muted-foreground/40">--</td>
+                          <td className="px-4 py-3 text-[11px] font-black tabular-nums text-muted-foreground/40">--</td>
+                          <td className="px-4 py-3 text-[11px] font-mono tabular-nums">
+                            <span className={cn(s.pnl >= 0 ? "text-secondary" : "text-destructive", "font-black")}>
+                              {s.pnl != null ? `₹${Number(s.pnl).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : "--"}
+                            </span>
                           </td>
-                          <td className="px-4 py-3">
-                            <IndustrialValue value={s.sortino} className="text-[11px] font-black text-secondary tabular-nums" />
-                          </td>
-                          <td className="px-4 py-3">
-                            <IndustrialValue value={s.cagr} suffix="%" className="text-[11px] font-black text-secondary tabular-nums" />
-                          </td>
-                          <td className="px-4 py-3">
-                            <IndustrialValue value={s.maxDD} suffix="%" className="text-[11px] font-black text-destructive tabular-nums" />
-                          </td>
-                          <td className="px-4 py-3 text-[9px] font-mono text-muted-foreground/40 tabular-nums">{s.trades}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -384,31 +367,29 @@ export default function StrategyLab() {
 
           {activeTab === "Equity Curve" && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="aether-panel p-4">
-               <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="text-[10px] font-black font-display uppercase tracking-[0.3em] text-foreground mb-0.5">Equity_Trail_Buffer</h3>
-                    <p className="text-[7px] font-mono font-black text-muted-foreground/20 uppercase">Nexus_Stream</p>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    {[{ l: "MOM", c: "#22c55e" }, { l: "REV", c: "#3b82f6" }, { l: "ARB", c: "#ef4444" }].map(l => (
-                      <div key={l.l} className="flex items-center gap-2">
-                        <div className="w-2.5 h-0.5" style={{ backgroundColor: l.c }} />
-                        <span className="text-[7px] font-mono font-black text-muted-foreground/40 uppercase tracking-widest">{l.l}</span>
-                      </div>
-                    ))}
-                  </div>
-               </div>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={equityData}>
-                    <XAxis dataKey="day" stroke="rgba(255,255,255,0.05)" fontSize={7} font-family="Fira Code" />
-                    <YAxis stroke="rgba(255,255,255,0.05)" fontSize={7} font-family="Fira Code" tickFormatter={(v) => `₹${(v/1000).toFixed(0)}K`} />
-                    <Tooltip contentStyle={{ background: '#020617', border: '1px solid rgba(51, 65, 85, 0.2)', padding: '8px' }} itemStyle={{ fontFamily: 'Fira Code', fontSize: '9px' }} />
-                    <Area type="step" dataKey="momentum" stroke="#22c55e" fillOpacity={0.05} fill="#22c55e" strokeWidth={1.5} name="MOM" isAnimationActive={false} />
-                    <Area type="step" dataKey="meanRev" stroke="#3b82f6" fillOpacity={0.05} fill="#3b82f6" strokeWidth={1.5} name="REV" isAnimationActive={false} />
-                  </AreaChart>
-                </ResponsiveContainer>
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-[10px] font-black font-display uppercase tracking-[0.3em] text-foreground mb-0.5">Equity_Trail_Buffer</h3>
+                  <p className="text-[7px] font-mono font-black text-muted-foreground/20 uppercase">Last Backtest Run</p>
+                </div>
               </div>
+              {lastBacktestResult?.equityCurve?.length > 0 ? (
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={lastBacktestResult.equityCurve.map((v: number, i: number) => ({ day: i + 1, equity: v }))}>
+                      <XAxis dataKey="day" stroke="rgba(255,255,255,0.05)" fontSize={7} />
+                      <YAxis stroke="rgba(255,255,255,0.05)" fontSize={7} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} />
+                      <Tooltip contentStyle={{ background: '#020617', border: '1px solid rgba(51,65,85,0.2)', padding: '8px' }} itemStyle={{ fontFamily: 'Fira Code', fontSize: '9px' }} />
+                      <Area type="monotone" dataKey="equity" stroke="#22c55e" fillOpacity={0.05} fill="#22c55e" strokeWidth={1.5} name="Equity" isAnimationActive={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="h-64 flex flex-col items-center justify-center gap-3 text-muted-foreground/20">
+                  <p className="text-[10px] font-mono uppercase tracking-widest">No backtest run yet</p>
+                  <p className="text-[9px] font-mono text-muted-foreground/10">Run INITIALIZE_FORGE from the Editor tab to populate this curve</p>
+                </div>
+              )}
             </motion.div>
           )}
 

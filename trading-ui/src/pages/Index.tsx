@@ -24,19 +24,39 @@ const Index = () => {
     }
   }, [lastMessage]);
 
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in input/textarea
+      if (document.activeElement?.tagName === "INPUT" ||
+          document.activeElement?.tagName === "TEXTAREA" ||
+          (document.activeElement as HTMLElement)?.isContentEditable) {
+        return;
+      }
+
+      if (e.key.toLowerCase() === "b" || e.key.toLowerCase() === "n") {
+        setOrderModalOpen(true);
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, []);
+
   const handleTradeClick = (symbol: string) => {
     setPrefilledSymbol(symbol);
     setOrderModalOpen(true);
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-background selection:bg-primary/30">
+    <div className="min-h-full flex flex-col bg-background selection:bg-primary/30">
       <div className="scanline" />
       <SectorSentimentStrip sentiments={sectorSentiments} />
 
       <div className="flex-1 flex min-h-0">
         <StrategySidebar />
-        <div className="flex-1 flex flex-col h-full bg-background relative overflow-hidden">
+        <div className="min-h-full flex flex-col bg-background relative">
           <div className="p-8 space-y-6">
             <AnalyticsPanel />
           </div>

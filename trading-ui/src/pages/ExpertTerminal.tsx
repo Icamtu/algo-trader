@@ -1,7 +1,16 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTerminalSettings } from "@/contexts/TerminalSettingsContext";
+import { LightweightChart } from "@/components/trading/charts/LightweightChart";
+import { TradingViewWidget } from "@/components/trading/charts/TradingViewWidget";
 import {
-  Activity, RefreshCw, Cpu, Layers, AlertCircle, Radio, TrendingUp, TrendingDown, Crosshair, BarChart3
+  AreaChart, Area, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, CartesianGrid
+} from "recharts";
+import {
+  Activity, RefreshCw, Cpu, Layers, AlertCircle, Radio,
+  TrendingUp, TrendingDown, Crosshair, BarChart3, Loader2,
+  Maximize2, Settings2, LineChart
 } from "lucide-react";
 import { algoApi } from "@/features/openalgo/api/client";
 import { useToast } from "@/hooks/use-toast";
@@ -16,13 +25,44 @@ interface OptionStrike {
     is_atm: boolean;
 }
 
+function VitalsBar({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div className="space-y-1.5">
+       <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-muted-foreground/60">
+          <span>{label}</span>
+          <span className="font-mono">{value.toFixed(0)}%</span>
+       </div>
+       <div className="h-1 w-full bg-muted/20">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${value}%` }}
+            className={cn("h-full", color)}
+          />
+       </div>
+    </div>
+  );
+}
+
+function Badge({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+     <div className={cn("inline-flex items-center border font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2", className)}>
+        {children}
+     </div>
+  );
+}
+
 export default function ExpertTerminal() {
   const { toast } = useToast();
   const { selectedSymbol, setSelectedSymbol } = useAether();
+  const { settings, updateSettings } = useTerminalSettings();
 
   const [optionChain, setOptionChain] = useState<OptionStrike[]>([]);
   const [underlyingPrice, setUnderlyingPrice] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [candles, setCandles] = useState<any[]>([]);
+  const [isLoadingChart, setIsLoadingChart] = useState(false);
+  const [showChart, setShowChart] = useState(true);
+
   const [marketStats, setMarketStats] = useState<{pcr: number, vix: number, breadth: number, flow: number}>({
     pcr: 1.24,
     vix: 14.60,
@@ -31,6 +71,57 @@ export default function ExpertTerminal() {
   });
 
   const displaySymbol = selectedSymbol || "NIFTY";
+
+  const fetchChart = async () => {
+    setIsLoadingChart(true);
+    try {
+      const data = await algoApi.getHistory({
+        symbol: displaySymbol,
+        exchange: "NSE",
+        interval: "1"
+      });
+      setCandles(data || []);
+    } catch (e) {
+      const mockData = Array.from({ length: 50 }).map((_, i) => ({
+        date: new Date(Date.now() - (50 - i) * 3600000).toISOString(),
+        close: 22000 + Math.sin(i / 5) * 200 + Math.random() * 50,
+      }));
+      setCandles(mockData);
+    } finally {
+      setIsLoadingChart(false);
+    }
+  };
+
+  const renderChart = () => {
+    if (isLoadingChart) {
+      return (
+        <div className="h-64 flex flex-col items-center justify-center gap-4 bg-background/20">
+           <Loader2 className="w-6 h-6 text-primary animate-spin" />
+        </div>
+      );
+    }
+
+    if (settings.chartEngine === "tradingview") {
+      return <div className="h-80"><TradingViewWidget symbol={displaySymbol} /></div>;
+    }
+
+    if (settings.chartEngine === "lightweight") {
+      return <div className="h-80"><LightweightChart data={candles} /></div>;
+    }
+
+    return (
+      <div className="h-64">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={candles}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" vertical={false} />
+            <XAxis dataKey="date" hide />
+            <YAxis domain={["auto", "auto"]} orientation="right" tick={{ fill: "rgba(255,255,255,0.15)", fontSize: 8 }} axisLine={false} tickLine={false} />
+            <Area type="monotone" dataKey="close" stroke="#00F5FF" fill="rgba(0, 245, 255, 0.05)" />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  };
 
   const fetchMarketStats = async () => {
     try {
@@ -72,6 +163,7 @@ export default function ExpertTerminal() {
   useEffect(() => {
     fetchOptionChain();
     fetchMarketStats();
+    fetchChart();
     const interval = setInterval(() => {
       fetchOptionChain();
       fetchMarketStats();
@@ -80,7 +172,7 @@ export default function ExpertTerminal() {
   }, [displaySymbol]);
 
   return (
-    <div className="flex flex-col gap-6 h-full pb-10">
+    <div className="flex flex-col gap-6 min-h-full pb-10">
       {/* Dynamic Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-6">
@@ -107,6 +199,16 @@ export default function ExpertTerminal() {
 
         <div className="flex items-center gap-2">
            <button
+             onClick={() => setShowChart(!showChart)}
+             className={cn(
+               "h-10 px-4 border text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3",
+               showChart ? "bg-primary text-black border-primary" : "bg-muted border-border text-muted-foreground"
+             )}
+           >
+             <LineChart className="w-3.5 h-3.5" />
+             {showChart ? "Hide_Visual" : "Show_Visual"}
+           </button>
+           <button
              onClick={fetchOptionChain}
              className={cn(
                "h-10 px-6 bg-muted border border-border text-[10px] font-black uppercase tracking-widest transition-all hover:bg-primary hover:text-black flex items-center gap-3",
@@ -122,19 +224,56 @@ export default function ExpertTerminal() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1 min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Main Option Chain Matrix */}
-        <div className="lg:col-span-3 flex flex-col border border-border/5 bg-background/20 backdrop-blur-2xl overflow-hidden relative group">
-           {/* Cybernetic Accent */}
-           <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+        <div className="lg:col-span-3 flex flex-col gap-6">
+           {/* Price Chart Section */}
+           <AnimatePresence>
+             {showChart && (
+               <motion.div
+                 initial={{ height: 0, opacity: 0 }}
+                 animate={{ height: "auto", opacity: 1 }}
+                 exit={{ height: 0, opacity: 0 }}
+                 className="overflow-hidden border border-border/5 bg-background/20 relative"
+               >
+                  <div className="p-4 border-b border-border/5 flex items-center justify-between">
+                     <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 flex items-center gap-2">
+                        <Activity className="w-3 h-3" /> Price_Stream // G-Sync
+                     </span>
+                     <div className="flex bg-card/10 border border-border/50 p-0.5">
+                        {[
+                          { id: 'lightweight', label: 'LW' },
+                          { id: 'tradingview', label: 'TV' }
+                        ].map((eng) => (
+                          <button
+                            key={eng.id}
+                            onClick={() => updateSettings({ chartEngine: eng.id as any })}
+                            className={cn(
+                              "px-2 py-1 text-[8px] font-black uppercase transition-all",
+                              settings.chartEngine === eng.id ? "bg-primary text-black" : "text-muted-foreground/40 hover:text-foreground/60"
+                            )}
+                          >
+                            {eng.label}
+                          </button>
+                        ))}
+                     </div>
+                  </div>
+                  {renderChart()}
+               </motion.div>
+             )}
+           </AnimatePresence>
 
-           <div className="px-6 py-4 border-b border-border/5 bg-background/40 flex items-center justify-between relative z-10">
-              <div className="flex items-center gap-4">
-                 <div className="bg-primary/10 p-2 border border-primary/20">
-                    <Layers className="w-4 h-4 text-primary animate-pulse" />
-                 </div>
-                 <div className="flex flex-col">
-                    <span className="text-[10px] font-black uppercase tracking-[0.4em] text-foreground">Matrix_Registry_v4.2</span>
+           <div className="flex flex-col border border-border/5 bg-background/20 backdrop-blur-2xl relative group">
+              {/* Cybernetic Accent */}
+              <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+
+              <div className="px-6 py-4 border-b border-border/5 bg-background/40 flex items-center justify-between relative z-10">
+                 <div className="flex items-center gap-4">
+                    <div className="bg-primary/10 p-2 border border-primary/20">
+                       <Layers className="w-4 h-4 text-primary animate-pulse" />
+                    </div>
+                    <div className="flex flex-col">
+                       <span className="text-[10px] font-black uppercase tracking-[0.4em] text-foreground">Matrix_Registry_v4.2</span>
                     <span className="text-[7px] font-mono text-muted-foreground/40 uppercase tracking-widest">REALTIME_QUANT_FEED // SYNC_LOCK_ACTIVE</span>
                  </div>
               </div>
@@ -148,7 +287,8 @@ export default function ExpertTerminal() {
                     <span className="text-[8px] font-black font-mono text-muted-foreground/60 uppercase tracking-widest">Beta_Puts</span>
                  </div>
               </div>
-           </div>           <div className="flex-1 overflow-auto custom-scrollbar relative z-10">
+           </div>
+           <div className="relative z-10">
               <table className="w-full text-[10px] font-mono border-separate border-spacing-0">
                  <thead className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl">
                     <tr className="uppercase tracking-[0.2em] text-muted-foreground/30 h-10 border-b border-border/10">
@@ -203,6 +343,7 @@ export default function ExpertTerminal() {
                  </tbody>
               </table>
            </div>
+         </div>
         </div>
 
         {/* Lateral Analysis Panels */}
@@ -270,31 +411,5 @@ export default function ExpertTerminal() {
         </div>
       </div>
     </div>
-  );
-}
-
-function VitalsBar({ label, value, color }: { label: string, value: number, color: string }) {
-  return (
-    <div className="space-y-1.5">
-       <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-muted-foreground/60">
-          <span>{label}</span>
-          <span className="font-mono">{value.toFixed(0)}%</span>
-       </div>
-       <div className="h-1 w-full bg-muted/20">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${value}%` }}
-            className={cn("h-full", color)}
-          />
-       </div>
-    </div>
-  );
-}
-
-function Badge({ children, className }: { children: React.ReactNode, className?: string }) {
-  return (
-     <div className={cn("inline-flex items-center border font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2", className)}>
-        {children}
-     </div>
   );
 }

@@ -7,6 +7,9 @@ from services.market_data_service import MarketDataService
 from services.analytics_engine import AnalyticsEngine
 from services.historify_service import historify_service
 
+from services.correlation_engine import correlation_engine
+from services.fill_analytics import fill_analytics
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["analytics"])
@@ -56,6 +59,27 @@ async def get_iv_smile(
         results = _analytics_engine.calculate_iv_smile(chain)
         return results
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/analytics/greeks")
+async def get_chain_greeks(
+    underlying: str = Body(...),
+    exchange: str = Body("NSE"),
+    expiry_date: str = Body(...)
+):
+    """
+    Calculate full Greeks (Delta, Gamma, Theta, Vega, Rho) for an option chain.
+    """
+    try:
+        ds = get_data_service()
+        chain = await ds.get_option_chain(underlying, exchange, expiry_date)
+        if chain.get("status") == "error":
+            raise HTTPException(status_code=500, detail=chain.get("message"))
+
+        results = _analytics_engine.calculate_chain_greeks(chain)
+        return results
+    except Exception as e:
+        logger.error(f"Greeks API Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/historify/watchlist")
@@ -254,4 +278,51 @@ async def get_analyzer_status():
         }
     except Exception as e:
         logger.error(f"Error getting analyzer status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/analytics/fill-quality")
+async def get_fill_quality(
+    strategy: str = Query("all"),
+    limit: int = Query(1000)
+):
+    """
+    Generate an execution slippage and fill-quality report.
+    """
+    try:
+        results = await fill_analytics.get_fill_quality_report(strategy, limit)
+        return results
+    except Exception as e:
+        logger.error(f"Fill Quality API Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+@router.post("/analytics/correlation")
+async def get_correlation_matrix(
+    symbols: List[str] = Body(...),
+    interval: str = Body("D"),
+    days: int = Body(30)
+):
+    """
+    Calculate asset correlation matrix for portfolio diversification analysis.
+    """
+    try:
+        results = await correlation_engine.get_asset_correlation_matrix(symbols, interval, days)
+        if results.get("status") == "error":
+            raise HTTPException(status_code=500, detail=results.get("message"))
+        return results
+    except Exception as e:
+        logger.error(f"Correlation API Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/analytics/convergence")
+async def get_signal_convergence(
+    multi_tf_signals: Dict[str, str] = Body(...)
+):
+    """
+    Determine trend strength by analyzing signal convergence across timeframes.
+    Input format: {"1m": "BUY", "5m": "BUY", "15m": "NEUTRAL"}
+    """
+    try:
+        results = correlation_engine.analyze_signal_convergence(multi_tf_signals)
+        return results
+    except Exception as e:
+        logger.error(f"Convergence API Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -6,7 +6,7 @@ from data.market_data import Tick
 from execution.order_manager import OrderManager
 from services.market_data_service import MarketDataService
 from services.analytics_engine import AnalyticsEngine
-from data.historify_db import get_indicator_state, get_ohlcv_data
+from data.historify_db import get_ohlcv_data
 
 
 logger = logging.getLogger(__name__)
