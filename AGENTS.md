@@ -8,8 +8,9 @@
 - **Done**: 100% Core Design "Kernalization" (Phase 1-16).
 - **Done**: System Integrity & P0 Security Vectorization (Phase 7).
 - **Done**: UI Normalization (Title, README, Metadata cleanup).
-- **Done**: Shoonya session sync automated verification (Phase 8).
-- **Now**: Performance optimization & Strategy execution audit.
+- **Done**: Institutional Observability (Loki/Jaeger/Prom) (Phase 4).
+- **Done**: Phase 5: Advanced AI (Stat-Arb, Genetic GA, Sentiment, Indicator UI).
+- **Now**: Phase 6: Multi-broker bridge & High-frequency connectivity.
 
 ## Key Files & Modules
 - `docker-compose.yml`: Unified service orchestrator
@@ -43,9 +44,21 @@
 ## Skills & Agent Docs (Unified)
 - **Single folder**: `.agents/` — all skills, rules, docs, workflows live here.
 - **Structure**:
-  - `commands/`: Slash command definitions (MD).
+  - `commands/` → synced to `.claude/commands/` (slash commands).
   - `agents/`: Specialized subagents (MD with frontmatter).
-  - `skills/`: Reusable capabilities (SKILL.md).
-- **Skills**: `.agents/skills/` — 201 skills total (general + trading-domain).
-- **Best Practice**: Follow [BEST_PRACTICE.md](file:///home/ubuntu/trading-workspace/.agents/BEST_PRACTICE.md) for all new additions.
-- **Consolidated**: Use `.agents/` exclusively.
+  - `skills/`: 1449 skills registered as `aetherdesk-local` plugin — all accessible via Skill tool.
+  - `workflows/` → synced to `.claude/commands/` as `/graphify`, `/update-memory`, `/audit-and-fix`, etc.
+  - `memory/` → synced to `~/.claude/projects/-workspace/memory/` (auto-imported each session).
+  - `rules/` + `.agents-rules` → architectural guardrails (see below).
+- **Best Practice**: Follow `.agents/BEST_PRACTICE.md` for all new additions.
+- **Auto-Sync**: `agents-sync.js` runs on every session start + file change. Watcher daemon: `bash .agents/scripts/watch.sh status`.
+- **Skill Catalog**: `.agents/core/skill-catalog.md` (64 categories, 1449 skills indexed).
+
+## Architectural Rules (from .agents-rules)
+- **Database**: Pure SQLite ONLY. No PostgreSQL.
+- **Network**: All services on `trading_net`. Access via container names + internal ports.
+- **Secrets**: NEVER hardcode credentials. Always use `.env`.
+- **WebSocket**: Preserve heartbeats in `live_feed.py`. Never break live feed connectivity.
+- **Frontend**: Consult `.agents/aetherdesk-frontend-brief.md` before any UI work.
+- **Memory**: After significant milestones, run `/update-memory` to consolidate.
+- **Graphify**: Run `/graphify .agents` to rebuild the knowledge graph after major changes.
