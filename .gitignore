@@ -27,6 +27,7 @@ __pycache__/
 algo-trader/database/*.db
 algo-trader/database/*.duckdb
 algo-trader/data/
+!algo-trader/data/*.py
 algo-trader/storage/
 mongodb_data/
 openalgo/db/
