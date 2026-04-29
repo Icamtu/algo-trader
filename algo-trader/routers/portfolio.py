@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Request, HTTPException, Depends
 import logging
+import os
+import jwt
 from typing import List, Dict, Any
 from core.context import app_context
 from database.trade_logger import get_trade_logger
@@ -7,6 +9,27 @@ from services.portfolio_analytics import portfolio_analytics
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["Portfolio"])
+
+_JWT_SECRET = os.environ.get("JWT_SECRET", "")
+
+def _require_admin(request: Request):
+    """Raise 401/403 unless caller has admin role via JWT."""
+    auth_header = request.headers.get("Authorization", "")
+    internal_key = request.headers.get("X-Internal-Key")
+    if internal_key and internal_key == _JWT_SECRET:
+        return
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Authorization Token")
+    token = auth_header.removeprefix("Bearer ").strip()
+    try:
+        payload = jwt.decode(token, _JWT_SECRET, algorithms=["HS256"], options={"verify_aud": False})
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError as e:
+        raise HTTPException(status_code=401, detail=f"Auth failure: {e}")
+    role = payload.get("role", "viewer").lower()
+    if role not in ("admin", "internal"):
+        raise HTTPException(status_code=403, detail="ADMIN_ROLE_REQUIRED")
 
 @router.get("/engine/positions")
 async def get_engine_positions():
@@ -51,8 +74,9 @@ async def get_broker_positions():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/system/reconcile")
-async def system_reconcile():
+async def system_reconcile(request: Request):
     """FastAPI port of /api/v1/system/reconcile."""
+    _require_admin(request)
     order_manager = app_context.get("order_manager")
     db_logger = get_trade_logger()
     if not order_manager:
