@@ -299,6 +299,16 @@ class TradeLogger:
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
             """)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS autoresearch_tasks (
+                task_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'processing',
+                result_json TEXT,
+                error TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """)
 
             conn.commit()
             conn.close()
@@ -1198,6 +1208,68 @@ class TradeLogger:
         except Exception as e:
             logger.error(f"Error deleting alert: {e}")
             return False
+
+    def acknowledge_alert(self, alert_id: int) -> bool:
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE alerts SET acknowledged = 1 WHERE id = ?",
+                (alert_id,)
+            )
+            conn.commit()
+            success = cursor.rowcount > 0
+            conn.close()
+            return success
+        except Exception as e:
+            logger.error(f"Error acknowledging alert {alert_id}: {e}")
+            return False
+
+    # --- AutoResearch Task Persistence ---
+
+    def create_ar_task(self, task_id: str) -> None:
+        try:
+            conn = self._get_connection()
+            conn.execute(
+                "INSERT OR REPLACE INTO autoresearch_tasks (task_id, status, created_at, updated_at) VALUES (?, 'processing', ?, ?)",
+                (task_id, datetime.utcnow().isoformat(), datetime.utcnow().isoformat())
+            )
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.warning(f"AR task create failed: {e}")
+
+    def update_ar_task(self, task_id: str, status: str, result: Any = None, error: str = None) -> None:
+        try:
+            result_json = json.dumps(result) if result is not None else None
+            conn = self._get_connection()
+            conn.execute(
+                "UPDATE autoresearch_tasks SET status=?, result_json=?, error=?, updated_at=? WHERE task_id=?",
+                (status, result_json, error, datetime.utcnow().isoformat(), task_id)
+            )
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.warning(f"AR task update failed: {e}")
+
+    def get_ar_task(self, task_id: str) -> Optional[Dict[str, Any]]:
+        try:
+            conn = self._get_connection()
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT * FROM autoresearch_tasks WHERE task_id=?", (task_id,)
+            ).fetchone()
+            conn.close()
+            if not row:
+                return None
+            d = dict(row)
+            if d.get("result_json"):
+                d["result"] = json.loads(d["result_json"])
+            del d["result_json"]
+            return d
+        except Exception as e:
+            logger.warning(f"AR task get failed: {e}")
+            return None
 
     # --- Backtest Results Methods ---
 

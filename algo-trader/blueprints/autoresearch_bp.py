@@ -7,11 +7,23 @@ from datetime import datetime
 from utils.auth import require_auth
 from core.autoresearch_agent import run_iteration_api
 from execution.action_manager import get_action_manager
+from database.trade_logger import get_trade_logger
 
 logger = logging.getLogger(__name__)
 autoresearch_bp = Blueprint('autoresearch_bp', __name__)
 
-autoresearch_tasks = {}
+def _get_task(tid):
+    return get_trade_logger().get_ar_task(tid)
+
+def _set_task(tid, status, result=None, error=None):
+    get_trade_logger().update_ar_task(tid, status, result=result, error=error)
+
+def _check_cancel(tid):
+    task = _get_task(tid)
+    return task is not None and task.get("status") == "cancelled"
+
+@autoresearch_bp.route("/api/v1/autoresearch/iteration", methods=["POST"])
+@require_auth
 def api_autoresearch_iteration():
     import uuid
     import threading
@@ -19,17 +31,14 @@ def api_autoresearch_iteration():
 
     data = request.json or {}
     task_id = str(uuid.uuid4())
-    autoresearch_tasks[task_id] = {"status": "processing"}
+    get_trade_logger().create_ar_task(task_id)
 
     def run_in_bg(tid, req_data):
         logger.info(f"Autoresearch task {tid} started in background thread.")
 
         def update_status(payload):
-            if tid in autoresearch_tasks:
-                autoresearch_tasks[tid].update(payload)
-
-        def check_cancel():
-            return autoresearch_tasks.get(tid, {}).get("status") == "cancelled"
+            if payload.get("status"):
+                _set_task(tid, payload["status"], result=payload.get("result"), error=payload.get("error"))
 
         async def _run():
             try:
@@ -42,53 +51,40 @@ def api_autoresearch_iteration():
                     days=req_data.get("days", 7),
                     model=req_data.get("model", "deepseek-coder:1.3b"),
                     task_callback=update_status,
-                    check_cancel=check_cancel
+                    check_cancel=lambda: _check_cancel(tid)
                 )
-                if not check_cancel():
-                    autoresearch_tasks[tid] = {"status": "completed", "result": result}
+                if not _check_cancel(tid):
+                    _set_task(tid, "completed", result=result)
             except Exception as e:
                 logger.error(f"Autoresearch API background error: {e}", exc_info=True)
-                autoresearch_tasks[tid] = {"status": "error", "error": str(e)}
+                _set_task(tid, "error", error=str(e))
 
-        # Create a new event loop for this thread to run the async function
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop.run_until_complete(_run())
         loop.close()
 
     threading.Thread(target=run_in_bg, args=(task_id, data), daemon=True).start()
+    return jsonify({"status": "processing", "task_id": task_id}), 202
 
-    # Simple cleanup of old tasks (older than 1 hour)
-    try:
-        now = datetime.now()
-        to_delete = []
-        # Note: This is a bit risky with concurrent access, but fine for low volume
-        for tid, tdata in list(autoresearch_tasks.items()):
-            # We'd need a timestamp in the task to do this properly
-            # For now, let's just limit the size of the dict
-            if len(autoresearch_tasks) > 100:
-                first_key = next(iter(autoresearch_tasks))
-                del autoresearch_tasks[first_key]
-    except:
-        pass
 @autoresearch_bp.route("/api/v1/autoresearch/stop", methods=["POST"])
 @require_auth
 def api_autoresearch_stop():
     data = request.json or {}
     task_id = data.get("taskId")
-    if task_id in autoresearch_tasks:
-        autoresearch_tasks[task_id]["status"] = "cancelled"
+    task = _get_task(task_id)
+    if task:
+        _set_task(task_id, "cancelled")
         return jsonify({"status": "success", "message": "Research task cancellation requested."}), 200
     return jsonify({"status": "error", "message": "Task not found."}), 404
-
-    return jsonify({"status": "processing", "task_id": task_id}), 202
 
 @autoresearch_bp.route("/api/v1/autoresearch/status/<task_id>", methods=["GET"])
 @require_auth
 def api_autoresearch_status(task_id):
-    if task_id not in autoresearch_tasks:
+    task = _get_task(task_id)
+    if task is None:
         return jsonify({"error": "Task not found"}), 404
-    return jsonify(autoresearch_tasks[task_id]), 200
+    return jsonify(task), 200
 
 @autoresearch_bp.route("/api/v1/autoresearch/history", methods=["GET"])
 @require_auth
