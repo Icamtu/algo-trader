@@ -1,6 +1,9 @@
+import asyncio
 import logging
 import hmac
 import hashlib
+import os
+import time as _time
 from fastapi import APIRouter, Request, HTTPException, Header, Depends
 from typing import Dict, Any, Optional
 from core.context import app_context
@@ -12,13 +15,51 @@ router = APIRouter(prefix="/api/v1/webhooks", tags=["Webhooks"])
 # Inbound alerts typically come as raw JSON from TradingView
 
 # --- Security ---
-import os
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "AetherDesk_Institutional_Secret_2026")
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "")
+WEBHOOK_MAX_AGE_SECONDS = 300  # 5-minute replay window
 
-def verify_webhook(request: Request, x_webhook_token: Optional[str] = Header(None)):
-    if x_webhook_token != WEBHOOK_SECRET:
-        logger.warning(f"Unauthorized webhook attempt from {request.client.host}")
-        raise HTTPException(status_code=401, detail="Invalid Webhook Token")
+
+async def verify_webhook(
+    request: Request,
+    x_webhook_token: Optional[str] = Header(None),
+    x_webhook_timestamp: Optional[str] = Header(None),
+):
+    """
+    Verifies webhook authenticity using HMAC-SHA256.
+    Expects:
+      X-Webhook-Timestamp: Unix timestamp (seconds) when the request was signed
+      X-Webhook-Token: HMAC-SHA256(secret, f"{timestamp}.{body}")
+    Falls back to constant-time token comparison for legacy callers without timestamp.
+    """
+    if not WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Webhook secret not configured")
+
+    body = await request.body()
+
+    # Modern path: HMAC + timestamp (replay protection)
+    if x_webhook_timestamp:
+        try:
+            ts = int(x_webhook_timestamp)
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=401, detail="Invalid timestamp format")
+
+        now = int(_time.time())
+        if abs(now - ts) > WEBHOOK_MAX_AGE_SECONDS:
+            raise HTTPException(status_code=401, detail="Webhook timestamp expired (replay protection)")
+
+        mac = hmac.new(WEBHOOK_SECRET.encode(), digestmod=hashlib.sha256)
+        mac.update(f"{ts}.".encode() + body)
+        expected = mac.hexdigest()
+
+        if not hmac.compare_digest(expected, x_webhook_token or ""):
+            logger.warning(f"Webhook HMAC mismatch from {request.client.host}")
+            raise HTTPException(status_code=401, detail="Invalid webhook signature")
+    else:
+        # Legacy fallback: simple token comparison (constant-time)
+        if not x_webhook_token or not hmac.compare_digest(x_webhook_token, WEBHOOK_SECRET):
+            logger.warning(f"Unauthorized webhook attempt from {request.client.host}")
+            raise HTTPException(status_code=401, detail="Invalid Webhook Token")
+
     return True
 
 # --- Routes ---
@@ -67,7 +108,6 @@ async def register_outbound_webhook(config: Dict[str, Any]):
 
 # --- Outbound Dispatcher ---
 import httpx
-import asyncio
 
 async def dispatch_outbound_webhook(url: str, payload: Dict[str, Any]):
     """Sends a trade event to an external listener."""
