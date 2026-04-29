@@ -48,6 +48,7 @@ from routers.strategies import router as strategies_router
 from routers.backtest import router as backtest_router
 from routers.vault import router as vault_router
 from routers.webhooks import router as webhooks_router
+from routers.reports import router as reports_router
 from routers.stat_arb import router as stat_arb_router
 from routers.sentiment import router as sentiment_router
 from routers.indicators import router as indicators_router
@@ -391,6 +392,8 @@ app.include_router(strategies_router)
 app.include_router(backtest_router)
 app.include_router(vault_router)
 app.include_router(webhooks_router)
+app.include_router(sentiment_router, prefix="/api/v1/sentiment", tags=["Sentiment"])
+app.include_router(reports_router)
 
 @app.get("/metrics")
 async def metrics():
