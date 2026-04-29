@@ -28,6 +28,8 @@ from utils.throttling import AsyncTokenBucket
 from data.timescale_logger import ts_logger
 from services.charges_service import get_charges_service
 from utils.latency_tracker import latency_tracker
+from services.dlq_service import dlq_service
+from services.sor_service import SmartOrderRouter
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +88,19 @@ class OrderManager:
         self.live_position_manager = (position_manager if self.mode == "live" else None) or PositionManager()
         self.sandbox_position_manager = (position_manager if self.mode != "live" else None) or PositionManager()
 
+        # AetherBridge Sandbox Kernel (Always initialized for isolation)
+        from brokers.paper_broker import PaperBroker
+        self.paper_broker = PaperBroker("paper", {"initial_funds": 1000000.0})
+        asyncio.create_task(self.paper_broker.login())
+
+        _sor_adapters = {}
+        if self.native_broker:
+            _sor_adapters[self.native_broker.broker_id] = self.native_broker
+        _sor_adapters["paper"] = self.paper_broker
+        self.sor = SmartOrderRouter(_sor_adapters)
+
+        asyncio.create_task(dlq_service.start_processor(self))
+
         # Rate Limiting (Phase 16: Institutional Throttling)
         self.limiter = AsyncTokenBucket(5, 5)
 
@@ -131,6 +146,7 @@ class OrderManager:
         ai_reasoning: Optional[str] = None,
         conviction: Optional[float] = None,
         mode: Optional[str] = None,
+        retry_from_dlq: bool = False,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -222,7 +238,18 @@ class OrderManager:
                         broker_span.set_attribute("broker_mode", effective_mode)
 
                         # AETHERBRIDGE ROUTE (Native First)
-                        if self.native_broker:
+                        if effective_mode == "sandbox":
+                            active_broker = self.paper_broker
+                        elif self.native_broker:
+                            try:
+                                best_id = await self.sor.get_best_execution_broker(symbol, action, quantity)
+                                active_broker = self.sor.adapters.get(best_id, self.native_broker)
+                            except Exception:
+                                active_broker = self.native_broker
+                        else:
+                            active_broker = None
+
+                        if active_broker:
                             try:
                                 from brokers.models import OrderAction, OrderType, ProductType
                                 n_action = OrderAction.BUY if action == "BUY" else OrderAction.SELL
@@ -234,23 +261,27 @@ class OrderManager:
                                     n_product = getattr(ProductType, product.upper(), ProductType.MIS)
                                 except:
                                     n_product = ProductType.MIS
+                                try:
+                                    n_exchange = exchange.upper()
+                                except:
+                                    n_exchange = "NSE"
 
                                 start_native = time.perf_counter()
-                                native_order = await self.native_broker.place_order(
+                                native_order = await active_broker.place_order(
                                     symbol=symbol,
                                     action=n_action,
                                     quantity=quantity,
                                     order_type=n_type,
                                     price=price,
                                     product=n_product,
-                                    exchange=exchange,
+                                    exchange=n_exchange,
                                     strategy=strategy_name,
                                     **kwargs
                                 )
                                 native_latency = (time.perf_counter() - start_native) * 1000
                                 native_order_id = native_order.order_id
-                                logger.info(f"[AETHERBRIDGE] Native Execution: {native_latency:.2f}ms | OrderID: {native_order_id}")
-                                
+                                logger.info(f"[AETHERBRIDGE] {effective_mode.upper()} Execution: {native_latency:.2f}ms | OrderID: {native_order_id}")
+
                                 response = {
                                     "status": "success",
                                     "order_id": native_order_id,
@@ -282,6 +313,13 @@ class OrderManager:
 
                     broker_latency = (time.perf_counter() - start_broker) * 1000
                     logger.info(f"[AUDIT] Broker Latency for {symbol} {action}: {broker_latency:.2f}ms")
+                    # Prometheus metrics
+                    try:
+                        from fastapi_app import ORDER_COUNTER, LATENCY_HISTOGRAM
+                        ORDER_COUNTER.labels(symbol=symbol, action=action, strategy=strategy_name).inc()
+                        LATENCY_HISTOGRAM.labels(operation="order_execution").observe(broker_latency / 1000)
+                    except Exception:
+                        pass
                 except Exception as e:
                     logger.error("[%s] Broker call failed for %s: %s", strategy_name, symbol, e, exc_info=True)
                     asyncio.create_task(self.trade_logger.log_trade(
@@ -295,6 +333,19 @@ class OrderManager:
                         ai_reasoning=ai_reasoning,
                         conviction=conviction,
                     ))
+                    if effective_mode == "live" and not retry_from_dlq:
+                        dlq_service.enqueue({
+                            "strategy_name": strategy_name,
+                            "symbol": symbol,
+                            "action": action,
+                            "quantity": quantity,
+                            "order_type": order_type,
+                            "price": price,
+                            "product": product,
+                            "exchange": exchange,
+                            "ai_reasoning": ai_reasoning,
+                            "conviction": conviction,
+                        }, str(e))
                     return {"status": "error", "message": str(e)}
 
                 logger.info("[%s] << Response: %s", strategy_name, response)

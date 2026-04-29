@@ -36,10 +36,6 @@ def require_auth(f):
 
         # 2. JWT Validation (Standard Frontend Auth)
         if not auth_header or not auth_header.startswith("Bearer "):
-            # Special bypass for test environment if tokens aren't available
-            if auth_header == "Bearer test-token" or os.environ.get("DEBUG_AUTH") == "true":
-                logger.info("Auth: Using test-token bypass")
-                return True, {"email": "guest@aetherdesk.dev", "role": "guest", "iat": 0}
             return False, (jsonify({"status": "error", "message": "Missing Authorization Token"}), 401)
 
         token = auth_header.replace("Bearer ", "")
@@ -56,9 +52,6 @@ def require_auth(f):
             return False, (jsonify({"status": "error", "message": "Token has expired"}), 401)
         except jwt.InvalidTokenError as e:
             logger.warning(f"Auth Failure for Token [{token[:10]}...]: {e}")
-            # If in debug mode, allow through with guest perms even on failure (caution!)
-            if os.environ.get("DEBUG_AUTH") == "true":
-                return True, {"email": "debug-guest@aetherdesk.dev", "role": "guest", "iat": 0}
             return False, (jsonify({"status": "error", "message": f"Auth Failure: {str(e)}"}), 401)
 
     @wraps(f)
