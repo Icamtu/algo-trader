@@ -72,28 +72,67 @@ class AlertService:
 
         return success
 
+    def _get_price(self, symbol: str) -> Optional[float]:
+        """Retrieve last known tick price from app_context."""
+        try:
+            from core.context import app_context
+            ticks = app_context.get("last_known_ticks", {})
+            tick = ticks.get(symbol) or ticks.get(symbol.upper())
+            if tick:
+                return float(tick.get("ltp") or tick.get("price") or 0) or None
+        except Exception:
+            pass
+        return None
+
+    def _evaluate(self, alert: Dict[str, Any], price: float) -> bool:
+        """Return True if alert trigger condition is met."""
+        condition = alert.get("condition", "").lower()
+        value = float(alert.get("value", 0))
+        if condition == "price_above":
+            return price > value
+        if condition == "price_below":
+            return price < value
+        if condition == "price_change_pct":
+            prev = alert.get("_prev_price")
+            if prev:
+                return abs((price - prev) / prev * 100) >= abs(value)
+        return False
+
     async def start_monitoring(self, interval: int = 60):
         """
-        Starts a background loop to check for alert triggers in the database.
-        (Note: In a high-frequency system, this should be event-driven or more frequent).
+        Background loop that evaluates active alert conditions against live tick prices.
+        Dispatches via configured channel when a condition is triggered.
         """
         if self.is_monitoring:
             return
 
         self.is_monitoring = True
         logger.info("Alert Monitoring Service Started.")
+        _prev_prices: Dict[str, float] = {}
 
         while self.is_monitoring:
             try:
-                # 1. Fetch active alerts from database
-                # (For now, we'll implement a simple mock check or a real DB query if table exists)
-                # This logic should be expanded based on specific trigger conditions (Price, RSI, etc.)
-                pass
+                alerts = self.db_logger.get_alerts(limit=200)
+                active = [a for a in alerts if not a.get("acknowledged") and not a.get("triggered")]
 
-                await asyncio.sleep(interval)
+                for alert in active:
+                    symbol = alert.get("symbol", "")
+                    price = self._get_price(symbol)
+                    if price is None:
+                        continue
+
+                    alert["_prev_price"] = _prev_prices.get(symbol)
+                    _prev_prices[symbol] = price
+
+                    if self._evaluate(alert, price):
+                        logger.info(f"Alert triggered: {alert.get('id')} {symbol} {alert.get('condition')} @ {price}")
+                        await self.dispatch_alert({**alert, "value": price})
+                        self.db_logger.acknowledge_alert(int(alert["id"]))
+
             except Exception as e:
                 logger.error(f"Alert monitoring loop error: {e}")
-                await asyncio.sleep(interval)
+
+            await asyncio.sleep(interval)
 
 # Singleton
 alert_service = AlertService()
