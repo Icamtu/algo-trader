@@ -141,6 +141,7 @@ export const algoApi = {
     openAlgoClient("/api/v1/settings", { method: "PUT", body: JSON.stringify(updates) }),
   getSystemStatus: () => openAlgoClient("/api/v1/system/health"),
   getSystemLogs: () => openAlgoClient("/api/v1/system/logs"),
+  getSystemRbac: () => openAlgoClient("/api/v1/system/rbac"),
   reconcilePositions: () => openAlgoClient("/api/v1/system/reconcile", { method: "POST" }),
   getTickerConfig: () => openAlgoClient("/api/v1/system/config/ticker"),
   resetPositions: () => openAlgoClient("/api/v1/system/reconcile/reset", { method: "POST" }),

@@ -210,3 +210,17 @@ async def get_alerts(limit: int = Query(50)):
         raise HTTPException(status_code=500, detail=str(e))
 
 from fastapi import Header
+from core.rbac import PERMISSIONS, Role
+
+@router.get("/system/rbac")
+async def get_rbac_matrix():
+    """Returns the RBAC permission matrix for all roles."""
+    matrix = []
+    for role in Role:
+        perms = PERMISSIONS.get(role, [])
+        matrix.append({
+            "role": role.value,
+            "permissions": perms,
+            "is_superuser": "*" in perms,
+        })
+    return {"status": "success", "roles": matrix}
