@@ -90,10 +90,8 @@ class WalkForwardEngine:
 
             engine.strategy_class = OptimizedStrategy
 
-            # Run the backtest for the specific test window
-            # We need to pass dates to engine.run
             test_from = test_start.strftime("%Y-%m-%d")
-            res = await engine.run(days=test_from) # Passing date string as 'days'
+            res = await engine.run(days=test_days)
 
             if res and "trades" in res:
                 # Filter trades to only those within the test window
