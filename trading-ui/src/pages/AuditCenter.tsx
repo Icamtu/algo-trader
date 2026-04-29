@@ -54,11 +54,14 @@ interface PendingSignal {
   ai_reasoning: string;
   conviction: number;
   timestamp: string;
+  rejection_reason?: string;
 }
 
 export default function AuditCenter() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"performance" | "governance">("performance");
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   // Fetch deep telemetry
   const { data: telemetry, isLoading: telemetryLoading, error: telemetryError } = useQuery<TelemetryData>({
@@ -322,21 +325,54 @@ export default function AuditCenter() {
                          <div className="col-span-5">
                             <span className="text-[8px] font-black text-white/20 uppercase block mb-1">Aether_AI_Inference</span>
                             <p className="text-[11px] text-white/50 leading-tight italic">"{signal.ai_reasoning}"</p>
+                            {signal.rejection_reason && (
+                              <p className="mt-1 text-[9px] text-rose-400/60 font-mono italic uppercase tracking-wide">
+                                REASON: {signal.rejection_reason}
+                              </p>
+                            )}
                          </div>
-                         <div className="col-span-3 flex justify-end gap-3">
-                            <button
-                              onClick={() => rejectMutation.mutate({ id: signal.id, reason: "Manual Rejection" })}
-                              className="w-10 h-10 flex items-center justify-center border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors"
-                            >
-                              <XCircle className="w-5 h-5" />
-                            </button>
-                            <button
-                              onClick={() => approveMutation.mutate(signal.id)}
-                              className="h-10 px-6 flex items-center gap-2 bg-secondary text-black font-black text-[10px] uppercase tracking-widest hover:bg-white transition-colors"
-                            >
-                              <CheckCircle2 className="w-4 h-4" />
-                              Approve
-                            </button>
+                         <div className="col-span-3 flex flex-col items-end gap-2">
+                           {rejectingId === signal.id ? (
+                             <div className="flex items-center gap-2">
+                               <input
+                                 autoFocus
+                                 value={rejectReason}
+                                 onChange={e => setRejectReason(e.target.value)}
+                                 placeholder="Rejection reason..."
+                                 className="bg-black/40 border border-white/10 rounded px-2 py-1 text-[9px] text-white font-mono placeholder-white/30 w-36"
+                                 onKeyDown={e => {
+                                   if (e.key === "Enter" && rejectReason.trim()) {
+                                     rejectMutation.mutate({ id: signal.id, reason: rejectReason.trim() });
+                                     setRejectingId(null); setRejectReason("");
+                                   }
+                                   if (e.key === "Escape") { setRejectingId(null); setRejectReason(""); }
+                                 }}
+                               />
+                               <button
+                                 onClick={() => {
+                                   rejectMutation.mutate({ id: signal.id, reason: rejectReason.trim() || "Manual Rejection" });
+                                   setRejectingId(null); setRejectReason("");
+                                 }}
+                                 className="text-[8px] font-black text-rose-500 border border-rose-500/30 px-2 py-1 hover:bg-rose-500/10 uppercase"
+                               >SEND</button>
+                             </div>
+                           ) : (
+                             <div className="flex gap-3">
+                               <button
+                                 onClick={() => { setRejectingId(signal.id); setRejectReason(""); }}
+                                 className="w-10 h-10 flex items-center justify-center border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors"
+                               >
+                                 <XCircle className="w-5 h-5" />
+                               </button>
+                               <button
+                                 onClick={() => approveMutation.mutate(signal.id)}
+                                 className="h-10 px-6 flex items-center gap-2 bg-secondary text-black font-black text-[10px] uppercase tracking-widest hover:bg-white transition-colors"
+                               >
+                                 <CheckCircle2 className="w-4 h-4" />
+                                 Approve
+                               </button>
+                             </div>
+                           )}
                          </div>
                       </motion.div>
                     ))}
