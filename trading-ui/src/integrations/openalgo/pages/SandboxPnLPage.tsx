@@ -87,16 +87,16 @@ export const SandboxPnLPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          <Button 
-            variant="secondary" 
-            onClick={fetchData} 
+          <Button
+            variant="secondary"
+            onClick={fetchData}
             className="h-10 font-mono text-[11px] font-black px-4 shadow-[0_0_15px_rgba(255,176,0,0.1)]"
           >
-            <RefreshCw className="h-3.5 w-3.5 mr-2" /> 
+            <RefreshCw className="h-3.5 w-3.5 mr-2" />
             RE_CALC_MTM
           </Button>
           <Button asChild variant="outline" className="h-10 border-border/10 font-mono text-[10px] uppercase tracking-widest bg-background/40">
-            <Link to="/openalgo/sandbox">
+            <Link to="/aetherdesk/simulation">
               <Settings className="w-4 h-4 mr-2" />
               BACK_TO_CONFIG
             </Link>
@@ -117,9 +117,9 @@ export const SandboxPnLPage: React.FC = () => {
                <div className="flex justify-between items-start mb-4">
                   <div className="flex flex-col">
                      <span className="text-[8px] font-mono font-black text-muted-foreground/40 uppercase tracking-widest mb-1">{item.label}</span>
-                     <IndustrialValue 
-                       value={item.value} 
-                       className={cn("text-xl font-black", item.value >= 0 ? "text-emerald-500" : "text-rose-500")} 
+                     <IndustrialValue
+                       value={item.value}
+                       className={cn("text-xl font-black", item.value >= 0 ? "text-emerald-500" : "text-rose-500")}
                        prefix="₹"
                      />
                   </div>
@@ -141,8 +141,8 @@ export const SandboxPnLPage: React.FC = () => {
                { id: 'holdings', icon: Package, label: "Vault_Inventory" },
                { id: 'trades', icon: Activity, label: "Op_Logs" },
              ].map(tab => (
-               <TabsTrigger 
-                 key={tab.id} 
+               <TabsTrigger
+                 key={tab.id}
                  value={tab.id}
                  className={cn(
                    "data-[state=active]:text-black font-mono text-[9px] uppercase tracking-widest py-3 rounded-none transition-all",
@@ -208,24 +208,147 @@ export const SandboxPnLPage: React.FC = () => {
           </TabsContent>
 
           <TabsContent value="positions">
-             <div className="p-20 text-center border border-dashed border-border/10 opacity-20">
-                <Briefcase className="w-8 h-8 mx-auto mb-4" />
-                <p className="text-[10px] font-mono uppercase tracking-widest">Redirecting to LIVE_MONITOR_V4...</p>
-             </div>
+             <AetherPanel className="border-border/10 bg-background/20 p-0 overflow-hidden">
+                <div className="p-6 border-b border-border/10 flex items-center gap-3">
+                   <Briefcase className={cn("w-4 h-4", primaryColorClass)} />
+                   <h3 className="text-xs font-black font-mono uppercase tracking-widest">Active_Position_Nodes</h3>
+                </div>
+                <div className="overflow-x-auto">
+                   {isLoading ? (
+                     <div className="space-y-2 p-4">
+                       {[1,2,3].map(i => <div key={i} className="h-10 bg-white/5 rounded animate-pulse" />)}
+                     </div>
+                   ) : !data?.positions || data.positions.length === 0 ? (
+                     <div className="flex flex-col items-center justify-center h-32 text-zinc-500 text-[10px] font-mono uppercase tracking-widest">
+                       <Briefcase className="w-6 h-6 mb-3 opacity-20" />
+                       <span>No open positions in sandbox session</span>
+                     </div>
+                   ) : (
+                     <table className="w-full text-left font-mono text-[10px]">
+                       <thead>
+                         <tr className="border-b border-border/10 bg-foreground/5 uppercase tracking-tighter">
+                           <th className="p-4 font-black text-muted-foreground/60">Symbol</th>
+                           <th className="p-4 font-black text-right text-muted-foreground/60">Qty</th>
+                           <th className="p-4 font-black text-right text-muted-foreground/60">Avg_Price</th>
+                           <th className="p-4 font-black text-right text-muted-foreground/60">LTP</th>
+                           <th className={cn("p-4 font-black text-right", primaryColorClass)}>P&amp;L</th>
+                         </tr>
+                       </thead>
+                       <tbody>
+                         {data.positions.map((pos, i) => (
+                           <tr key={i} className={cn("border-b border-border/10 transition-colors group", isAD ? "hover:bg-primary/5" : "hover:bg-teal-500/5")}>
+                             <td className="p-4 font-black text-muted-foreground group-hover:text-foreground italic">{pos.symbol || pos.tradingsymbol || '—'}</td>
+                             <td className="p-4 text-right italic">{pos.quantity ?? pos.netqty ?? 0}</td>
+                             <td className="p-4 text-right italic">₹{Number(pos.average_price ?? pos.avg_price ?? 0).toLocaleString('en-IN')}</td>
+                             <td className="p-4 text-right italic">₹{Number(pos.ltp ?? pos.last_price ?? 0).toLocaleString('en-IN')}</td>
+                             <td className={cn("p-4 text-right font-black", Number(pos.pnl ?? 0) >= 0 ? "text-emerald-500" : "text-rose-500")}>
+                               ₹{Number(pos.pnl ?? 0).toLocaleString('en-IN')}
+                             </td>
+                           </tr>
+                         ))}
+                       </tbody>
+                     </table>
+                   )}
+                </div>
+             </AetherPanel>
           </TabsContent>
-          
+
           <TabsContent value="holdings">
-             <div className="p-20 text-center border border-dashed border-border/10 opacity-20">
-                <Package className="w-8 h-8 mx-auto mb-4" />
-                <p className="text-[10px] font-mono uppercase tracking-widest">SECURE_VAULT_INTERFACE_LOCKED</p>
-             </div>
+             <AetherPanel className="border-border/10 bg-background/20 p-0 overflow-hidden">
+                <div className="p-6 border-b border-border/10 flex items-center gap-3">
+                   <Package className={cn("w-4 h-4", primaryColorClass)} />
+                   <h3 className="text-xs font-black font-mono uppercase tracking-widest">Vault_Inventory_Matrix</h3>
+                </div>
+                <div className="overflow-x-auto">
+                   {isLoading ? (
+                     <div className="space-y-2 p-4">
+                       {[1,2,3].map(i => <div key={i} className="h-10 bg-white/5 rounded animate-pulse" />)}
+                     </div>
+                   ) : !data?.holdings || data.holdings.length === 0 ? (
+                     <div className="flex flex-col items-center justify-center h-32 text-zinc-500 text-[10px] font-mono uppercase tracking-widest">
+                       <Package className="w-6 h-6 mb-3 opacity-20" />
+                       <span>No holdings in sandbox vault</span>
+                     </div>
+                   ) : (
+                     <table className="w-full text-left font-mono text-[10px]">
+                       <thead>
+                         <tr className="border-b border-border/10 bg-foreground/5 uppercase tracking-tighter">
+                           <th className="p-4 font-black text-muted-foreground/60">Symbol</th>
+                           <th className="p-4 font-black text-right text-muted-foreground/60">Qty</th>
+                           <th className="p-4 font-black text-right text-muted-foreground/60">Avg_Price</th>
+                           <th className="p-4 font-black text-right text-muted-foreground/60">CMP</th>
+                           <th className={cn("p-4 font-black text-right", primaryColorClass)}>Unrealized_P&amp;L</th>
+                         </tr>
+                       </thead>
+                       <tbody>
+                         {data.holdings.map((h, i) => (
+                           <tr key={i} className={cn("border-b border-border/10 transition-colors group", isAD ? "hover:bg-primary/5" : "hover:bg-teal-500/5")}>
+                             <td className="p-4 font-black text-muted-foreground group-hover:text-foreground italic">{h.symbol || h.tradingsymbol || '—'}</td>
+                             <td className="p-4 text-right italic">{h.quantity ?? h.holdingqty ?? 0}</td>
+                             <td className="p-4 text-right italic">₹{Number(h.average_price ?? h.avg_price ?? 0).toLocaleString('en-IN')}</td>
+                             <td className="p-4 text-right italic">₹{Number(h.ltp ?? h.cmp ?? h.close ?? 0).toLocaleString('en-IN')}</td>
+                             <td className={cn("p-4 text-right font-black", Number(h.pnl ?? h.unrealized_pnl ?? 0) >= 0 ? "text-emerald-500" : "text-rose-500")}>
+                               ₹{Number(h.pnl ?? h.unrealized_pnl ?? 0).toLocaleString('en-IN')}
+                             </td>
+                           </tr>
+                         ))}
+                       </tbody>
+                     </table>
+                   )}
+                </div>
+             </AetherPanel>
           </TabsContent>
 
           <TabsContent value="trades">
-             <div className="p-20 text-center border border-dashed border-border/10 opacity-20">
-                <Activity className="w-8 h-8 mx-auto mb-4" />
-                <p className="text-[10px] font-mono uppercase tracking-widest">LOG_STREAM_PIPE_ACTIVE</p>
-             </div>
+             <AetherPanel className="border-border/10 bg-background/20 p-0 overflow-hidden">
+                <div className="p-6 border-b border-border/10 flex justify-between items-center">
+                   <div className="flex items-center gap-3">
+                      <Activity className={cn("w-4 h-4", primaryColorClass)} />
+                      <h3 className="text-xs font-black font-mono uppercase tracking-widest">Op_Log_Stream</h3>
+                   </div>
+                </div>
+                <div className="overflow-x-auto">
+                   {isLoading ? (
+                     <div className="space-y-2 p-4">
+                       {[1,2,3].map(i => <div key={i} className="h-10 bg-white/5 rounded animate-pulse" />)}
+                     </div>
+                   ) : !data?.trades || data.trades.length === 0 ? (
+                     <div className="flex flex-col items-center justify-center h-32 text-zinc-500 text-[10px] font-mono uppercase tracking-widest">
+                       <Activity className="w-6 h-6 mb-3 opacity-20" />
+                       <span>No trade logs in sandbox session</span>
+                     </div>
+                   ) : (
+                     <table className="w-full text-left font-mono text-[10px]">
+                       <thead>
+                         <tr className="border-b border-border/10 bg-foreground/5 uppercase tracking-tighter">
+                           <th className="p-4 font-black text-muted-foreground/60">Time</th>
+                           <th className="p-4 font-black text-muted-foreground/60">Symbol</th>
+                           <th className="p-4 font-black text-muted-foreground/60">Side</th>
+                           <th className="p-4 font-black text-right text-muted-foreground/60">Qty</th>
+                           <th className="p-4 font-black text-right text-muted-foreground/60">Price</th>
+                           <th className={cn("p-4 font-black text-right", primaryColorClass)}>Status</th>
+                         </tr>
+                       </thead>
+                       <tbody>
+                         {data.trades.map((t, i) => (
+                           <tr key={i} className={cn("border-b border-border/10 transition-colors group", isAD ? "hover:bg-primary/5" : "hover:bg-teal-500/5")}>
+                             <td className="p-4 italic text-muted-foreground group-hover:text-foreground">{t.time || t.timestamp || t.fill_timestamp || '—'}</td>
+                             <td className="p-4 font-black italic">{t.symbol || t.tradingsymbol || '—'}</td>
+                             <td className={cn("p-4 font-black italic", (t.side || t.action || t.transactiontype || '').toUpperCase() === 'BUY' ? "text-emerald-500" : "text-rose-500")}>
+                               {(t.side || t.action || t.transactiontype || '—').toUpperCase()}
+                             </td>
+                             <td className="p-4 text-right italic">{t.quantity ?? t.qty ?? t.filled_quantity ?? 0}</td>
+                             <td className="p-4 text-right italic">₹{Number(t.price ?? t.fill_price ?? t.average_price ?? 0).toLocaleString('en-IN')}</td>
+                             <td className={cn("p-4 text-right font-black opacity-60 group-hover:opacity-100", primaryColorClass)}>
+                               {(t.status || t.order_status || 'EXECUTED').toUpperCase()}
+                             </td>
+                           </tr>
+                         ))}
+                       </tbody>
+                     </table>
+                   )}
+                </div>
+             </AetherPanel>
           </TabsContent>
        </Tabs>
     </div>
