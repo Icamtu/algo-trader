@@ -34,6 +34,8 @@ services:
     networks:
       - trading_net
     mem_limit: 512MB
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
@@ -57,6 +59,8 @@ services:
       - trading_net
     mem_limit: 2GB
     cpu_shares: 1024
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/metrics"]
       interval: 30s
@@ -163,6 +167,8 @@ services:
           - db
     restart: always
     mem_limit: 2GB
+    security_opt:
+      - no-new-privileges:true
 
   supabase-auth:
     container_name: supabase-auth
@@ -185,6 +191,8 @@ services:
       - trading_net
     restart: always
     mem_limit: 256MB
+    security_opt:
+      - no-new-privileges:true
 
   supabase-rest:
     container_name: supabase-rest
@@ -211,6 +219,8 @@ services:
       - trading_net
     restart: always
     mem_limit: 256MB
+    security_opt:
+      - no-new-privileges:true
 
   supabase-kong:
     container_name: supabase-kong
@@ -239,6 +249,8 @@ services:
       - trading_net
     restart: always
     mem_limit: 768MB
+    security_opt:
+      - no-new-privileges:true
 
   supabase-studio:
     container_name: supabase-studio
@@ -262,6 +274,8 @@ services:
       - trading_net
     restart: always
     mem_limit: 512MB
+    security_opt:
+      - no-new-privileges:true
 
   supabase-meta:
     container_name: supabase-meta
@@ -278,6 +292,8 @@ services:
     restart: always
     mem_limit: 512MB
     cpu_shares: 512
+    security_opt:
+      - no-new-privileges:true
 
 
   # --- INSTITUTIONAL DATA STORE ---
@@ -295,6 +311,8 @@ services:
     networks:
       - trading_net
     mem_limit: 2GB
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -363,6 +381,8 @@ services:
       - trading_net
     restart: always
     mem_limit: 4GB
+    security_opt:
+      - no-new-privileges:true
 
   # --- LOCAL AI ENGINE ---
   ollama_engine:
@@ -456,6 +476,8 @@ services:
       - trading_net
     mem_limit: 512MB
     cpu_shares: 512
+    security_opt:
+      - no-new-privileges:true
 
   grafana:
     image: grafana/grafana:10.0.0
@@ -471,6 +493,8 @@ services:
       - trading_net
     mem_limit: 512MB
     cpu_shares: 512
+    security_opt:
+      - no-new-privileges:true
 
   loki:
     image: grafana/loki:2.8.2
@@ -483,6 +507,8 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
     networks:
       - trading_net
+    security_opt:
+      - no-new-privileges:true
 
   promtail:
     image: grafana/promtail:2.8.2
@@ -495,6 +521,8 @@ services:
     command: -config.file=/etc/promtail/config.yml
     networks:
       - trading_net
+    security_opt:
+      - no-new-privileges:true
 
   jaeger:
     image: jaegertracing/all-in-one:1.47
@@ -508,6 +536,8 @@ services:
       - COLLECTOR_OTLP_ENABLED=true
     networks:
       - trading_net
+    security_opt:
+      - no-new-privileges:true
 
 networks:
   trading_net:
