@@ -1,5 +1,11 @@
 import os
+import subprocess
+import json
+import sys
+import tempfile
+import io
 import importlib.util
+import ast
 import pandas as pd
 import logging
 from typing import Dict, Any, List, Optional
@@ -12,6 +18,33 @@ class IndicatorService:
     Manages custom technical indicators.
     Allows dynamic loading and execution of Python-based indicator logic.
     """
+
+    ALLOWED_IMPORTS = {"pandas", "numpy", "ta", "math", "statistics"}
+
+    BLOCKED_IMPORTS = {
+        "os", "subprocess", "sys", "socket", "requests", "httpx",
+        "importlib", "ctypes", "builtins", "__import__",
+    }
+
+    # Runner script: reads payload JSON from stdin, executes indicator, prints result JSON.
+    # No user data is interpolated into source — all IPC is through stdin/stdout.
+    _RUNNER_SCRIPT = """\
+import json, sys, io
+import pandas as pd
+import importlib.util
+
+payload = json.loads(sys.stdin.read())
+df = pd.read_json(io.StringIO(payload["df"]), orient="split")
+params = payload["params"]
+file_path = payload["file_path"]
+
+spec = importlib.util.spec_from_file_location("indicator", file_path)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+
+result = mod.calculate(df, **params)
+print(result.to_json())
+"""
 
     def __init__(self, indicators_dir: str = "indicators"):
         self.indicators_dir = indicators_dir
@@ -36,28 +69,86 @@ class IndicatorService:
         files = [f[:-3] for f in os.listdir(self.indicators_dir) if f.endswith(".py") and f != "__init__.py"]
         return files
 
+    def _validate_imports(self, source: str) -> None:
+        """
+        Rejects indicators that import blocked modules.
+
+        Parses the AST and walks all Import / ImportFrom nodes.
+        Note: this is a belt-and-suspenders check; subprocess isolation is the
+        primary security boundary.
+        """
+        try:
+            tree = ast.parse(source)
+        except SyntaxError as e:
+            raise ValueError(f"Indicator has syntax error: {e}")
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names = [alias.name.split(".")[0] for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                names = [node.module.split(".")[0]] if node.module else []
+            else:
+                continue
+
+            for mod_name in names:
+                if mod_name in self.BLOCKED_IMPORTS:
+                    raise PermissionError(
+                        f"Indicator imports blocked module: '{mod_name}'"
+                    )
+
     def calculate(self, name: str, df: pd.DataFrame, params: Dict[str, Any]) -> pd.Series:
         """
-        Dynamically loads and executes an indicator's calculate function.
-        Expected signature in file: def calculate(df, **params) -> pd.Series
+        Executes indicator via isolated subprocess with 5s timeout.
+
+        Data is passed to the subprocess via stdin as JSON — no user data is
+        interpolated into Python source, preventing code-injection through
+        DataFrame contents or parameter values.
         """
         file_path = os.path.join(self.indicators_dir, f"{name.lower()}.py")
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"Indicator {name} not found at {file_path}")
 
+        # Validate imports before execution (AST-level check)
+        with open(file_path) as f:
+            source = f.read()
+        self._validate_imports(source)
+
+        # Serialize DataFrame and params for IPC via stdin
+        payload = json.dumps({
+            "df": df.to_json(orient="split"),
+            "params": params,
+            "file_path": file_path,
+        })
+
+        # Write runner to a temp file (avoids shell=True and -c length limits)
+        tmp_path = None
         try:
-            spec = importlib.util.spec_from_file_location(name, file_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".py", delete=False
+            ) as tmp:
+                tmp.write(self._RUNNER_SCRIPT)
+                tmp_path = tmp.name
 
-            if not hasattr(module, "calculate"):
-                raise AttributeError(f"Indicator {name} must have a 'calculate' function.")
+            proc = subprocess.run(
+                [sys.executable, tmp_path],
+                input=payload,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
 
-            result = module.calculate(df, **params)
-            return result
-        except Exception as e:
-            logger.error(f"Error calculating indicator {name}: {e}")
-            raise e
+            if proc.returncode != 0:
+                raise RuntimeError(
+                    f"Indicator execution failed: {proc.stderr[:500]}"
+                )
+
+            return pd.read_json(io.StringIO(proc.stdout), typ="series")
+
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"Indicator '{name}' timed out after 5 seconds")
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
 
 # Singleton
 indicator_service = IndicatorService()
