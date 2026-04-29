@@ -10,6 +10,7 @@ Checks applied before every order:
   - Maximum simultaneous open positions across all symbols
 """
 
+import json
 import logging
 import os
 from dataclasses import dataclass, field
@@ -88,6 +89,13 @@ class RiskManager:
         # 2. Override with persistent settings from DB (Priority 2: User Settings)
         try:
             self._db = get_trade_logger()
+            self._db.execute("""
+                CREATE TABLE IF NOT EXISTS risk_audit_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    changed_at TEXT NOT NULL,
+                    changes TEXT NOT NULL
+                )
+            """)
             persistent = self._db.get_risk_settings()
             if "max_order_quantity" in persistent: self.max_order_quantity = int(persistent["max_order_quantity"])
             if "max_order_notional" in persistent: self.max_order_notional = float(persistent["max_order_notional"])
@@ -311,8 +319,17 @@ class RiskManager:
         }
 
     def update_limits(self, updates: Dict[str, Any]):
-        """Update risk limits and persist to database."""
+        """Update risk limits, persist to database, and write audit log entry."""
         try:
+            old_snapshot = {
+                "max_order_quantity": self.max_order_quantity,
+                "max_order_notional": self.max_order_notional,
+                "max_position_qty": self.max_position_quantity_per_symbol,
+                "max_open_positions": self.max_open_positions,
+                "max_daily_trades": self.max_daily_trades,
+                "max_daily_loss": self.max_daily_loss,
+            }
+
             db = get_trade_logger()
             if "max_order_quantity" in updates:
                 self.max_order_quantity = int(updates["max_order_quantity"])
@@ -338,10 +355,24 @@ class RiskManager:
                 self.max_daily_loss = float(updates["max_daily_loss"])
                 db.update_risk_setting("max_daily_loss", self.max_daily_loss)
 
+            self._log_risk_change(old_snapshot, updates)
             logger.info(f"RiskManager: Updated limits - {updates}")
         except Exception as e:
             logger.error(f"RiskManager: Error updating limits: {e}")
             raise e
+
+    def _log_risk_change(self, old: Dict[str, Any], new: Dict[str, Any]):
+        """Persist a risk limit change record to the audit log table."""
+        try:
+            changes = {k: {"from": old.get(k), "to": v} for k, v in new.items() if str(old.get(k)) != str(v)}
+            if not changes:
+                return
+            self._db.execute(
+                "INSERT INTO risk_audit_log (changed_at, changes) VALUES (?, ?)",
+                [datetime.utcnow().isoformat(), json.dumps(changes)]
+            )
+        except Exception as e:
+            logger.warning(f"Risk audit log write failed: {e}")
 
     def is_circuit_broken(self) -> bool:
         """
