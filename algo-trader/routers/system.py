@@ -18,6 +18,8 @@ from services.alert_service import alert_service
 router = APIRouter(prefix="/api/v1", tags=["System"])
 logger = logging.getLogger(__name__)
 
+_terminal_rate: dict = {}
+
 # --- Models ---
 class TerminalCommandRequest(BaseModel):
     command: str
@@ -76,10 +78,35 @@ async def post_system_heartbeat(
     return {"status": "captured"}
 
 @router.post("/terminal/command")
-async def terminal_command(request: TerminalCommandRequest):
+async def terminal_command(cmd_req: TerminalCommandRequest, request: Request):
     """Institutional Gateway for direct engine diagnostics."""
+    # Auth: require trader or admin
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authorization required")
+    import jwt as _jwt
+    JWT_SECRET = os.environ.get("JWT_SECRET", "")
     try:
-        raw_cmd = request.command.strip()
+        payload = _jwt.decode(
+            auth_header.removeprefix("Bearer ").strip(),
+            JWT_SECRET, algorithms=["HS256"],
+            options={"verify_aud": False}
+        )
+        role = payload.get("role", "viewer")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    if role not in ("admin", "trader"):
+        raise HTTPException(status_code=403, detail="INSUFFICIENT_PERMISSIONS")
+
+    # Rate limit: 5s cooldown per user
+    user_key = payload.get("email", auth_header[-12:])
+    now = time.time()
+    if now - _terminal_rate.get(user_key, 0) < 5.0:
+        raise HTTPException(status_code=429, detail="Terminal rate limited: wait 5 seconds")
+    _terminal_rate[user_key] = now
+
+    try:
+        raw_cmd = cmd_req.command.strip()
         if not raw_cmd:
             raise HTTPException(status_code=400, detail="EMPTY_COMMAND")
 
