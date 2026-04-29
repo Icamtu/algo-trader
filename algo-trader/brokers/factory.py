@@ -29,6 +29,9 @@ class BrokerFactory:
                 elif broker_name == "zerodha":
                     from .zerodha_broker import ZerodhaBroker
                     cls.register("zerodha", ZerodhaBroker)
+                elif broker_name == "angel":
+                    from .angel_one_broker import AngelOneBroker
+                    cls.register("angel", AngelOneBroker)
                 elif broker_name == "paper":
                     from .paper_broker import PaperBroker
                     cls.register("paper", PaperBroker)
@@ -56,6 +59,19 @@ def get_active_broker() -> BaseBroker:
             "api_secret": os.getenv("AETHERBRIDGE_BROKERS_ZERODHA_API_SECRET"),
             "access_token": os.getenv("AETHERBRIDGE_BROKERS_ZERODHA_ACCESS_TOKEN"),
             "dry_run": shadow_mode
+        }
+    elif broker_name == "angel":
+        config = {
+            "user_id": os.getenv("AETHERBRIDGE_BROKERS_ANGEL_USER_ID"),
+            "password": os.getenv("AETHERBRIDGE_BROKERS_ANGEL_PASSWORD"),
+            "totp_secret": os.getenv("AETHERBRIDGE_BROKERS_ANGEL_TOTP_SECRET"),
+            "api_key": os.getenv("AETHERBRIDGE_BROKERS_ANGEL_API_KEY"),
+            "dry_run": shadow_mode
+        }
+    elif broker_name == "paper":
+        config = {
+            "initial_funds": float(os.getenv("PAPER_BROKER_FUNDS", "1000000")),
+            "dry_run": True
         }
     else:
         # Default to Shoonya
