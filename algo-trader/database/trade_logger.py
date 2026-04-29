@@ -1,4 +1,5 @@
 import sqlite3
+import hashlib
 import numpy as np
 import logging
 from datetime import datetime
@@ -310,11 +311,27 @@ class TradeLogger:
             )
             """)
 
+            # Append-only audit chain columns (idempotent — silently skip if already present)
+            for col_sql in [
+                "ALTER TABLE trades ADD COLUMN prev_hash TEXT",
+                "ALTER TABLE trades ADD COLUMN entry_hash TEXT",
+            ]:
+                try:
+                    cursor.execute(col_sql)
+                except sqlite3.OperationalError:
+                    pass
+
             conn.commit()
             conn.close()
             logger.info(f"Trade database initialized at {self.db_file}")
         except Exception as e:
             logger.error(f"Error initializing trade database: {e}", exc_info=True)
+
+    @staticmethod
+    def _compute_trade_hash(prev_hash: str, timestamp: str, strategy: str, symbol: str,
+                             side: str, quantity: int, price: float, status: str) -> str:
+        payload = f"{prev_hash}|{timestamp}|{strategy}|{symbol}|{side}|{quantity}|{price}|{status}"
+        return hashlib.sha256(payload.encode()).hexdigest()
 
     async def log_trade(self, strategy, symbol, side, quantity, price, status="filled", order_id=None, pnl=None, charges=0.0, mode="sandbox", ai_reasoning=None, conviction=None, requested_price=0.0):
         try:
@@ -323,10 +340,20 @@ class TradeLogger:
             def _sqlite_log():
                 conn = self._get_connection()
                 cursor = conn.cursor()
+
+                # Fetch last entry_hash to build the chain
+                row = cursor.execute(
+                    "SELECT entry_hash FROM trades ORDER BY id DESC LIMIT 1"
+                ).fetchone()
+                prev_hash = (row[0] or "") if row else ""
+                entry_hash = TradeLogger._compute_trade_hash(
+                    prev_hash, timestamp, strategy, symbol, side.upper(), quantity, price, status
+                )
+
                 cursor.execute("""
-                INSERT INTO trades (timestamp, strategy, symbol, side, quantity, price, status, order_id, pnl, charges, mode, ai_reasoning, conviction, requested_price)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (timestamp, strategy, symbol, side.upper(), quantity, price, status, order_id, pnl, charges, mode, ai_reasoning, conviction, requested_price))
+                INSERT INTO trades (timestamp, strategy, symbol, side, quantity, price, status, order_id, pnl, charges, mode, ai_reasoning, conviction, requested_price, prev_hash, entry_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (timestamp, strategy, symbol, side.upper(), quantity, price, status, order_id, pnl, charges, mode, ai_reasoning, conviction, requested_price, prev_hash, entry_hash))
                 conn.commit()
                 tid = cursor.lastrowid
                 conn.close()
