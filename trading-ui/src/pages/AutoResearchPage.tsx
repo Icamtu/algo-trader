@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import DOMPurify from 'dompurify';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +20,18 @@ import {
 } from "@/components/ui/dialog";
 import { CONFIG } from "@/lib/config";
 
-const AUTH = () => `Bearer ${localStorage.getItem("aether_token") || "test-token"}`;
+// SEC-11: No hardcoded token fallbacks — empty string if unauthenticated
+const getAuthToken = (): string =>
+  localStorage.getItem("aether_token") ||
+  localStorage.getItem("auth_token") ||
+  sessionStorage.getItem("aether_token") ||
+  "";
+
+const AUTH = (): string => `Bearer ${getAuthToken()}`;
+
+// SEC-05: Strip all HTML from LLM-generated content (defense-in-depth)
+const sanitizeCode = (code: string | undefined | null): string =>
+  DOMPurify.sanitize(code ?? '', { ALLOWED_TAGS: [] });
 
 const DATA_PRESETS = [
   { label: "7D", days: 7 },
@@ -88,6 +100,7 @@ export default function AutoResearchPage() {
   // Fetch base strategy code when strategy changes
   useEffect(() => {
     if (!baseStrategy) return;
+    if (!getAuthToken()) return; // unauthenticated; protected route will redirect
     fetch(`${CONFIG.API_BASE_URL}/api/v1/autoresearch/base-code?name=${encodeURIComponent(baseStrategy)}`, {
       headers: { "Authorization": AUTH() }
     })
@@ -100,6 +113,7 @@ export default function AutoResearchPage() {
   useEffect(() => {
     const syncDays = async () => {
       if (!symbol || !timeframe) return;
+      if (!getAuthToken()) return; // unauthenticated; protected route will redirect
       setIsSyncingData(true);
       try {
         const r = await fetch(`${CONFIG.API_BASE_URL}/api/v1/historify/catalog?interval=${timeframe}`, {
@@ -163,6 +177,7 @@ export default function AutoResearchPage() {
   };
 
   const fetchHistory = async () => {
+    if (!getAuthToken()) return; // unauthenticated; protected route will redirect
     try {
       const r = await fetch(`${CONFIG.API_BASE_URL}/api/v1/autoresearch/history`, { headers: { "Authorization": AUTH() } });
       if (r.ok) { const d = await r.json(); setHistory(d.history || []); }
@@ -612,9 +627,11 @@ export default function AutoResearchPage() {
               </div>
               <div className="pt-9 pb-4 px-4 h-full overflow-auto custom-scrollbar">
                 <pre className="font-mono text-[11px] leading-relaxed text-blue-100/70 selection:bg-primary/30 whitespace-pre-wrap">
-                  {activeView === "base"
-                    ? (baseCode || `// Loading ${baseStrategy} source code...`)
-                    : (activeCode || "// Optimized logic will appear here with each iteration...")}
+                  <code>
+                    {activeView === "base"
+                      ? (sanitizeCode(baseCode) || `// Loading ${baseStrategy} source code...`)
+                      : (sanitizeCode(activeCode) || "// Optimized logic will appear here with each iteration...")}
+                  </code>
                 </pre>
               </div>
             </div>

@@ -3,6 +3,7 @@ import logging
 import numpy as np
 from core.context import app_context
 from database.trade_logger import get_trade_logger, Trade
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/risk", tags=["Risk"])
@@ -100,4 +101,27 @@ async def risk_matrix():
         }
     except Exception as e:
         logger.error(f"Risk matrix failure: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/status")
+async def get_risk_status() -> Dict[str, Any]:
+    """
+    GET /api/v1/risk/status
+    Returns a live snapshot of the risk manager counters for the dashboard.
+    """
+    try:
+        order_manager = app_context.get("order_manager")
+        if not order_manager or not hasattr(order_manager, "risk_manager"):
+            raise HTTPException(status_code=503, detail="Risk manager unavailable")
+
+        risk_manager = order_manager.risk_manager
+        status: Dict[str, Any] = risk_manager.get_status()
+        # Attach trading mode from order manager
+        status["mode"] = getattr(order_manager, "mode", "sandbox")
+        return status
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Risk status endpoint failure: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

@@ -21,6 +21,17 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Switch } from '@/components/ui/switch'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useToast } from '@/hooks/use-toast'
 import { useAppModeStore } from '@/stores/appModeStore'
 import { apiClient } from '@/integrations/openalgo/services/client'
@@ -55,7 +66,9 @@ export default function PlaygroundPage() {
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
   const [apiKey, setApiKey] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  
+  const [isOrderUnlocked, setIsOrderUnlocked] = useState(false)
+  const [pendingExecution, setPendingExecution] = useState<OpenTab | null>(null)
+
   const [response, setResponse] = useState<{
     status: number | null
     time: number | null
@@ -86,7 +99,7 @@ export default function PlaygroundPage() {
       ]
     }
     setEndpoints(defaultEndpoints as any)
-    
+
     tradingService.getPlaygroundEndpoints().then(data => {
       if (data && typeof data === 'object') setEndpoints(data)
     }).catch(err => {
@@ -116,25 +129,21 @@ export default function PlaygroundPage() {
     setOpenTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, requestBody: body } : t))
   }
 
-  const executeRequest = async () => {
-    const tab = openTabs.find(t => t.id === activeTabId)
-    if (!tab) return
+  const isOrderEndpoint = (url: string) =>
+    url.includes('/api/order/') || url.includes('/order/place')
 
+  const fireRequest = async (tab: OpenTab) => {
     setIsLoading(true)
     const startTime = Date.now()
     try {
       let fetchUrl = tab.endpoint.path
-      const options: RequestInit = {
-        method: tab.endpoint.method,
-        headers: { 'Content-Type': 'application/json' }
-      }
 
       if (tab.endpoint.method === 'GET') {
         const params = JSON.parse(tab.requestBody)
         const search = new URLSearchParams()
         Object.entries(params).forEach(([k, v]) => search.append(k, String(v)))
         fetchUrl += (fetchUrl.includes('?') ? '&' : '?') + search.toString()
-        
+
         const res = await apiClient.get(fetchUrl)
         setResponse({
           status: res.status,
@@ -162,6 +171,23 @@ export default function PlaygroundPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const executeRequest = async () => {
+    const tab = openTabs.find(t => t.id === activeTabId)
+    if (!tab) return
+
+    if (isOrderEndpoint(tab.endpoint.path)) {
+      if (!isOrderUnlocked) {
+        toast({ variant: 'destructive', title: 'FAULT::EXECUTION_LOCKED', description: 'Order execution is locked. Enable the ARM toggle first.' })
+        return
+      }
+      // Gate 2: show confirmation dialog — fireRequest fires on confirm
+      setPendingExecution(tab)
+      return
+    }
+
+    await fireRequest(tab)
   }
 
   const prettify = () => {
@@ -194,12 +220,12 @@ export default function PlaygroundPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <Button 
-            variant="secondary" 
-            onClick={() => window.location.reload()} 
+          <Button
+            variant="secondary"
+            onClick={() => window.location.reload()}
             className="h-10 font-mono text-[11px] font-black px-4 shadow-[0_0_15px_rgba(255,176,0,0.1)]"
           >
-            <RefreshCw className="h-3.5 w-3.5 mr-2" /> 
+            <RefreshCw className="h-3.5 w-3.5 mr-2" />
             RE_BOOT_CONSOLE
           </Button>
         </div>
@@ -217,8 +243,8 @@ export default function PlaygroundPage() {
                   <div key={cat} className="space-y-1">
                      <div className="px-2 py-1 text-[9px] font-black font-mono uppercase tracking-widest text-muted-foreground/20 italic">{cat}</div>
                      {eps.map(ep => (
-                        <div 
-                         key={ep.name} 
+                        <div
+                         key={ep.name}
                          onClick={() => selectEndpoint(ep)}
                          className={cn(
                            "px-2 py-1.5 rounded-none cursor-pointer group flex items-center justify-between transition-all",
@@ -226,7 +252,7 @@ export default function PlaygroundPage() {
                          )}
                        >
                          <span className="text-[10px] font-black truncate opacity-40 group-hover:opacity-100 group-hover:pl-1 transition-all uppercase tracking-widest">{ep.name}</span>
-                         <Badge variant="outline" className={cn("text-[8px] h-3 px-1 border-0 uppercase font-bold", 
+                         <Badge variant="outline" className={cn("text-[8px] h-3 px-1 border-0 uppercase font-bold",
                            ep.method === 'POST' ? primaryColorClass : "text-muted-foreground/30"
                          )}>{ep.method}</Badge>
                        </div>
@@ -258,16 +284,16 @@ export default function PlaygroundPage() {
                  <div className="flex-1 flex flex-col overflow-hidden">
                    <div className="bg-foreground/5 px-4 py-1.5 flex justify-between items-center border-b border-border/10">
                       <span className="text-[9px] font-black font-mono uppercase tracking-widest opacity-20">Payload_Definition</span>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={prettify}
                         className="h-5 px-2 text-[9px] font-black opacity-20 hover:opacity-100 italic"
                       >
                         PRETTIFY_V
                       </Button>
                    </div>
-                   <textarea 
+                   <textarea
                     value={activeTab.requestBody}
                     onChange={(e) => updateBody(e.target.value)}
                     className={cn(
@@ -284,10 +310,18 @@ export default function PlaygroundPage() {
                        <span className="text-[9px] font-black font-mono uppercase tracking-widest opacity-20">Response_Output</span>
                        <div className="flex items-center gap-4">
                          {response.status !== null && (
-                           <div className={cn("text-[9px] font-mono font-black border px-2 py-0.5 rounded-none", 
+                           <div className={cn("text-[9px] font-mono font-black border px-2 py-0.5 rounded-none",
                              response.status >= 200 && response.status < 300 ? "text-emerald-500 border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.05)]" : "text-rose-500 border-rose-500/20"
                            )}>
                               HTTP::{response.status} :: {response.time}ms
+                           </div>
+                         )}
+                         {activeTab && isOrderEndpoint(activeTab.endpoint.path) && (
+                           <div className="flex items-center gap-2">
+                             <Switch checked={isOrderUnlocked} onCheckedChange={setIsOrderUnlocked} />
+                             <span className={cn("text-xs font-mono", isOrderUnlocked ? "text-red-400" : "text-zinc-500")}>
+                               {isOrderUnlocked ? "ORDER EXECUTION ARMED" : "ORDER EXECUTION LOCKED"}
+                             </span>
                            </div>
                          )}
                          <Button onClick={executeRequest} disabled={isLoading} className={cn("h-12 w-full font-mono font-black text-[10px] uppercase shadow-xl text-black", isAD ? "bg-amber-500" : "bg-teal-500")}>
@@ -317,12 +351,50 @@ export default function PlaygroundPage() {
         </div>
       </div>
 
+      {/* Order Confirmation Dialog — Gate 2 */}
+      <AlertDialog open={!!pendingExecution} onOpenChange={(open) => { if (!open) setPendingExecution(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Order Execution</AlertDialogTitle>
+            <AlertDialogDescription>
+              You are about to place a live order for{' '}
+              <span className="font-mono font-bold text-foreground">
+                {(() => {
+                  try {
+                    return JSON.parse(pendingExecution?.requestBody ?? '{}')?.symbol ?? 'Unknown symbol'
+                  } catch {
+                    return 'Unknown symbol'
+                  }
+                })()}
+              </span>
+              . This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingExecution(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (pendingExecution) {
+                  fireRequest(pendingExecution)
+                  setPendingExecution(null)
+                }
+              }}
+            >
+              Execute Order
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
        {/* Footer Info */}
        <div className="h-8 border-t border-border/10 bg-background/50 px-4 flex items-center justify-between">
           <div className="flex gap-6 items-center">
-             <div className="flex items-center gap-1.5 opacity-20">
-                <ShieldAlert className={cn("w-3 h-3", isAD ? "text-primary" : "text-rose-500")} />
-                <span className="text-[9px] font-black uppercase tracking-widest">MODE::SENSITIVE_EXECUTION_LOCKED</span>
+             <div className={cn("flex items-center gap-1.5", isOrderUnlocked ? "opacity-100" : "opacity-20")}>
+                <ShieldAlert className={cn("w-3 h-3", isOrderUnlocked ? "text-red-500" : (isAD ? "text-primary" : "text-rose-500"))} />
+                <span className={cn("text-[9px] font-black uppercase tracking-widest", isOrderUnlocked ? "text-red-400" : "")}>
+                  {isOrderUnlocked ? "MODE::EXECUTION_ARMED" : "MODE::SENSITIVE_EXECUTION_LOCKED"}
+                </span>
              </div>
              <div className="flex items-center gap-1.5 opacity-20">
                 <Globe className={cn("w-3 h-3", primaryColorClass)} />

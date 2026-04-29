@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Brain, Sparkles, Activity, ShieldCheck, Info, RefreshCcw } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import { RegimeGauge } from '@/features/intelligence/components/RegimeGauge';
 import { SectorBento } from '@/features/intelligence/components/SectorBento';
 import { AetherPanel } from '@/components/ui/AetherPanel';
@@ -8,6 +9,7 @@ import { useAether } from '@/contexts/AetherContext';
 import { useAppModeStore } from '@/stores/appModeStore';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { CONFIG } from '@/lib/config';
 
 interface MarketRegimeData {
   market_regime: string;
@@ -21,6 +23,9 @@ interface MarketRegimeData {
   reasoning: string;
 }
 
+const sanitizeText = (text: string | undefined | null): string =>
+  DOMPurify.sanitize(text ?? '', { ALLOWED_TAGS: [] });
+
 export default function MarketRegimePage() {
   const { mode } = useAppModeStore();
   const isAD = mode === 'AD';
@@ -31,8 +36,7 @@ export default function MarketRegimePage() {
   const fetchRegimeData = async () => {
     try {
       setLoading(true);
-      // Using the unified port 18788 for engine API
-      const response = await fetch('http://100.66.171.30:18788/api/v1/market_regime', {
+      const response = await fetch(`${CONFIG.API_BASE_URL}/api/v1/market_regime`, {
         headers: {
           'apikey': import.meta.env.VITE_OPENALGO_API_KEY
         }
@@ -113,7 +117,7 @@ export default function MarketRegimePage() {
                 <RegimeGauge
                   score={data?.trend_strength || 0.5}
                   label="STRENGTH_INDEX"
-                  regime={data?.market_regime || "ANALYZING"}
+                  regime={sanitizeText(data?.market_regime) || "ANALYZING"}
                 />
 
                 <div className="mt-8 pt-6 border-t border-white/5 space-y-4">
@@ -123,7 +127,7 @@ export default function MarketRegimePage() {
                       data?.bias === "BULLISH" ? "text-emerald-500" :
                       data?.bias === "BEARISH" ? "text-rose-500" :
                       "text-amber-500"
-                    )}>{data?.bias}</span>
+                    )}>{sanitizeText(data?.bias)}</span>
                   </div>
                   <div className="flex items-center justify-between text-[10px] font-black tracking-widest uppercase">
                     <span className="text-muted-foreground/60">SYSTEM_MODE::</span>
@@ -137,8 +141,8 @@ export default function MarketRegimePage() {
                   <ShieldCheck className="w-3.5 h-3.5" /> AETHER_SECURITY_AUDIT
                 </h3>
                 <p className="text-[11px] text-muted-foreground leading-relaxed italic font-bold">
-                  "Regime detected as {data?.market_regime}. Bias is currently {data?.bias}.
-                  Execution engines are optimized for high-conviction sector plays in {formattedSectors.find(s => s.sentiment === 'BULLISH')?.sector || 'NIFTY BANK'}."
+                  "Regime detected as {sanitizeText(data?.market_regime)}. Bias is currently {sanitizeText(data?.bias)}.
+                  Execution engines are optimized for high-conviction sector plays in {sanitizeText(formattedSectors.find(s => s.sentiment === 'BULLISH')?.sector) || 'NIFTY BANK'}."
                 </p>
               </AetherPanel>
             </div>
@@ -163,7 +167,7 @@ export default function MarketRegimePage() {
                   <h3 className="text-sm font-black uppercase tracking-widest">NARRATIVE_REASONING</h3>
                 </div>
                 <div className="text-[12px] text-muted-foreground leading-relaxed font-bold uppercase space-y-4 whitespace-pre-wrap">
-                  {data?.reasoning || "NO_NARRATIVE_DATA_DETECTED_IN_THIS_INFRA_SESSION_..."}
+                  {sanitizeText(data?.reasoning) || "NO_NARRATIVE_DATA_DETECTED_IN_THIS_INFRA_SESSION_..."}
                 </div>
 
                 {/* Decorative pulse */}
