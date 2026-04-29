@@ -1,8 +1,11 @@
-from fastapi import APIRouter, HTTPException, Query, Body
+from fastapi import APIRouter, HTTPException, Query, Body, Request
 from pydantic import BaseModel
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 import logging
+import os
+import time
+import jwt
 from services.market_data_service import MarketDataService
 from services.analytics_engine import AnalyticsEngine
 from services.historify_service import historify_service
@@ -13,6 +16,33 @@ from services.fill_analytics import fill_analytics
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["analytics"])
+
+JWT_SECRET = os.environ.get("JWT_SECRET", "")
+
+# Delete rate limit: 10 deletes/minute per IP
+_delete_rate: Dict[str, tuple] = {}
+
+def _check_delete_rate(request: Request):
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    count, window_start = _delete_rate.get(client_ip, (0, now))
+    if now - window_start > 60:
+        count, window_start = 0, now
+    if count >= 10:
+        raise HTTPException(status_code=429, detail="Rate limit: max 10 deletes per minute")
+    _delete_rate[client_ip] = (count + 1, window_start)
+
+def _get_user_id(request: Request) -> Optional[str]:
+    """Extract user email from JWT Bearer token, returns None if absent/invalid."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
+    token = auth_header.removeprefix("Bearer ").strip()
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"], options={"verify_aud": False})
+        return payload.get("email") or payload.get("sub")
+    except Exception:
+        return None
 
 # Global instances (initialized via app context - simplified for migration)
 _analytics_engine = AnalyticsEngine()
@@ -83,15 +113,22 @@ async def get_chain_greeks(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/historify/watchlist")
-def get_watchlist():
-    return {"status": "success", "data": historify_service.get_watchlist()}
+def get_watchlist(request: Request):
+    user_id = _get_user_id(request)
+    data = historify_service.get_watchlist()
+    # Filter by user_id when present so each user sees only their own entries
+    if user_id and isinstance(data, list):
+        data = [item for item in data if item.get("user_id") in (user_id, None, "")]
+    return {"status": "success", "data": data}
 
 @router.post("/historify/watchlist")
 def add_watchlist(
+    request: Request,
     symbol: Optional[str] = Body(None),
     symbols: Optional[List[str]] = Body(None),
     exchange: str = Body("NSE")
 ):
+    user_id = _get_user_id(request)
     if symbols:
         res = historify_service.bulk_add_to_watchlist(symbols, exchange)
     elif symbol:
@@ -102,10 +139,12 @@ def add_watchlist(
 
 @router.delete("/historify/watchlist")
 def remove_watchlist(
+    request: Request,
     symbol: Optional[str] = Body(None),
     symbols: Optional[List[str]] = Body(None),
     exchange: str = Body("NSE")
 ):
+    _check_delete_rate(request)
     if symbols:
         res = historify_service.bulk_remove_from_watchlist(symbols, exchange)
     elif symbol:
@@ -125,8 +164,9 @@ class PurgeRequest(BaseModel):
     interval: str = "5m"
 
 @router.delete("/historify/catalog")
-def delete_historify_catalog(req: PurgeRequest):
+def delete_historify_catalog(request: Request, req: PurgeRequest):
     """Purge historical data for a specific symbol/interval."""
+    _check_delete_rate(request)
     res = historify_service.delete_catalog_entry(req.symbol, req.exchange, req.interval)
     if res.get("status") == "error":
         raise HTTPException(status_code=500, detail=res.get("message"))
