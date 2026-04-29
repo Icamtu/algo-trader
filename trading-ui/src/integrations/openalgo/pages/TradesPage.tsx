@@ -161,15 +161,37 @@ export const TradesPage: React.FC = () => {
   ], [selectedTrade, primaryColorClass]);
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
 
   const filteredTrades = useMemo(() => {
-    if (!searchQuery) return trades;
-    const q = searchQuery.toLowerCase();
-    return trades.filter(t =>
-      t.symbol.toLowerCase().includes(q) ||
-      t.orderid.toLowerCase().includes(q)
-    );
-  }, [trades, searchQuery]);
+    let result = trades;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(t =>
+        t.symbol.toLowerCase().includes(q) ||
+        t.orderid.toLowerCase().includes(q)
+      );
+    }
+    if (fromDate) {
+      result = result.filter(t => t.timestamp >= fromDate);
+    }
+    if (toDate) {
+      result = result.filter(t => t.timestamp <= toDate + "T23:59:59");
+    }
+    return result;
+  }, [trades, searchQuery, fromDate, toDate]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredTrades.length / PAGE_SIZE));
+  const pagedTrades = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredTrades.slice(start, start + PAGE_SIZE);
+  }, [filteredTrades, page]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => { setPage(1); }, [searchQuery, fromDate, toDate]);
 
   return (
     <motion.div
@@ -257,16 +279,58 @@ export const TradesPage: React.FC = () => {
                   <Badge variant="outline" className="text-[7px] font-mono tracking-widest opacity-40 uppercase">LIVE_SYNC</Badge>
                 </div>
              </div>
+             <div className="px-4 py-2 border-b border-border/5 bg-black/20 flex flex-wrap items-center gap-3 shrink-0">
+               <span className="text-[8px] font-black text-muted-foreground/40 uppercase tracking-widest">FILTER:</span>
+               <input
+                 type="date"
+                 value={fromDate}
+                 onChange={e => setFromDate(e.target.value)}
+                 className="bg-black/40 border border-white/10 rounded px-2 py-1 text-white text-[10px] font-mono"
+                 placeholder="From"
+               />
+               <span className="text-[8px] text-muted-foreground/30">→</span>
+               <input
+                 type="date"
+                 value={toDate}
+                 onChange={e => setToDate(e.target.value)}
+                 className="bg-black/40 border border-white/10 rounded px-2 py-1 text-white text-[10px] font-mono"
+                 placeholder="To"
+               />
+               {(fromDate || toDate) && (
+                 <button
+                   onClick={() => { setFromDate(""); setToDate(""); }}
+                   className="text-[8px] font-black text-rose-500/60 hover:text-rose-400 uppercase tracking-widest"
+                 >CLEAR</button>
+               )}
+               <span className="ml-auto text-[8px] font-mono text-muted-foreground/30">{filteredTrades.length} RECORDS</span>
+             </div>
 
              <div className="flex-1 min-h-0 overflow-hidden">
                 <VirtualizedDataTable
-                  data={filteredTrades}
+                  data={pagedTrades}
                   columns={columns}
                   rowHeight={50}
                   onRowClick={setSelectedTrade}
-                  emptyMessage={isLoading ? "Kernel_Syncing..." : searchQuery ? "NO MATCHING TRADES FOUND" : "NO_SIGNALS_EXECUTED_IN_CURRENT_SESSION"}
+                  emptyMessage={isLoading ? "Kernel_Syncing..." : searchQuery || fromDate || toDate ? "NO MATCHING TRADES FOUND" : "NO_SIGNALS_EXECUTED_IN_CURRENT_SESSION"}
                 />
               </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="h-8 border-t border-white/5 bg-black/40 flex items-center justify-between px-4 shrink-0">
+                  <button
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="text-[8px] font-black font-mono uppercase tracking-widest text-muted-foreground/40 hover:text-white disabled:opacity-20 disabled:cursor-not-allowed"
+                  >← PREV</button>
+                  <span className="text-[8px] font-mono text-muted-foreground/40 uppercase">PAGE {page}/{totalPages} // {filteredTrades.length} RECORDS</span>
+                  <button
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    disabled={page === totalPages}
+                    className="text-[8px] font-black font-mono uppercase tracking-widest text-muted-foreground/40 hover:text-white disabled:opacity-20 disabled:cursor-not-allowed"
+                  >NEXT →</button>
+                </div>
+              )}
 
               {/* Data Status Bar */}
               <div className="h-6 border-t border-white/5 bg-black/60 flex items-center px-4 justify-between">
