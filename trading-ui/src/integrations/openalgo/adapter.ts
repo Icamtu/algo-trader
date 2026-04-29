@@ -262,7 +262,7 @@ export class OpenAlgoAdapter {
   }
 
   async acknowledgeHealthAlert(alertId: number) {
-    const response = await webClient.post(`/health/api/alerts/${alertId}/acknowledge`);
+    const response = await webClient.post(`/api/v1/alerts/${alertId}/acknowledge`);
     return response.data;
   }
 
