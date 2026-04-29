@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 import logging
 import os
+import re
 import time
 import jwt
 from services.market_data_service import MarketDataService
@@ -18,6 +19,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["analytics"])
 
 JWT_SECRET = os.environ.get("JWT_SECRET", "")
+
+_EXPIRY_RE = re.compile(r"^\d{2}[A-Z]{3}\d{2}$")
+_SYMBOL_RE = re.compile(r"^[A-Z0-9&_\-]{1,30}$")
+_VALID_EXCHANGES = {"NSE", "BSE", "NFO", "BFO", "MCX", "CDS"}
+
+def _validate_option_params(underlying: str, exchange: str, expiry_date: str):
+    if not _SYMBOL_RE.match(underlying.upper()):
+        raise HTTPException(status_code=422, detail="Invalid underlying symbol")
+    if exchange.upper() not in _VALID_EXCHANGES:
+        raise HTTPException(status_code=422, detail=f"Invalid exchange. Allowed: {', '.join(sorted(_VALID_EXCHANGES))}")
+    if not _EXPIRY_RE.match(expiry_date.upper()):
+        raise HTTPException(status_code=422, detail="Invalid expiry_date format — expected DDMMMYY (e.g. 27APR25)")
 
 # Delete rate limit: 10 deletes/minute per IP
 _delete_rate: Dict[str, tuple] = {}
@@ -65,6 +78,7 @@ async def get_gex_analysis(
     exchange: str = Body("NSE"),
     expiry_date: str = Body(...)
 ):
+    _validate_option_params(underlying, exchange, expiry_date)
     try:
         ds = get_data_service()
         chain = await ds.get_option_chain(underlying, exchange, expiry_date)
@@ -83,6 +97,7 @@ async def get_iv_smile(
     exchange: str = Body("NSE"),
     expiry_date: str = Body(...)
 ):
+    _validate_option_params(underlying, exchange, expiry_date)
     try:
         ds = get_data_service()
         chain = await ds.get_option_chain(underlying, exchange, expiry_date)
@@ -100,6 +115,7 @@ async def get_chain_greeks(
     """
     Calculate full Greeks (Delta, Gamma, Theta, Vega, Rho) for an option chain.
     """
+    _validate_option_params(underlying, exchange, expiry_date)
     try:
         ds = get_data_service()
         chain = await ds.get_option_chain(underlying, exchange, expiry_date)
