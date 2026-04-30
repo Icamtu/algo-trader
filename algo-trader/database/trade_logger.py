@@ -44,6 +44,8 @@ class Trade:
     conviction: Optional[float] = None
     requested_price: Optional[float] = 0.0
     created_at: Optional[str] = None
+    prev_hash: Optional[str] = None
+    entry_hash: Optional[str] = None
 
     def to_dict(self):
         return asdict(self)

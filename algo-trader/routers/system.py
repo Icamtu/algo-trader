@@ -290,10 +290,9 @@ async def get_mode_status():
     try:
         from database.trade_logger import get_trade_logger
         db_logger = get_trade_logger()
-        all_trades = await db_logger.get_all_trades(limit=1)  # Just to verify DB is working
 
-        # Count trades by mode
-        all_trades_full = await db_logger.get_all_trades(limit=10000)
+        # Get all trades (using async version)
+        all_trades_full = await db_logger.get_all_trades_async(limit=10000)
         sandbox_count = sum(1 for t in all_trades_full if t.mode == "sandbox")
         live_count = sum(1 for t in all_trades_full if t.mode == "live")
 
@@ -322,5 +321,5 @@ async def get_mode_status():
             }
         }
     except Exception as e:
-        logger.error(f"Error getting mode status: {e}")
+        logger.error(f"Error getting mode status: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
