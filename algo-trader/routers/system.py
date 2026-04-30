@@ -15,7 +15,7 @@ from execution.action_manager import get_action_manager
 from utils.latency_tracker import latency_tracker
 from services.alert_service import alert_service
 
-router = APIRouter(prefix="/api/v1", tags=["System"])
+router = APIRouter(tags=["System"])
 logger = logging.getLogger(__name__)
 
 _terminal_rate: dict = {}
@@ -33,8 +33,9 @@ class TestAlertRequest(BaseModel):
     type: str = "TEST"
 
 @router.get("/health")
+@router.get("/system/health")
 async def get_system_health():
-    """GET /api/v1/health - Unified health check."""
+    """GET /api/v1/health & /api/v1/system/health - Unified health check."""
     health = {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
@@ -158,8 +159,8 @@ async def get_telemetry():
     try:
         db_logger = get_trade_logger()
         order_manager = app_context.get("order_manager")
-        portfolio_manager = app_context.get("portfolio_manager")
 
+        # Get actual summaries
         pnl_stats = await db_logger.get_pnl_summary()
         perf_stats = await db_logger.get_performance_metrics()
 
@@ -182,6 +183,28 @@ async def get_telemetry():
     except Exception as e:
         logger.error(f"Telemetry API Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/telemetry/pnl")
+async def get_telemetry_pnl():
+    """Returns global PnL summary for the dashboard."""
+    try:
+        db_logger = get_trade_logger()
+        stats = await db_logger.get_pnl_summary()
+        return {"status": "success", "data": stats}
+    except Exception as e:
+        logger.error(f"Telemetry PnL Error: {e}")
+        return {"status": "success", "data": {"daily": {"net": 0.0}, "all_time": {"net": 0.0}}}
+
+@router.get("/telemetry/performance")
+async def get_telemetry_performance():
+    """Returns global performance metrics (Win Rate, Profit Factor, etc.)."""
+    try:
+        db_logger = get_trade_logger()
+        metrics = await db_logger.get_performance_metrics()
+        return {"status": "success", "data": metrics}
+    except Exception as e:
+        logger.error(f"Telemetry Performance Error: {e}")
+        return {"status": "success", "data": {"win_rate": 0.0, "profit_factor": 0.0, "total_trades": 0}}
 
 @router.post("/system/test-alert")
 async def test_alert(request: TestAlertRequest):
@@ -224,3 +247,80 @@ async def get_rbac_matrix():
             "is_superuser": "*" in perms,
         })
     return {"status": "success", "roles": matrix}
+@router.get("/system/logs")
+async def get_system_logs(limit: int = Query(100)):
+    """GET /api/v1/system/logs - Returns internal system logs."""
+    logs = _memory_log_handler.get_logs()
+    return {"status": "success", "logs": logs[-limit:] if limit > 0 else logs}
+
+@router.get("/mode")
+async def get_trading_mode():
+    """GET /api/v1/mode - Current engine trading mode."""
+    order_manager = app_context.get("order_manager")
+    return {
+        "status": "success",
+        "mode": order_manager.mode if order_manager else "sandbox"
+    }
+
+@router.post("/mode")
+async def set_trading_mode(data: Dict[str, str] = Body(...)):
+    """POST /api/v1/mode - Update engine trading mode."""
+    mode = data.get("mode")
+    if mode not in ("live", "sandbox"):
+        raise HTTPException(status_code=400, detail="Invalid mode. Must be 'live' or 'sandbox'.")
+
+    order_manager = app_context.get("order_manager")
+    if order_manager:
+        order_manager.set_mode(mode)
+        logger.info(f"Trading mode switched to {mode.upper()}")
+        return {
+            "status": "success",
+            "mode": order_manager.mode,
+            "message": f"System switched to {mode.upper()} mode"
+        }
+    return {"status": "error", "message": "Order manager not initialized"}
+
+@router.get("/mode/status")
+async def get_mode_status():
+    """GET /api/v1/mode/status - Detailed mode status including database info."""
+    order_manager = app_context.get("order_manager")
+    if not order_manager:
+        raise HTTPException(status_code=503, detail="Order manager not initialized")
+
+    try:
+        from database.trade_logger import get_trade_logger
+        db_logger = get_trade_logger()
+        all_trades = await db_logger.get_all_trades(limit=1)  # Just to verify DB is working
+
+        # Count trades by mode
+        all_trades_full = await db_logger.get_all_trades(limit=10000)
+        sandbox_count = sum(1 for t in all_trades_full if t.mode == "sandbox")
+        live_count = sum(1 for t in all_trades_full if t.mode == "live")
+
+        current_mode = order_manager.mode
+        pm = order_manager.sandbox_position_manager if current_mode == "sandbox" else order_manager.live_position_manager
+        positions = pm.all_positions()
+        open_pos_count = sum(1 for p in positions.values() if p.quantity != 0)
+
+        return {
+            "status": "success",
+            "current_mode": current_mode.upper(),
+            "database": {
+                "sandbox_trades": sandbox_count,
+                "live_trades": live_count,
+                "total_trades": sandbox_count + live_count,
+                "location": db_logger.db_file
+            },
+            "positions": {
+                "open": open_pos_count,
+                "total_tracked": len(positions)
+            },
+            "position_manager": {
+                "active": current_mode,
+                "sandbox_pm": order_manager.sandbox_position_manager is not None,
+                "live_pm": order_manager.live_position_manager is not None
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error getting mode status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

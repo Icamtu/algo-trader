@@ -472,6 +472,26 @@ class TradeLogger:
     async def get_all_trades_async(self, limit=100):
         return await asyncio.to_thread(self.get_all_trades, limit)
 
+    def get_trades_by_mode(self, mode: str = "sandbox", limit: int = 100):
+        """Get trades filtered by mode (sandbox or live)."""
+        try:
+            conn = self._get_connection()
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM trades WHERE mode = ? ORDER BY timestamp DESC LIMIT ?",
+                (mode.lower(), limit)
+            )
+            rows = cursor.fetchall()
+            conn.close()
+            return [Trade(**dict(row)) for row in rows]
+        except Exception as e:
+            logger.error(f"Error fetching trades by mode: {e}")
+            return []
+
+    async def get_trades_by_mode_async(self, mode: str = "sandbox", limit: int = 100):
+        return await asyncio.to_thread(self.get_trades_by_mode, mode, limit)
+
     def get_strategy_metrics(self, strategy: str) -> Dict[str, Any]:
         try:
             conn = self._get_connection()

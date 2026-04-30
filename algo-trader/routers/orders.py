@@ -6,7 +6,7 @@ from core.context import app_context
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1", tags=["Orders"])
+router = APIRouter(tags=["Orders"])
 
 class OrderRequest(BaseModel):
     symbol: str
@@ -103,8 +103,9 @@ async def api_place_smart_order(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/orders")
+@router.get("/orderbook")
 async def get_orders():
-    """FastAPI port of /api/v1/orders."""
+    """FastAPI port of /api/v1/orders & /api/v1/orderbook."""
     order_manager = app_context.get("order_manager")
     if not order_manager:
         raise HTTPException(status_code=503, detail="Order manager not initialized")
@@ -114,6 +115,156 @@ async def get_orders():
         return orders
     except Exception as e:
         logger.error(f"Error fetching orders: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/tradebook")
+async def get_tradebook():
+    """FastAPI port of /api/v1/tradebook. Returns mode-filtered trades."""
+    order_manager = app_context.get("order_manager")
+    if not order_manager:
+        raise HTTPException(status_code=503, detail="Order manager not initialized")
+
+    try:
+        from database.trade_logger import get_trade_logger
+        db_logger = get_trade_logger()
+
+        current_mode = order_manager.mode
+
+        # Use optimized mode-filtered query
+        trades = await db_logger.get_trades_by_mode_async(mode=current_mode, limit=500)
+
+        # Serialize trades to dict
+        mode_trades = [
+            trade.to_dict() if hasattr(trade, 'to_dict') else trade.__dict__
+            for trade in trades
+        ]
+
+        logger.info(f"Tradebook: returning {len(mode_trades)} {current_mode.upper()} trades")
+        return {
+            "status": "success",
+            "mode": current_mode,
+            "trades": mode_trades,
+            "count": len(mode_trades)
+        }
+    except Exception as e:
+        logger.error(f"Error fetching tradebook: {e}", exc_info=True)
+        return {
+            "status": "success",
+            "mode": order_manager.mode if order_manager else "sandbox",
+            "trades": [],
+            "count": 0
+        }
+
+@router.get("/sandbox/trades")
+async def get_sandbox_trades():
+    """GET /api/v1/sandbox/trades - Returns only sandbox mode trades."""
+    try:
+        from database.trade_logger import get_trade_logger
+        db_logger = get_trade_logger()
+
+        # Use optimized query
+        trades = await db_logger.get_trades_by_mode_async(mode="sandbox", limit=500)
+
+        sandbox_trades = [
+            trade.to_dict() if hasattr(trade, 'to_dict') else trade.__dict__
+            for trade in trades
+        ]
+
+        return {
+            "status": "success",
+            "mode": "sandbox",
+            "trades": sandbox_trades,
+            "count": len(sandbox_trades)
+        }
+    except Exception as e:
+        logger.error(f"Error fetching sandbox trades: {e}")
+        return {"status": "success", "mode": "sandbox", "trades": [], "count": 0}
+
+@router.get("/sandbox/positions")
+async def get_sandbox_positions():
+    """GET /api/v1/sandbox/positions - Returns sandbox position manager state."""
+    order_manager = app_context.get("order_manager")
+    if not order_manager:
+        raise HTTPException(status_code=503, detail="Order manager not initialized")
+
+    try:
+        pm = order_manager.sandbox_position_manager
+        positions = pm.all_positions()
+
+        formatted_positions = [
+            {
+                "symbol": symbol,
+                "quantity": pos.quantity,
+                "avg_price": pos.avg_price,
+                "entry_price": getattr(pos, 'entry_price', pos.avg_price),
+                "metadata": getattr(pos, 'metadata', {})
+            }
+            for symbol, pos in positions.items()
+            if pos.quantity != 0
+        ]
+
+        return {
+            "status": "success",
+            "mode": "sandbox",
+            "positions": formatted_positions,
+            "count": len(formatted_positions)
+        }
+    except Exception as e:
+        logger.error(f"Error fetching sandbox positions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/sandbox/summary")
+async def get_sandbox_summary():
+    """GET /api/v1/sandbox/summary - Comprehensive sandbox state snapshot."""
+    order_manager = app_context.get("order_manager")
+    if not order_manager:
+        raise HTTPException(status_code=503, detail="Order manager not initialized")
+
+    try:
+        from database.trade_logger import get_trade_logger
+        db_logger = get_trade_logger()
+
+        # Get sandbox trades
+        trades = await db_logger.get_trades_by_mode_async(mode="sandbox", limit=1000)
+
+        # Count by status
+        status_counts = {}
+        for trade in trades:
+            status = trade.status or "unknown"
+            status_counts[status] = status_counts.get(status, 0) + 1
+
+        # Calculate metrics
+        filled_trades = [t for t in trades if t.status == "filled"]
+        blocked_trades = [t for t in trades if t.status == "blocked"]
+
+        # Positions
+        pm = order_manager.sandbox_position_manager
+        positions = pm.all_positions()
+        open_positions = [
+            {"symbol": s, "quantity": p.quantity, "avg_price": p.avg_price}
+            for s, p in positions.items()
+            if p.quantity != 0
+        ]
+
+        return {
+            "status": "success",
+            "mode": "sandbox",
+            "summary": {
+                "total_trades": len(trades),
+                "filled_trades": len(filled_trades),
+                "blocked_trades": len(blocked_trades),
+                "status_breakdown": status_counts,
+                "open_positions_count": len(open_positions),
+                "database_file": db_logger.db_file
+            },
+            "recent_trades": [
+                t.to_dict() if hasattr(t, 'to_dict') else t.__dict__
+                for t in trades[:10]
+            ],
+            "positions": open_positions
+        }
+    except Exception as e:
+        logger.error(f"Error fetching sandbox summary: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/orders/{order_id}/cancel")
