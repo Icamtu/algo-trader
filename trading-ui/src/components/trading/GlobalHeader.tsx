@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef, memo } from "react";
 import { Link } from "react-router-dom";
-import { ChevronDown, LogOut, Radio, Power, PowerOff, Brain, Cpu, ShieldAlert, Zap, Skull, Settings, Bell } from "lucide-react";
-import { algoApi } from "@/features/openalgo/api/client";
+import { ChevronDown, LogOut, Radio, Power, PowerOff, Brain, Cpu, ShieldAlert, Zap, Skull, Settings, Bell, Wifi, WifiOff, Palette, Clock } from "lucide-react";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { BrokerManagementPanel } from "./BrokerManagementPanel";
 import { UnifiedSettings } from "./UnifiedSettings";
 import { ScriptGroupPanel } from "./ScriptGroupPanel";
+import { ModeIndicator } from "./ModeIndicator";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { useTradingMode, useSystemHealth, useFunds, useAnalyzerStatus } from "@/features/openalgo/hooks/useTrading";
+import { useTradingMode, useSystemHealth, useFunds, useAnalyzerStatus } from "@/features/aetherdesk/hooks/useTrading";
 import { SlideToConfirm } from "../ui/SlideToConfirm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 import { IndustrialValue } from "./IndustrialValue";
@@ -46,6 +47,32 @@ export const GlobalHeader = memo(function GlobalHeader() {
   const { data: systemHealth } = useSystemHealth();
   const { data: fundsData } = useFunds();
   const analyzer = useAnalyzerStatus();
+
+  // Market clock (NSE session state)
+  const getMarketSessionState = () => {
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    const timeInMinutes = hours * 60 + minutes;
+
+    // NSE: 09:15–15:30 (555–930 minutes)
+    if (timeInMinutes >= 555 && timeInMinutes < 930) {
+      return { state: "OPEN", color: "text-secondary" };
+    } else if (timeInMinutes >= 900 && timeInMinutes < 930) {
+      return { state: "CLOSING", color: "text-amber-500" };
+    }
+    return { state: "CLOSED", color: "text-muted-foreground/50" };
+  };
+  const marketSession = getMarketSessionState();
+
+  // Environment mode color-coding
+  const environmentColors = {
+    LIVE: "bg-destructive/10 border-destructive/40 text-destructive",
+    SANDBOX: "bg-amber-500/10 border-amber-500/40 text-amber-500",
+    BACKTEST: "bg-blue-500/10 border-blue-500/40 text-blue-500"
+  };
+  const currentEnv = tradingMode.mode === 'live' ? 'LIVE' : (tradingMode.mode === 'sandbox' ? 'SANDBOX' : 'BACKTEST');
+  const envColor = environmentColors[currentEnv as keyof typeof environmentColors] || environmentColors.SANDBOX;
 
   useEffect(() => {
     if (aetherTelemetry) {
@@ -139,28 +166,47 @@ export const GlobalHeader = memo(function GlobalHeader() {
         )}
       </AnimatePresence>
 
-      <header className="h-10 bg-[#0A0A0A] border-b border-white/5 flex items-center z-50 relative overflow-hidden">
+      <header className="h-10 bg-[#0A0A0A] border-b border-white/5 flex items-center z-50 relative overflow-hidden" role="banner">
         <div className="noise-overlay opacity-[0.02] pointer-events-none" />
 
-        {/* LOGO SECTION */}
-        <div
-          className="flex items-center gap-3 shrink-0 group cursor-pointer px-4 border-r border-white/10 h-full bg-black/40 hover:bg-white/[0.02] transition-colors"
-          onClick={() => window.location.href = '/'}
-        >
-          <div className="relative w-6 h-6 flex items-center justify-center">
-            <div className="absolute inset-0 bg-primary/20 blur-md group-hover:bg-primary/40 transition-all" />
-            <div className="relative bg-black border border-primary/40 w-full h-full flex items-center justify-center shadow-[0_0_10px_rgba(255,176,0,0.1)]">
-              <Zap className="w-3.5 h-3.5 text-primary animate-pulse" />
+        {/* LOGO + ENVIRONMENT CHIP (LEFT) */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Logo */}
+          <div
+            className="flex items-center gap-3 group cursor-pointer px-4 border-r border-white/10 h-full bg-black/40 hover:bg-white/[0.02] transition-colors"
+            onClick={() => window.location.href = '/'}
+          >
+            <div className="relative w-6 h-6 flex items-center justify-center">
+              <div className="absolute inset-0 bg-primary/20 blur-md group-hover:bg-primary/40 transition-all" />
+              <div className="relative bg-black border border-primary/40 w-full h-full flex items-center justify-center shadow-[0_0_10px_rgba(255,176,0,0.1)]">
+                <Zap className="w-3.5 h-3.5 text-primary animate-pulse" />
+              </div>
+            </div>
+            <div className="flex flex-col leading-none hidden md:flex">
+              <span className="text-[14px] font-black tracking-[-0.05em] text-cyan-400 font-display uppercase">AetherDesk</span>
+              <span className="text-[7px] font-mono font-black text-slate-500 tracking-[0.3em] uppercase mt-0.5">STRAT_OS // v6.0.4</span>
             </div>
           </div>
-          <div className="flex flex-col leading-none">
-            <span className="text-[14px] font-black tracking-[-0.05em] text-cyan-400 font-display uppercase">AlgoDesk</span>
-            <span className="text-[7px] font-mono font-black text-slate-500 tracking-[0.3em] uppercase mt-0.5">STRAT_OS // v6.0.4</span>
+
+          {/* Environment Chip */}
+          <div className={cn("px-3 h-7 border rounded-[2px] flex items-center gap-2 shrink-0 font-mono text-[8px] font-black uppercase tracking-widest", envColor)}>
+            <div className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+            {currentEnv}
           </div>
         </div>
 
-        {/* INDICES SECTION */}
-        <div className="flex items-center h-full border-r border-white/10 shrink-0">
+        {/* CENTER: MARKET CLOCK + INDICES (hidden on mobile) */}
+        <div className="hidden md:flex items-center h-full border-r border-white/10 shrink-0">
+          {/* Market Clock */}
+          <div className="flex flex-col justify-center px-4 border-r border-white/5 h-full bg-black/20">
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <Clock className="w-3 h-3 text-muted-foreground/40" />
+              <span className="text-[8px] font-mono font-black uppercase tracking-widest text-muted-foreground/40">SESSION</span>
+            </div>
+            <span className={cn("text-[10px] font-black font-mono tracking-widest", marketSession.color)}>{marketSession.state}</span>
+          </div>
+
+          {/* Ticker symbols */}
           {tickerSymbols.slice(0, 2).map((sym) => {
             const tick = ticks[sym];
             const ltp = tick?.ltp || 0;
@@ -185,8 +231,8 @@ export const GlobalHeader = memo(function GlobalHeader() {
           })}
         </div>
 
-        {/* RUNNING MARQUEE SECTION */}
-        <div className="flex-1 flex items-center overflow-hidden h-full relative border-r border-white/10 bg-black/20">
+        {/* RUNNING MARQUEE SECTION (hidden on mobile) */}
+        <div className="hidden lg:flex flex-1 items-center overflow-hidden h-full relative border-r border-white/10 bg-black/20">
            <div className="flex items-center gap-12 px-8 whitespace-nowrap animate-marquee hover:pause grayscale hover:grayscale-0 transition-all opacity-40 hover:opacity-100">
             {marketData.filter(m => !tickerSymbols.slice(0, 2).includes(m.name)).map((m) => (
               <div key={m.name} className="flex items-center gap-2.5">
@@ -202,14 +248,57 @@ export const GlobalHeader = memo(function GlobalHeader() {
           <div className="absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[#0A0A0A] to-transparent pointer-events-none" />
         </div>
 
-        {/* GLOBAL ACTIONS / STATUS SECTION */}
+        {/* CENTER-RIGHT: COMMAND PALETTE + NOTIFICATIONS + BROKER STATUS */}
+        <div className="flex items-center h-full gap-1.5 px-2 border-r border-white/10 shrink-0 bg-black/20">
+          {/* Command Palette Trigger (⌘K) */}
+          <button
+            aria-label="Open command palette (⌘K)"
+            className="hidden sm:flex items-center gap-2 px-3 h-7 bg-white/[0.03] border border-white/10 hover:border-primary/40 hover:bg-primary/[0.05] transition-all rounded-[2px] text-[8px] font-mono text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60"
+          >
+            <Palette className="w-3 h-3" />
+            <span>⌘K</span>
+          </button>
+
+          {/* Notifications Bell */}
+          <button
+            aria-label="Notifications"
+            aria-haspopup="menu"
+            className="relative w-7 h-7 flex items-center justify-center border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-all rounded-[2px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60 group"
+          >
+            <Bell className="w-3.5 h-3.5 text-muted-foreground/60 group-hover:text-foreground transition-colors" />
+            {alerts.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-destructive rounded-full text-[7px] font-black text-white flex items-center justify-center">
+                {alerts.length > 9 ? '9+' : alerts.length}
+              </span>
+            )}
+          </button>
+
+          {/* Broker Connectivity Dot (Shoonya status) */}
+          <button
+            aria-label={isConnected ? "Broker connected (Shoonya)" : "Broker disconnected"}
+            className={cn(
+              "w-7 h-7 flex items-center justify-center border rounded-[2px] transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:ring-offset-black",
+              isConnected
+                ? "bg-secondary/10 border-secondary/40 hover:bg-secondary/20"
+                : "bg-destructive/10 border-destructive/40 hover:bg-destructive/20"
+            )}
+          >
+            {isConnected ? (
+              <Wifi className="w-3.5 h-3.5 text-secondary animate-pulse" />
+            ) : (
+              <WifiOff className="w-3.5 h-3.5 text-destructive" />
+            )}
+          </button>
+        </div>
+
+        {/* RIGHT: ENGINE CONTROL + USER MENU + MODE TOGGLE */}
         <div className="flex items-center h-full px-2 gap-2 border-r border-white/10 shrink-0 bg-black/40">
           <button
             onClick={toggleEngine}
             aria-label={engineLive ? "Stop trading engine" : "Start trading engine"}
             aria-pressed={engineLive}
             className={cn(
-              "flex items-center gap-1.5 px-3 h-8 min-w-[80px] transition-all shrink-0 border uppercase font-mono tracking-widest text-[9px] font-black group/power relative overflow-hidden focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:ring-offset-black",
+              "flex items-center gap-1.5 px-3 h-8 min-w-[80px] transition-all shrink-0 border uppercase font-mono tracking-widest text-[9px] font-black group/power relative overflow-hidden focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:ring-offset-black hidden sm:flex",
               engineLive
                 ? "bg-secondary/10 border-secondary/40 text-secondary shadow-[0_0_15px_rgba(34,197,94,0.1)] focus-visible:ring-secondary/60"
                 : "bg-destructive/10 border-destructive/40 text-destructive grayscale brightness-50 focus-visible:ring-destructive/60"
@@ -220,7 +309,7 @@ export const GlobalHeader = memo(function GlobalHeader() {
             {engineLive ? "CORE_RUN" : "CORE_HLT"}
           </button>
 
-          <div className="flex items-center gap-3 relative group/user pl-1">
+          <div className="flex items-center gap-2 relative group/user pl-1">
              <div className="flex flex-col items-end mr-1 hidden lg:flex">
                <span className="text-[9px] font-black tracking-widest uppercase text-foreground">{user?.user_metadata?.full_name || 'OPERATOR'}</span>
                <span className="text-[7px] font-mono font-black text-muted-foreground/50 tracking-widest">{user?.email || 'OFFLINE_MODE'}</span>
@@ -258,19 +347,13 @@ export const GlobalHeader = memo(function GlobalHeader() {
              </div>
           </div>
 
-          <div className="flex items-center gap-1.5 px-3 h-7 bg-white/[0.03] border border-white/10 hover:border-white/20 transition-all rounded-[1px] ml-1">
-             <span className={cn("text-[8px] font-mono font-black", tradingMode.mode === 'sandbox' ? "text-primary/60" : "text-muted-foreground/20")}>SIM</span>
-             <Switch
-                checked={tradingMode.mode === 'live'}
-                onCheckedChange={(checked) => tradingMode.setMode(checked ? 'live' : 'sandbox')}
-                className="scale-[0.45]"
-             />
-             <span className={cn("text-[8px] font-mono font-black", tradingMode.mode === 'live' ? "text-destructive" : "text-muted-foreground/20")}>LIVE</span>
-          </div>
+          {/* Mode Toggle (hidden on mobile for space) */}
+          {/* Mode Indicator Button */}
+          <ModeIndicator />
         </div>
 
-        {/* FINANCIALS SECTION */}
-        <div className="flex items-center gap-0 shrink-0 h-full border-r border-white/10">
+        {/* FINANCIALS SECTION (hidden on mobile) */}
+        <div className="hidden md:flex items-center gap-0 shrink-0 h-full border-r border-white/10">
           <div className="px-5 border-r border-white/5 h-full flex flex-col justify-center min-w-[120px] bg-black/20">
             <span className="text-[8px] font-black uppercase tracking-[0.3em] text-muted-foreground/30 mb-0.5 font-mono">CAPITAL_EXP</span>
             <IndustrialValue value={(fundsData?.margin_available ?? telemetry.equity) || 42200000.00} prefix="₹" className="text-[11px] font-black text-foreground tabular-nums font-mono" />
@@ -287,8 +370,8 @@ export const GlobalHeader = memo(function GlobalHeader() {
           </div>
         </div>
 
-        {/* UPTIME / LATENCY SECTION */}
-        <div className="flex items-center gap-0 shrink-0 h-full border-r border-white/10">
+        {/* UPTIME / LATENCY SECTION (hidden on mobile) */}
+        <div className="hidden lg:flex items-center gap-0 shrink-0 h-full border-r border-white/10">
           <div className="px-5 border-r border-white/5 h-full flex flex-col justify-center bg-black/20 min-w-[90px]">
             <span className="text-[8px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 mb-0.5 font-mono">UPTIME</span>
             <span className="text-[10px] font-black font-mono text-primary/80 tabular-nums">
@@ -303,8 +386,8 @@ export const GlobalHeader = memo(function GlobalHeader() {
           </div>
         </div>
 
-        {/* SYSTEM STATUS LABELS */}
-        <div className="flex-1 flex items-center justify-end px-5 gap-6 h-full bg-black/60">
+        {/* SYSTEM STATUS LABELS (hidden on mobile) */}
+        <div className="hidden lg:flex flex-1 items-center justify-end px-5 gap-6 h-full bg-black/60">
             <div className="flex flex-col items-end leading-none cursor-pointer" onClick={() => analyzer.toggle(!analyzer.isEnabled)}>
                 <div className="flex items-center gap-2">
                   <span className={cn("text-[8px] font-mono font-black uppercase tracking-widest transition-all duration-500",
