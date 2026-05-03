@@ -92,8 +92,8 @@ async def get_analyzer_data(
                 "requests": formatted_requests
             }
         }
-    except Exception as e:
-        logger.error(f"Analyzer API Error: {e}")
+    except Exception:
+        logger.error("Analyzer API Error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/scan")
@@ -114,6 +114,6 @@ async def trigger_neural_scan(
 
         result = await analyzer.analyze_symbol(symbol, timeframe)
         return {"status": "success", "data": result}
-    except Exception as e:
-        logger.error(f"Neural Scan Trigger Error: {e}")
+    except Exception:
+        logger.error("Neural Scan Trigger Error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
