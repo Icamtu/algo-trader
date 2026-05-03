@@ -136,8 +136,8 @@ async def terminal_command(cmd_req: TerminalCommandRequest, request: Request):
             return {"status": "EXEC_SUCCESS", "output": "POS_RECONCILIATION_SYNCED_WITH_BROKER"}
 
         return {"status": "CMD_UNKNOWN", "output": f"COMMAND_NOT_RECOGNIZED: {cmd}"}
-    except Exception as e:
-        logger.error(f"Terminal Command Error: {e}")
+    except Exception:
+        logger.error("Terminal Command Error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/ticker/config")
@@ -153,8 +153,8 @@ async def get_ticker_config():
                 {"symbol": "NSE:BANKNIFTY-INDEX", "label": "BANK NIFTY"}
             ]
         return {"ticker_symbols": tickers, "count": len(tickers)}
-    except Exception as e:
-        logger.error(f"Ticker config error: {e}")
+    except Exception:
+        logger.error("Ticker config error", exc_info=True)
         return {"ticker_symbols": [], "count": 0}
 
 @router.get("/telemetry")
@@ -184,8 +184,8 @@ async def get_telemetry():
             }
         }
         return telemetry
-    except Exception as e:
-        logger.error(f"Telemetry API Error: {e}")
+    except Exception:
+        logger.error("Telemetry API Error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/pnl")
@@ -196,8 +196,8 @@ async def get_telemetry_pnl():
         db_logger = get_trade_logger()
         stats = await db_logger.get_pnl_summary()
         return {"status": "success", "data": stats}
-    except Exception as e:
-        logger.error(f"Telemetry PnL Error: {e}")
+    except Exception:
+        logger.error("Telemetry PnL Error", exc_info=True)
         return {"status": "success", "data": {"daily": {"net": 0.0}, "all_time": {"net": 0.0}}}
 
 @router.get("/telemetry/performance")
@@ -207,8 +207,8 @@ async def get_telemetry_performance():
         db_logger = get_trade_logger()
         metrics = await db_logger.get_performance_metrics()
         return {"status": "success", "data": metrics}
-    except Exception as e:
-        logger.error(f"Telemetry Performance Error: {e}")
+    except Exception:
+        logger.error("Telemetry Performance Error", exc_info=True)
         return {"status": "success", "data": {"win_rate": 0.0, "profit_factor": 0.0, "total_trades": 0}}
 
 @router.post("/system/test-alert")
@@ -217,8 +217,8 @@ async def test_alert(request: TestAlertRequest):
     try:
         success = await alert_service.send_telegram(f"[{request.type}] {request.message}")
         return {"status": "success" if success else "failed"}
-    except Exception as e:
-        logger.error(f"Alert test error: {e}")
+    except Exception:
+        logger.error("Alert test error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/alerts")
@@ -234,8 +234,8 @@ async def get_alerts(limit: int = Query(50)):
         rows = cursor.fetchall()
         conn.close()
         return {"status": "success", "data": [dict(row) for row in rows]}
-    except Exception as e:
-        logger.error(f"Error fetching alerts: {e}")
+    except Exception:
+        logger.error("Error fetching alerts", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 from fastapi import Header
@@ -326,8 +326,8 @@ async def get_mode_status():
                 "live_pm": order_manager.live_position_manager is not None
             }
         }
-    except Exception as e:
-        logger.error(f"Error getting mode status: {e}", exc_info=True)
+    except Exception:
+        logger.error("Error getting mode status", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/settings")
@@ -345,8 +345,8 @@ async def get_settings():
             "agent_enabled": settings.get("agent_enabled", "true").lower() == "true",
             "agent_error_reason": settings.get("agent_error_reason", "")
         }
-    except Exception as e:
-        logger.error(f"Error fetching settings: {e}")
+    except Exception:
+        logger.error("Error fetching settings", exc_info=True)
         return {
             "status": "error",
             "message": "Internal error",
@@ -371,8 +371,8 @@ async def update_settings(data: Dict[str, Any] = Body(...)):
         # (This would be handled by the agent itself on next poll or via signal)
 
         return {"status": "success" if success else "partial_success"}
-    except Exception as e:
-        logger.error(f"Error updating settings: {e}")
+    except Exception:
+        logger.error("Error updating settings", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/apikey")
