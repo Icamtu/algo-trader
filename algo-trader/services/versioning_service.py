@@ -34,6 +34,11 @@ class StrategyVersioningService:
         """
         Returns the commit history for a specific strategy file.
         """
+        # Security: Validate strategy_id to prevent command injection or path traversal
+        if not all(c.isalnum() or c in "-_" for c in strategy_id):
+            logger.error(f"Invalid strategy_id: {strategy_id}")
+            return []
+
         filename = f"{strategy_id}.py"
         try:
             # git log --pretty=format:"%H|%an|%ad|%s" filename
@@ -60,6 +65,10 @@ class StrategyVersioningService:
         """
         Stages and commits a strategy file change.
         """
+        # Security: Validate strategy_id
+        if not all(c.isalnum() or c in "-_" for c in strategy_id):
+            return {"status": "error", "message": "Invalid strategy ID"}
+
         filename = f"{strategy_id}.py"
         try:
             self._run_git(["add", filename])
@@ -86,6 +95,14 @@ class StrategyVersioningService:
         """
         Returns the diff between two versions of a strategy.
         """
+        # Security: Validate strategy_id and hashes
+        if not all(c.isalnum() or c in "-_" for c in strategy_id):
+            return "Error: Invalid strategy ID"
+        
+        # Basic hash validation (alphanumeric)
+        if not all(c.isalnum() for c in hash_a) or not all(c.isalnum() or c == "HEAD" for c in hash_b):
+             return "Error: Invalid version hashes"
+
         filename = f"{strategy_id}.py"
         try:
             return self._run_git(["diff", hash_a, hash_b, "--", filename])

@@ -68,7 +68,7 @@ async def post_system_heartbeat(
     x_heartbeat_token: Optional[str] = Header(None)
 ):
     """POST /api/v1/system/heartbeat - Receives health updates."""
-    expected_api_key = os.getenv("API_KEY", "AetherDesk_Unified_Key_2026")
+    expected_api_key = os.getenv("API_KEY")
     expected_jwt = os.getenv("JWT_SECRET")
 
     if apikey != expected_api_key and x_heartbeat_token != expected_jwt:
@@ -378,7 +378,7 @@ async def update_settings(data: Dict[str, Any] = Body(...)):
 @router_no_prefix.get("/apikey")
 async def get_system_apikey():
     """GET /apikey - Returns the engine's unified API key."""
-    return {"api_key": os.getenv("API_KEY", "AetherDesk_Unified_Key_2026")}
+    return {"api_key": os.getenv("API_KEY")}
 
 @router.get("/brokers")
 async def get_brokers_registry():

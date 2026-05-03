@@ -1,0 +1,10 @@
+# Gitleaks configuration file
+# This file is used to ignore specific historical leaks that have been remediated.
+
+[allowlist]
+description = "Ignore legacy historical secrets already remediated in the current code"
+fingerprints = [
+    "f0c6bf0bd8e9fd04124b3b02f038facf03ee8105:algo-trader/routers/system.py:generic-api-key:64",
+    "f0c6bf0bd8e9fd04124b3b02f038facf03ee8105:algo-trader/routers/webhooks.py:generic-api-key:16",
+    "f0c6bf0bd8e9fd04124b3b02f038facf03ee8105:algo-trader/blueprints/system_bp.py:generic-api-key:47"
+]

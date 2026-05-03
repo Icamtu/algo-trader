@@ -407,7 +407,7 @@ setup_tracing(app)
 @app.get("/apikey")
 async def get_root_apikey():
     """GET /apikey - Root-level API key retrieval for legacy frontend modules."""
-    return {"api_key": os.getenv("API_KEY", "AetherDesk_Unified_Key_2026")}
+    return {"api_key": os.getenv("API_KEY")}
 
 @app.get("/sandbox/api/configs")
 async def get_root_sandbox_configs():

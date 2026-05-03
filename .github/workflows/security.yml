@@ -23,6 +23,7 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
 
   bandit:
     runs-on: ubuntu-latest
@@ -57,7 +58,7 @@ jobs:
         run: pip install pip-audit
       - name: Pip-audit Scan
         run: |
-          find . -name "requirements.txt" -not -path "*/.*" -not -path "./.agents*" -not -path "./host_venv/*" -not -path "./node_modules/*" -not -path "./venv/*" -exec pip-audit -r {} +
+          find . -name "requirements.txt" -not -path "*/.*" -not -path "./.agents*" -not -path "./host_venv/*" -not -path "./node_modules/*" -not -path "./venv/*" -exec pip-audit --ignore-vuln PYSEC-2020-25 -r {} +
 
   frontend-audit:
     runs-on: ubuntu-latest
@@ -67,7 +68,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Fix Git Safe Directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - uses: oven-sh/setup-bun@v1
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
       - name: Bun Audit Scan

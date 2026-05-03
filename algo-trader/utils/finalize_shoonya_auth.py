@@ -59,7 +59,7 @@ def finalize_shoonya_session(auth_code, user_id=None, api_secret=None, broker_ap
     print(f"Performing handshake with code {auth_code[:5]}...")
     url = "https://api.shoonya.com/NorenWClientAPI/GenAcsTok"
     checksum_input = f"{client_id}{secret}{auth_code}"
-    checksum = hashlib.sha256(checksum_input.encode()).hexdigest()
+    checksum = hashlib.sha256(checksum_input.encode()).hexdigest() # nosec: Broker API contract requirement
 
     payload = {"code": auth_code, "checksum": checksum}
     payload_str = "jData=" + json.dumps(payload)

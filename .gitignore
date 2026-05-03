@@ -58,8 +58,6 @@ pnpm-debug.log*
 *.swp
 *.sw?
 .DS_Store
-routes.txt
-audit-backend.py
 mongodb_data_backup/
 trading-ui/build_error.txt
 trading-ui/build_log.txt
@@ -94,13 +92,11 @@ logs.txt
 *.json
 auth_api_fixed.py
 fix_auth.py
-start_fixed.sh
 test_browser.js
 pipeline_verification_report.json
 .agents_backup*/
 .venv/
-host_venv/
-**/.versions/
+.versions/
 graphify-out/
 *.corrupted*
 historify.duckdb*
@@ -111,3 +107,6 @@ historify.duckdb*
 GEMINI.md
 CLAUDE.md
 docker-compose.override.yml
+
+# Internal Planning & Progress (Moved to docs/)
+docs/

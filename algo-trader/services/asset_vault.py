@@ -45,8 +45,17 @@ class AssetVault:
         Registers a new asset or a new version of an asset.
         """
         try:
-            # 1. Save file to storage
-            filename = f"{name}_{version}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            # 1. Sanitize and Validate
+            allowed_types = ["strategy", "dataset", "result", "model"]
+            if asset_type not in allowed_types:
+                raise ValueError(f"Invalid asset type. Must be one of {allowed_types}")
+
+            # Enforce strict name and version normalization to prevent path traversal
+            safe_name = os.path.basename(name).replace(" ", "_")
+            safe_version = os.path.basename(version).replace(" ", "_")
+
+            # 2. Save file to storage
+            filename = f"{safe_name}_{safe_version}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
             if asset_type == "strategy":
                 filename += ".py"
             elif asset_type == "dataset":
@@ -56,6 +65,10 @@ class AssetVault:
 
             rel_path = os.path.join(asset_type, filename)
             abs_path = os.path.join(VAULT_STORAGE_PATH, rel_path)
+
+            # Ensure the final path is still within VAULT_STORAGE_PATH
+            if not os.path.abspath(abs_path).startswith(os.path.abspath(VAULT_STORAGE_PATH)):
+                raise PermissionError("Access denied: Invalid path construction.")
 
             with open(abs_path, "w") as f:
                 f.write(file_content)

@@ -164,7 +164,7 @@ class ShoonyaClient:
 
     def _generate_checksum(self, code: str) -> str:
         raw = f"{self.api_key}{self.secret_key}{code}"
-        return hashlib.sha256(raw.encode()).hexdigest()
+        return hashlib.sha256(raw.encode()).hexdigest() # nosec: Broker API contract requirement
 
     def login(self, code: str) -> Dict[str, Any]:
         """

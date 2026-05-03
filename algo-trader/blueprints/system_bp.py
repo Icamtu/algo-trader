@@ -44,7 +44,7 @@ def system_heartbeat():
     apikey = request.headers.get("apikey")
     token_header = request.headers.get("X-Heartbeat-Token")
 
-    expected_api_key = os.getenv("API_KEY", "AetherDesk_Unified_Key_2026")
+    expected_api_key = os.getenv("API_KEY")
     expected_jwt = os.getenv("JWT_SECRET")
 
     if apikey != expected_api_key and token_header != expected_jwt:
@@ -251,7 +251,7 @@ def proxy_to_openalgo():
     try:
         target_url = f"{os.getenv('OPENALGO_BASE_URL', 'http://openalgo-web:5000')}{request.path}"
         headers = {k: v for k, v in request.headers if k.lower() != 'host'}
-        headers['apikey'] = os.getenv('API_KEY', 'default_key')
+        headers['apikey'] = os.getenv('API_KEY')
 
         resp = requests.request(
             method=request.method,
@@ -263,7 +263,13 @@ def proxy_to_openalgo():
             timeout=5
         )
 
-        return (resp.content, resp.status_code, resp.headers.items())
+        # Security: Harden proxy response against XSS
+        from flask import Response
+        return Response(
+            resp.content,
+            status=resp.status_code,
+            headers={k: v for k, v in resp.headers.items() if k.lower() != 'content-encoding'}
+        )
     except Exception as e:
         logger.error(f"Proxy Error for {request.path}: {e}")
         return jsonify({"status": "error", "message": "Upstream proxy failure"}), 502

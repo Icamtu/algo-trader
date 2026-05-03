@@ -93,7 +93,7 @@ class InstrumentService:
             with duckdb.connect(self.db_path) as conn:
                 placeholder = ",".join(["?"] * len(tokens))
                 res = conn.execute(
-                    f"SELECT instrument_token, tradingsymbol FROM instrument_master WHERE instrument_token IN ({placeholder})",
+                    f"SELECT instrument_token, tradingsymbol FROM instrument_master WHERE instrument_token IN ({placeholder})",  # nosec B608
                     tokens
                 ).fetchall()
                 return {r[0]: r[1] for r in res}

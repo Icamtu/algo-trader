@@ -47,7 +47,7 @@ def _load_strategy_class(strategy_id: str) -> Optional[Type]:
 
         # Correct path for strategies
         strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
-        filename = filename.replace(":", "/")
+        filename = os.path.basename(filename.replace(":", "/"))
         file_path = os.path.join(strat_dir, filename)
 
         if not os.path.exists(file_path):
@@ -128,7 +128,7 @@ def get_strategy_file(filename):
     """Returns the content of a specific strategy file."""
     try:
         strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
-        filename = filename.replace(":", "/")
+        filename = os.path.basename(filename.replace(":", "/"))
         file_path = os.path.join(strat_dir, filename)
 
         if not os.path.exists(file_path):
@@ -249,7 +249,7 @@ def save_strategy_file(filename):
             return jsonify({"error": "No content provided"}), 400
 
         strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
-        filename = filename.replace(":", "/")
+        filename = os.path.basename(filename.replace(":", "/"))
         file_path = os.path.join(strat_dir, filename)
 
         if not os.path.abspath(file_path).startswith(os.path.abspath(strat_dir)):
@@ -282,7 +282,7 @@ def delete_strategy_file(filename):
             filename += ".py"
 
         strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
-        filename = filename.replace(":", "/")
+        filename = os.path.basename(filename.replace(":", "/"))
         file_path = os.path.join(strat_dir, filename)
 
         if not os.path.abspath(file_path).startswith(os.path.abspath(strat_dir)):
@@ -551,8 +551,8 @@ def create_strategy():
         if not name:
             return jsonify({"error": "Strategy name required"}), 400
 
-        # Clean name
-        name = name.replace(".py", "").replace(" ", "_").lower()
+        # Clean name and prevent path traversal
+        name = os.path.basename(name.replace(".py", "").replace(" ", "_").lower())
         filename = f"{name}.py"
         strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
         file_path = os.path.join(strat_dir, filename)
