@@ -45,6 +45,6 @@ async def finalize_zerodha_session(request_token: str):
 
         logger.info(f"✅ Zerodha session finalized for user {data.get('user_id')}. Persisted to TradeLogger.")
         return True
-    except Exception as e:
-        logger.error(f"❌ Error finalizing Zerodha session: {e}")
+    except Exception:
+        logger.error("Error finalizing Zerodha session", exc_info=True)
         return False
