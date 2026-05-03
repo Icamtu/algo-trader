@@ -38,15 +38,20 @@ export const PnLTracker: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      const [tel, pnl] = await Promise.all([
+      const [telRes, pnlRes] = await Promise.all([
         tradingService.getTelemetry(),
         tradingService.getTelemetryPnL()
       ]);
 
+      const tel = telRes?.data || telRes;
+      const pnl = pnlRes?.data || pnlRes;
+
       setTelemetry(tel);
       setPnLSummary(pnl);
 
-      if (pnl.equity_curve && pnl.equity_curve.length > 0) {
+      const equityCurve = Array.isArray(pnl?.equity_curve) ? pnl.equity_curve : [];
+
+      if (equityCurve.length > 0) {
         let maxEquity = -Infinity;
         let minEquity = Infinity;
         let maxEquityTime = "";
@@ -54,7 +59,7 @@ export const PnLTracker: React.FC = () => {
         let currentMax = -Infinity;
         let maxDdVal = 0;
 
-        const pnlData = pnl.equity_curve.map((point: any) => {
+        const pnlData = equityCurve.map((point: any) => {
           const val = point.value;
           const time = new Date(point.time).getTime() / 1000;
 
@@ -74,17 +79,9 @@ export const PnLTracker: React.FC = () => {
           return { time, value: val };
         });
 
-        const ddData = pnl.equity_curve.map((point: any) => {
-          const val = point.value;
-          const time = new Date(point.time).getTime() / 1000;
-          // Calculate drawdown for this point
-          // We need to track running max up to this point
-          return { time, value: val }; // Will recalculate correctly below
-        });
-
         // Re-calculate running max for accurate drawdown curve
         let runningMax = -Infinity;
-        const processedDdData = pnl.equity_curve.map((point: any) => {
+        const processedDdData = equityCurve.map((point: any) => {
           const val = point.value;
           if (val > runningMax) runningMax = val;
           return { time: new Date(point.time).getTime() / 1000, value: val - runningMax };
@@ -94,7 +91,7 @@ export const PnLTracker: React.FC = () => {
         if (ddSeriesRef.current) ddSeriesRef.current.setData(processedDdData);
 
         setMetrics({
-          currentMtm: pnl.equity_curve[pnl.equity_curve.length - 1].value,
+          currentMtm: equityCurve[equityCurve.length - 1].value,
           maxMtm: maxEquity,
           minMtm: minEquity,
           maxDd: maxDdVal,
@@ -368,7 +365,7 @@ export const PnLTracker: React.FC = () => {
           {/* Watermark */}
           {settings.showWatermark && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 opacity-[0.03]">
-               <span className="text-[12vw] font-black tracking-[0.2em] text-white select-none">OPENALGO</span>
+               <span className="text-[12vw] font-black tracking-[0.2em] text-white select-none">AETHERDESK</span>
             </div>
           )}
 
