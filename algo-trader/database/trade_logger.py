@@ -326,8 +326,8 @@ class TradeLogger:
             conn.commit()
             conn.close()
             logger.info(f"Trade database initialized at {self.db_file}")
-        except Exception as e:
-            logger.error(f"Error initializing trade database: {e}", exc_info=True)
+        except Exception:
+            logger.error("Error initializing trade database", exc_info=True)
 
     @staticmethod
     def _compute_trade_hash(prev_hash: str, timestamp: str, strategy: str, symbol: str,
@@ -379,12 +379,12 @@ class TradeLogger:
                     pnl=pnl or 0.0,
                     mode=mode
                 )
-            except Exception as ts_err:
-                logger.warning(f"Failed to sync trade to TimescaleDB: {ts_err}")
+            except Exception:
+                logger.warning("Failed to sync trade to TimescaleDB", exc_info=True)
 
             return trade_id
-        except Exception as e:
-            logger.error(f"Error logging trade: {e}")
+        except Exception:
+            logger.error("Error logging trade", exc_info=True)
             return None
 
     async def log_drift_event(self, symbol: str, local_qty: int, broker_qty: int, drift_type: str, action: str, snapshot: Dict[str, Any]):
@@ -404,8 +404,8 @@ class TradeLogger:
 
             await asyncio.to_thread(_sqlite_log)
             logger.warning(f"DRIFT_AUDIT: {symbol} | Local: {local_qty} | Broker: {broker_qty} | Action: {action}")
-        except Exception as e:
-            logger.error(f"Failed to log drift event: {e}")
+        except Exception:
+            logger.error("Failed to log drift event", exc_info=True)
 
     def rotate_logs(self, max_days: int = 30):
         """SQLite trade log rotation: keeps only the last N days of api_logs and trades to prevent bloat."""
@@ -439,8 +439,8 @@ class TradeLogger:
             conn.close()
 
             logger.info(f"Log Rotation Complete: Removed {api_logs_deleted} old api_logs, {queue_deleted} old queue entries.")
-        except Exception as e:
-            logger.error(f"Error during SQLite log rotation: {e}")
+        except Exception:
+            logger.error("Error during SQLite log rotation", exc_info=True)
 
     async def log_signal(self, strategy_id: str, symbol: str, signal_type: str, price: float, indicators: Dict[str, Any] = {}, ai_reasoning: str = "", conviction: float = 0.0):
         """Audit strategy decision signals in TimescaleDB."""
@@ -455,8 +455,8 @@ class TradeLogger:
                 ai_reasoning=ai_reasoning or "",
                 conviction=conviction
             )
-        except Exception as e:
-            logger.warning(f"Failed to log signal to TimescaleDB: {e}")
+        except Exception:
+            logger.warning("Failed to log signal to TimescaleDB", exc_info=True)
 
     def get_all_trades(self, limit=100):
         try:
@@ -467,8 +467,8 @@ class TradeLogger:
             rows = cursor.fetchall()
             conn.close()
             return [Trade(**dict(row)) for row in rows]
-        except Exception as e:
-            logger.error(f"Error fetching all trades: {e}")
+        except Exception:
+            logger.error("Error fetching all trades", exc_info=True)
             return []
 
     async def get_all_trades_async(self, limit=100):
@@ -487,8 +487,8 @@ class TradeLogger:
             rows = cursor.fetchall()
             conn.close()
             return [Trade(**dict(row)) for row in rows]
-        except Exception as e:
-            logger.error(f"Error fetching trades by mode: {e}")
+        except Exception:
+            logger.error("Error fetching trades by mode", exc_info=True)
             return []
 
     async def get_trades_by_mode_async(self, mode: str = "sandbox", limit: int = 100):
@@ -517,7 +517,8 @@ class TradeLogger:
                 "total_charges": round(float(np.sum(charges)), 2),
                 "net_pnl": round(float(np.sum(net_pnls)), 2)
             }
-        except Exception as e: return {"error": str(e)}
+        except Exception:
+            return {"error": "Internal metrics error"}
 
     async def get_strategy_metrics_async(self, strategy: str) -> Dict[str, Any]:
         return await asyncio.to_thread(self.get_strategy_metrics, strategy)
@@ -530,8 +531,8 @@ class TradeLogger:
             rows = cursor.fetchall()
             conn.close()
             return {row[0]: row[1] for row in rows}
-        except Exception as e:
-            logger.error(f"Error fetching system settings: {e}")
+        except Exception:
+            logger.error("Error fetching system settings", exc_info=True)
             return {}
 
     def update_system_setting(self, key: str, value: str) -> bool:
@@ -548,8 +549,8 @@ class TradeLogger:
             conn.commit()
             conn.close()
             return True
-        except Exception as e:
-            logger.error(f"Error updating system setting {key}: {e}")
+        except Exception:
+            logger.error(f"Error updating system setting {key}", exc_info=True)
             return False
 
     def get_broker_config(self) -> Dict[str, Any]:
@@ -570,8 +571,8 @@ class TradeLogger:
                             broker_config[broker_name] = {}
                         broker_config[broker_name][config_key] = v
             return broker_config
-        except Exception as e:
-            logger.error(f"Error fetching broker config: {e}")
+        except Exception:
+            logger.error("Error fetching broker config", exc_info=True)
             return {}
 
     def update_broker_config(self, broker_name: str, config: Dict[str, Any]) -> bool:
@@ -585,8 +586,8 @@ class TradeLogger:
                 if not self.update_system_setting(setting_key, str(v)):
                     success = False
             return success
-        except Exception as e:
-            logger.error(f"Error updating broker config for {broker_name}: {e}")
+        except Exception:
+            logger.error(f"Error updating broker config for {broker_name}", exc_info=True)
             return False
 
     def get_risk_settings(self) -> Dict[str, Any]:
@@ -598,8 +599,8 @@ class TradeLogger:
             rows = cursor.fetchall()
             conn.close()
             return {row[0]: row[1] for row in rows}
-        except Exception as e:
-            logger.error(f"Error fetching risk settings: {e}")
+        except Exception:
+            logger.error("Error fetching risk settings", exc_info=True)
             return {}
 
     def update_risk_setting(self, key: str, value: Any):
@@ -614,8 +615,8 @@ class TradeLogger:
             """, (key, float(value), now))
             conn.commit()
             conn.close()
-        except Exception as e:
-            logger.error(f"Error updating risk setting {key}: {e}")
+        except Exception:
+            logger.error(f"Error updating risk setting {key}", exc_info=True)
 
     def get_trades_by_symbol(self, symbol: str, limit: int = 50) -> List[Trade]:
         try:
@@ -626,8 +627,8 @@ class TradeLogger:
             rows = cursor.fetchall()
             conn.close()
             return [Trade(**dict(row)) for row in rows]
-        except Exception as e:
-            logger.error(f"Error fetching trades by symbol {symbol}: {e}")
+        except Exception:
+            logger.error(f"Error fetching trades by symbol {symbol}", exc_info=True)
             return []
 
     def get_trades_by_strategy(self, strategy: str, limit: int = 100) -> List[Trade]:
@@ -646,8 +647,8 @@ class TradeLogger:
             rows = cursor.fetchall()
             conn.close()
             return [Trade(**dict(row)) for row in rows]
-        except Exception as e:
-            logger.error(f"Error fetching trades by strategy {strategy}: {e}")
+        except Exception:
+            logger.error("Error fetching trades by strategy %s", strategy, exc_info=True)
             return []
 
     def get_daily_charges(self) -> float:
@@ -660,8 +661,8 @@ class TradeLogger:
             res = cursor.fetchone()
             conn.close()
             return round(float(res[0] or 0.0), 2)
-        except Exception as e:
-            logger.error(f"Error getting daily charges: {e}")
+        except Exception:
+            logger.error("Error getting daily charges", exc_info=True)
             return 0.0
 
     def get_symbol_pnl(self, symbol: str) -> Dict[str, float]:
@@ -672,8 +673,8 @@ class TradeLogger:
             pnl = cursor.fetchone()[0] or 0.0
             conn.close()
             return {"symbol": symbol, "pnl": round(float(pnl), 2)}
-        except Exception as e:
-            logger.error(f"Error fetching symbol PnL for {symbol}: {e}")
+        except Exception:
+            logger.error("Error fetching symbol PnL for %s", symbol, exc_info=True)
             return {"symbol": symbol, "pnl": 0.0}
 
     def get_strategy_pnl(self, strategy: str) -> Dict[str, Any]:
@@ -691,8 +692,8 @@ class TradeLogger:
             count = row[1] or 0
             conn.close()
             return {"strategy": strategy, "pnl": round(float(pnl), 2), "trade_count": count}
-        except Exception as e:
-            logger.error(f"Error fetching strategy PnL for {strategy}: {e}")
+        except Exception:
+            logger.error("Error fetching strategy PnL for %s", strategy, exc_info=True)
             return {"strategy": strategy, "pnl": 0.0, "trade_count": 0}
 
     def get_open_positions(self) -> Dict[str, int]:
@@ -710,8 +711,8 @@ class TradeLogger:
             rows = cursor.fetchall()
             conn.close()
             return {row[0]: row[1] for row in rows}
-        except Exception as e:
-            logger.error(f"Error fetching open positions: {e}")
+        except Exception:
+            logger.error("Error fetching open positions", exc_info=True)
             return {}
 
     def reconcile_positions(self, symbol: str, target_qty: int, strategy: str = "System"):
@@ -738,8 +739,8 @@ class TradeLogger:
             conn.close()
             logger.info(f"Reconciled {symbol}: current={current_qty}, target={target_qty}, injected_{side}={abs_qty} (ID: {tid})")
             return True
-        except Exception as e:
-            logger.error(f"Error reconciling positions for {symbol}: {e}")
+        except Exception:
+            logger.error("Error reconciling positions for %s", symbol, exc_info=True)
             return False
 
     def reset_positions(self, symbol: str = None):
@@ -771,8 +772,8 @@ class TradeLogger:
             conn.close()
             if row: return dict(row)
             return {"strategy_id": strategy_id, "confidence_score": 0.5, "regime_preference": "UNKNOWN"}
-        except Exception as e:
-            logger.error(f"Error fetching strategy personality for {strategy_id}: {e}")
+        except Exception:
+            logger.error("Error fetching strategy personality for %s", strategy_id, exc_info=True)
             return {}
 
     def update_strategy_personality(self, strategy_id: str, updates: Dict[str, Any]):
@@ -808,7 +809,8 @@ class TradeLogger:
                 cursor.execute(f"INSERT INTO strategy_personality ({', '.join(keys)}) VALUES ({placeholders})", vals) # nosec
             conn.commit()
             conn.close()
-        except Exception as e: logger.error(f"Error updating personality: {e}")
+        except Exception:
+            logger.error("Error updating personality", exc_info=True)
 
     def record_decision_episode(self, trade_id: int, episode_data: Dict[str, Any]):
         try:
@@ -820,7 +822,8 @@ class TradeLogger:
             """, (trade_id, episode_data.get('market_regime'), episode_data.get('conviction_at_entry'), episode_data.get('expected_pnl'), episode_data.get('actual_pnl_normalized'), episode_data.get('semantic_lessons')))
             conn.commit()
             conn.close()
-        except Exception as e: logger.error(f"Error recording episode: {e}")
+        except Exception:
+            logger.error("Error recording episode", exc_info=True)
 
     def get_recent_episodes(self, strategy_id: Optional[str] = None, limit: int = 20) -> List[Dict[str, Any]]:
         try:
@@ -838,8 +841,8 @@ class TradeLogger:
             rows = cursor.fetchall()
             conn.close()
             return [dict(row) for row in rows]
-        except Exception as e:
-            logger.error(f"Error fetching recent episodes: {e}")
+        except Exception:
+            logger.error("Error fetching recent episodes", exc_info=True)
             return []
 
     # --- Strategy Safeguard & Personality Management ---
@@ -859,8 +862,8 @@ class TradeLogger:
                 "max_loss_inr": 0.0,
                 "is_armed": 1
             }
-        except Exception as e:
-            logger.error(f"Error fetching safeguards for {strategy_id}: {e}")
+        except Exception:
+            logger.error("Error fetching safeguards for %s", strategy_id, exc_info=True)
             return {}
 
     def get_all_strategy_safeguards(self) -> List[Dict[str, Any]]:
@@ -872,8 +875,8 @@ class TradeLogger:
             rows = cursor.fetchall()
             conn.close()
             return [dict(row) for row in rows]
-        except Exception as e:
-            logger.error(f"Error fetching all safeguards: {e}")
+        except Exception:
+            logger.error("Error fetching all safeguards", exc_info=True)
             return []
 
     def update_strategy_safeguard(self, strategy_id: str, updates: Dict[str, Any]):
@@ -900,8 +903,8 @@ class TradeLogger:
 
             conn.commit()
             conn.close()
-        except Exception as e:
-            logger.error(f"Error updating safeguard: {e}")
+        except Exception:
+            logger.error("Error updating safeguard", exc_info=True)
 
     def get_all_strategy_personalities(self) -> List[Dict[str, Any]]:
         try:
@@ -912,8 +915,8 @@ class TradeLogger:
             rows = cursor.fetchall()
             conn.close()
             return [dict(row) for row in rows]
-        except Exception as e:
-            logger.error(f"Error fetching all personalities: {e}")
+        except Exception:
+            logger.error("Error fetching all personalities", exc_info=True)
             return []
 
     def log_api_call(self, api_type, request_data, response_data, strategy="System"):
@@ -944,8 +947,8 @@ class TradeLogger:
             rows = cursor.fetchall()
             conn.close()
             return [ {**dict(r), "request_data": json.loads(r["request_data"]), "response_data": json.loads(r["response_data"])} for r in rows ]
-        except Exception as e:
-            logger.error(f"Error fetching API logs: {e}")
+        except Exception:
+            logger.error("Error fetching API logs", exc_info=True)
             return []
 
     async def get_pnl_summary(self, unrealized_pnl: float = 0.0, mode: str = None) -> Dict[str, Any]:
@@ -1009,9 +1012,9 @@ class TradeLogger:
                 "daily": {"pnl": daily_pnl, "charges": daily_charges, "net": round(daily_pnl - daily_charges + unrealized_pnl, 2)},
                 "equity_curve": curve
             }
-        except Exception as e:
-            logger.error(f"Error generating PnL summary: {e}")
-            return {"error": str(e)}
+        except Exception:
+            logger.error("Error generating PnL summary", exc_info=True)
+            return {"error": "Internal PnL error"}
 
     async def get_performance_metrics(self) -> Dict[str, Any]:
         """Calculates risk ratios (Sharpe, Sortino, Drawdown)."""
@@ -1065,9 +1068,9 @@ class TradeLogger:
                 "profit_factor": round(float(profit_factor), 2),
                 "total_trades": len(returns)
             }
-        except Exception as e:
-            logger.error(f"Error generating performance metrics: {e}")
-            return {"error": str(e)}
+        except Exception:
+            logger.error("Error generating performance metrics", exc_info=True)
+            return {"error": "Internal performance error"}
 
     # --- HITL Action Center Methods ---
 
@@ -1101,8 +1104,8 @@ class TradeLogger:
             order_id = cursor.lastrowid
             conn.close()
             return order_id
-        except Exception as e:
-            logger.error(f"Error queuing order for approval: {e}")
+        except Exception:
+            logger.error("Error queuing order for approval", exc_info=True)
             return None
 
     def get_action_queue(self, status: str = 'pending', limit: int = 100) -> List[dict]:
@@ -1129,8 +1132,8 @@ class TradeLogger:
                         pass
                 result.append(r)
             return result
-        except Exception as e:
-            logger.error(f"Error fetching action queue: {e}")
+        except Exception:
+            logger.error("Error fetching action queue", exc_info=True)
             return []
 
     def get_action_order(self, order_id: int) -> Optional[dict]:
@@ -1152,8 +1155,8 @@ class TradeLogger:
                 except json.JSONDecodeError:
                     pass
             return r
-        except Exception as e:
-            logger.error(f"Error fetching action order {order_id}: {e}")
+        except Exception:
+            logger.error("Error fetching action order %s", order_id, exc_info=True)
             return None
 
     def update_action_order_status(self, order_id: int, status: str, reason: Optional[str] = None) -> bool:
@@ -1169,8 +1172,8 @@ class TradeLogger:
             success = cursor.rowcount > 0
             conn.close()
             return success
-        except Exception as e:
-            logger.error(f"Error updating action order status: {e}")
+        except Exception:
+            logger.error("Error updating action order status", exc_info=True)
             return False
 
     def delete_action_order(self, order_id: int) -> bool:
@@ -1182,8 +1185,8 @@ class TradeLogger:
             success = cursor.rowcount > 0
             conn.close()
             return success
-        except Exception as e:
-            logger.error(f"Error deleting action order {order_id}: {e}")
+        except Exception:
+            logger.error("Error deleting action order %s", order_id, exc_info=True)
             return False
 
     def get_action_center_stats(self) -> dict:
@@ -1207,8 +1210,8 @@ class TradeLogger:
                 "persistence": "SQLite/WAL",
                 "db_path": os.path.basename(self.db_file)
             }
-        except Exception as e:
-            logger.error(f"Error fetching action center stats: {e}")
+        except Exception:
+            logger.error("Error fetching action center stats", exc_info=True)
             return {"pending": 0, "approved": 0, "rejected": 0, "health": "error", "persistence": "Disconnected"}
 
 
@@ -1222,8 +1225,8 @@ class TradeLogger:
             conn.commit()
             conn.close()
             return count
-        except Exception as e:
-            logger.error(f"Error cancelling all pending signals: {e}")
+        except Exception:
+            logger.error("Error cancelling all pending signals", exc_info=True)
             return 0
 
 
@@ -1238,8 +1241,8 @@ class TradeLogger:
             rows = cursor.fetchall()
             conn.close()
             return [dict(row) for row in rows]
-        except Exception as e:
-            logger.error(f"Error fetching alerts: {e}")
+        except Exception:
+            logger.error("Error fetching alerts", exc_info=True)
             return []
 
     def create_alert(self, alert_type: str, symbol: str, condition: str, value: float, channel: str = "telegram", message: str = "") -> Optional[int]:
@@ -1254,8 +1257,8 @@ class TradeLogger:
             alert_id = cursor.lastrowid
             conn.close()
             return alert_id
-        except Exception as e:
-            logger.error(f"Error creating alert: {e}")
+        except Exception:
+            logger.error("Error creating alert", exc_info=True)
             return None
 
     def delete_alert(self, alert_id: int) -> bool:
@@ -1267,8 +1270,8 @@ class TradeLogger:
             success = cursor.rowcount > 0
             conn.close()
             return success
-        except Exception as e:
-            logger.error(f"Error deleting alert: {e}")
+        except Exception:
+            logger.error("Error deleting alert", exc_info=True)
             return False
 
     def acknowledge_alert(self, alert_id: int) -> bool:
@@ -1283,8 +1286,8 @@ class TradeLogger:
             success = cursor.rowcount > 0
             conn.close()
             return success
-        except Exception as e:
-            logger.error(f"Error acknowledging alert {alert_id}: {e}")
+        except Exception:
+            logger.error("Error acknowledging alert %s", alert_id, exc_info=True)
             return False
 
     # --- AutoResearch Task Persistence ---
@@ -1298,8 +1301,9 @@ class TradeLogger:
             )
             conn.commit()
             conn.close()
-        except Exception as e:
-            logger.warning(f"AR task create failed: {e}")
+        except Exception:
+            logger.warning("AR task create failed", exc_info=True)
+            return None
 
     def update_ar_task(self, task_id: str, status: str, result: Any = None, error: str = None) -> None:
         try:
@@ -1311,8 +1315,8 @@ class TradeLogger:
             )
             conn.commit()
             conn.close()
-        except Exception as e:
-            logger.warning(f"AR task update failed: {e}")
+        except Exception:
+            logger.warning("AR task update failed", exc_info=True)
 
     def get_ar_task(self, task_id: str) -> Optional[Dict[str, Any]]:
         try:
@@ -1329,8 +1333,8 @@ class TradeLogger:
                 d["result"] = json.loads(d["result_json"])
             del d["result_json"]
             return d
-        except Exception as e:
-            logger.warning(f"AR task get failed: {e}")
+        except Exception:
+            logger.warning("AR task get failed", exc_info=True)
             return None
 
     # --- Backtest Results Methods ---
@@ -1347,8 +1351,8 @@ class TradeLogger:
             run_id = cursor.lastrowid
             conn.close()
             return run_id
-        except Exception as e:
-            logger.error(f"Error saving backtest run: {e}")
+        except Exception:
+            logger.error("Error saving backtest run", exc_info=True)
             return None
 
     def get_latest_backtest_run(self, strategy_id: Optional[str] = None) -> Optional[dict]:
@@ -1372,8 +1376,8 @@ class TradeLogger:
             r["metrics"] = json.loads(r["metrics"])
             r["trades"] = json.loads(r["trades"])
             return r
-        except Exception as e:
-            logger.error(f"Error fetching latest backtest run: {e}")
+        except Exception:
+            logger.error("Error fetching latest backtest run", exc_info=True)
             return None
 
     async def save_backtest_run_async(self, strategy_id: str, symbol: str, days: int, interval: str, metrics: dict, trades: list):
@@ -1392,8 +1396,8 @@ class TradeLogger:
             rows = cursor.fetchall()
             conn.close()
             return [ {**dict(r), "snapshot": json.loads(r["snapshot_json"]) if r["snapshot_json"] else {}} for r in rows ]
-        except Exception as e:
-            logger.error(f"Error fetching drift events: {e}")
+        except Exception:
+            logger.error("Error fetching drift events", exc_info=True)
             return []
 
     async def get_drift_events_async(self, limit: int = 50) -> List[Dict[str, Any]]:
