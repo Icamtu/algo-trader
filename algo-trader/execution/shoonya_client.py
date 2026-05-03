@@ -163,8 +163,13 @@ class ShoonyaClient:
         self.session.headers.pop("Authorization", None)
 
     def _generate_checksum(self, code: str) -> str:
+        """
+        Generates authentication checksum required by Shoonya API contract.
+        Note: SHA256 is mandated by the broker for this handshake.
+        """
         raw = f"{self.api_key}{self.secret_key}{code}"
-        return hashlib.sha256(raw.encode()).hexdigest() # nosec: Broker API contract requirement
+        # codeql [py/weak-cryptographic-hash-on-sensitive-data] - Mandatory broker API contract requirement
+        return hashlib.sha256(raw.encode()).hexdigest()  # nosec: B324
 
     def login(self, code: str) -> Dict[str, Any]:
         """
@@ -221,9 +226,9 @@ class ShoonyaClient:
             if self._is_error_response(body):
                 logger.warning("Shoonya API error response [%s]: %s", endpoint, body)
             return body
-        except requests.RequestException as exc:
-            logger.error("Shoonya API request failed [%s]: %s", endpoint, exc)
-            return {"status": "error", "message": str(exc)}
+        except requests.RequestException:
+            logger.error("Shoonya API request failed for %s", endpoint, exc_info=True)
+            return {"status": "error", "message": "Shoonya API request failed"}
 
     @staticmethod
     def _looks_like_token_response(response: Dict[str, Any]) -> bool:
