@@ -116,10 +116,16 @@ async def get_content(asset_id):
             return jsonify({"error": "Asset not found"}), 404
 
         file_path = row['file_path']
-        if not os.path.exists(file_path):
+        base_storage = settings.get('storage_path', '/app/storage')
+        abs_path = os.path.abspath(file_path)
+        
+        if not abs_path.startswith(os.path.abspath(base_storage)):
+             return jsonify({"error": "Access denied: Forbidden path"}), 403
+
+        if not os.path.exists(abs_path):
             return jsonify({"error": "File missing on storage board"}), 404
 
-        return send_file(file_path)
+        return send_file(abs_path)
     finally:
         await conn.close()
 

@@ -24,35 +24,39 @@ class StrategyVersioningService:
         except:
             logger.warning(f"Strategies path {self.strategies_path} is not in a git repository. Versioning will be limited.")
 
-    def _run_git(self, args: List[str]) -> str:
-        """
-        Executes a git command with sanitization.
-        """
-        ALLOWED_COMMANDS = {"log", "add", "status", "commit", "rev-parse", "diff", "show"}
-        
-        if not args or args[0] not in ALLOWED_COMMANDS:
-            raise Exception(f"Unauthorized Git command: {args[0] if args else 'None'}")
     def _run_git(self, cmd: str, args: List[str]) -> str:
         """
         Executes a git command with strict validation to prevent injection.
         """
-        if cmd not in self.ALLOWED_COMMANDS:
+        ALLOWED_COMMANDS = {"log", "add", "status", "commit", "rev-parse", "diff", "show"}
+        
+        if cmd not in ALLOWED_COMMANDS:
+            logger.error(f"Unauthorized Git command attempted: {cmd}")
             raise PermissionError(f"Git command '{cmd}' is not allowed.")
 
-        # Flag validation: only allow simple flags, no --ext-diff, --upload-pack, etc.
+        # Flag validation: only allow safe flags, prevent dangerous ones like --ext-diff
         for arg in args:
-            if arg.startswith("-") and not all(c in "abcdefghijklmnopqrstuvwxyz-" for c in arg[1:]):
-                 raise PermissionError(f"Potentially unsafe git flag detected: {arg}")
-            if ";" in arg or "&" in arg or "|" in arg or ">" in arg:
+            if arg.startswith("-"):
+                # Basic safety: only allow alphanumeric flags and common delimiters
+                if not all(c.isalnum() or c in "-=_:" for c in arg[1:]):
+                     logger.warning(f"Potentially unsafe git flag rejected: {arg}")
+                     raise PermissionError(f"Potentially unsafe git flag detected: {arg}")
+            
+            # Shell injection character prevention
+            if any(c in arg for c in ";;|&><`$"):
+                 logger.error(f"Unsafe character in git argument: {arg}")
                  raise PermissionError(f"Unsafe character in git argument: {arg}")
 
         full_cmd = ["git", cmd] + args
-        res = subprocess.run(full_cmd, cwd=self.strategies_path, capture_output=True, text=True)
-
-        if res.returncode != 0:
-            logger.error(f"Git Error ({cmd}): {res.stderr}")
-            raise Exception(f"Git Error: {res.stderr}")
-        return res.stdout
+        try:
+            res = subprocess.run(full_cmd, cwd=self.strategies_path, capture_output=True, text=True, check=True)
+            return res.stdout
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Git Error ({cmd}): {e.stderr}")
+            raise Exception(f"Git Error: {e.stderr}")
+        except Exception as e:
+            logger.error(f"Execution Error ({cmd}): {e}")
+            raise
 
     def get_strategy_history(self, strategy_id: str) -> List[Dict[str, Any]]:
         """
@@ -95,16 +99,16 @@ class StrategyVersioningService:
 
         filename = f"{strategy_id}.py"
         try:
-            self._run_git(["add", filename])
+            self._run_git("add", [filename])
             # Check if there are changes to commit
-            status = self._run_git(["status", "--short", filename])
+            status = self._run_git("status", ["--short", filename])
             if not status:
                 return {"status": "success", "message": "No changes to commit"}
 
-            self._run_git(["commit", "-m", f"Strategy Update [{strategy_id}]: {message}"])
+            self._run_git("commit", ["-m", f"Strategy Update [{strategy_id}]: {message}"])
 
             # Get latest hash
-            last_hash = self._run_git(["rev-parse", "HEAD"]).strip()
+            last_hash = self._run_git("rev-parse", ["HEAD"]).strip()
 
             return {
                 "status": "success",
@@ -129,7 +133,7 @@ class StrategyVersioningService:
 
         filename = f"{strategy_id}.py"
         try:
-            return self._run_git(["diff", hash_a, hash_b, "--", filename])
+            return self._run_git("diff", [hash_a, hash_b, "--", filename])
         except Exception as e:
             return f"Error fetching diff: {str(e)}"
 
