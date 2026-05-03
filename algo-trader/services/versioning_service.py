@@ -25,8 +25,32 @@ class StrategyVersioningService:
             logger.warning(f"Strategies path {self.strategies_path} is not in a git repository. Versioning will be limited.")
 
     def _run_git(self, args: List[str]) -> str:
-        res = subprocess.run(["git"] + args, cwd=self.strategies_path, capture_output=True, text=True)
+        """
+        Executes a git command with sanitization.
+        """
+        ALLOWED_COMMANDS = {"log", "add", "status", "commit", "rev-parse", "diff", "show"}
+        
+        if not args or args[0] not in ALLOWED_COMMANDS:
+            raise Exception(f"Unauthorized Git command: {args[0] if args else 'None'}")
+    def _run_git(self, cmd: str, args: List[str]) -> str:
+        """
+        Executes a git command with strict validation to prevent injection.
+        """
+        if cmd not in self.ALLOWED_COMMANDS:
+            raise PermissionError(f"Git command '{cmd}' is not allowed.")
+
+        # Flag validation: only allow simple flags, no --ext-diff, --upload-pack, etc.
+        for arg in args:
+            if arg.startswith("-") and not all(c in "abcdefghijklmnopqrstuvwxyz-" for c in arg[1:]):
+                 raise PermissionError(f"Potentially unsafe git flag detected: {arg}")
+            if ";" in arg or "&" in arg or "|" in arg or ">" in arg:
+                 raise PermissionError(f"Unsafe character in git argument: {arg}")
+
+        full_cmd = ["git", cmd] + args
+        res = subprocess.run(full_cmd, cwd=self.strategies_path, capture_output=True, text=True)
+
         if res.returncode != 0:
+            logger.error(f"Git Error ({cmd}): {res.stderr}")
             raise Exception(f"Git Error: {res.stderr}")
         return res.stdout
 
@@ -42,7 +66,7 @@ class StrategyVersioningService:
         filename = f"{strategy_id}.py"
         try:
             # git log --pretty=format:"%H|%an|%ad|%s" filename
-            output = self._run_git(["log", "--pretty=format:%H|%an|%ai|%s", "--", filename])
+            output = self._run_git("log", ["--pretty=format:%H|%an|%ai|%s", "--", filename])
 
             history = []
             if not output: return history
