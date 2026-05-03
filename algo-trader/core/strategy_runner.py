@@ -79,8 +79,8 @@ class StrategyRunner:
             with open(sector_path, "r") as f:
                 self.sector_config = yaml.safe_load(f)
                 logger.info("Sector Registry loaded successfully.")
-        except Exception as e:
-            logger.error(f"Failed to load sectors.yaml: {e}")
+        except Exception:
+            logger.error("Failed to load sectors.yaml", exc_info=True)
             self.sector_config = {"tiers": {}}
 
     def _discover_strategies(self):
@@ -264,7 +264,7 @@ class StrategyRunner:
         )
         for (strategy_key, strategy), result in zip(startup_pairs, results):
             if isinstance(result, Exception):
-                logger.error("Strategy '%s' failed during startup: %s", strategy.name, result, exc_info=True)
+                logger.error("Strategy '%s' failed during startup", strategy.name, exc_info=True)
                 self.market_stream.unsubscribe(strategy.symbols, strategy.on_tick)
                 self._strategies_by_key.pop(strategy_key, None)
             else:
@@ -336,8 +336,8 @@ class StrategyRunner:
 
             logger.warning(f"INSTITUTIONAL HALT >> {strategy_key} is now fully halted.")
             return True
-        except Exception as e:
-            logger.error(f"Failed to halt strategy {strategy_key}: {e}")
+        except Exception:
+            logger.error("Failed to halt strategy %s", strategy_key, exc_info=True)
             return False
 
     async def unhalt_strategy(self, strategy_key: str) -> bool:
@@ -352,8 +352,8 @@ class StrategyRunner:
 
             logger.info(f"INSTITUTIONAL RESUME >> {strategy_key} has been unhalted.")
             return True
-        except Exception as e:
-            logger.error(f"Failed to unhalt strategy {strategy_key}: {e}")
+        except Exception:
+            logger.error("Failed to unhalt strategy %s", strategy_key, exc_info=True)
             return False
 
     def get_telemetry(self) -> Dict[str, Any]:
@@ -444,8 +444,8 @@ class StrategyRunner:
                                 "action": "HALT_AND_LIQUIDATE"
                             }))
 
-            except Exception as e:
-                logger.error(f"Safeguard Loop Error: {e}")
+            except Exception:
+                logger.error("Safeguard Loop Error", exc_info=True)
                 await asyncio.sleep(30)
 
     async def _trading_hours_monitor_loop(self):
@@ -474,8 +474,8 @@ class StrategyRunner:
                             try:
                                 await self.order_manager.liquidate_strategy(strategy_id)
                                 await self.stop_strategies([strategy_id])
-                            except Exception as exec_err:
-                                logger.error(f"Failed to execute auto square-off for {strategy_id}: {exec_err}")
+                            except Exception:
+                                logger.error("Failed to execute auto square-off for %s", strategy_id, exc_info=True)
 
                             if self.telemetry_callback:
                                 asyncio.create_task(self.telemetry_callback("auto_square_off", {
@@ -483,11 +483,11 @@ class StrategyRunner:
                                     "time": str(sq_off_t),
                                     "action": "LIQUIDATE_AND_STOP"
                                 }))
-                    except Exception as parse_err:
-                        logger.error(f"Error checking square-off for {strategy_id}: {parse_err}")
+                    except Exception:
+                        logger.error("Error checking square-off for %s", strategy_id, exc_info=True)
 
-            except Exception as e:
-                logger.error(f"Trading Hours Loop Error: {e}")
+            except Exception:
+                logger.error("Trading Hours Loop Error", exc_info=True)
 
     async def _market_regime_loop(self):
         """
@@ -535,8 +535,8 @@ class StrategyRunner:
 
                     try:
                         logger.warning(f"Regime Agent: OpenAlgo decommissioned. Skipping sync for {symbol}.")
-                    except Exception as sync_err:
-                        logger.error(f"Regime Agent Sync Error: {sync_err}")
+                    except Exception:
+                        logger.error("Regime Agent Sync Error", exc_info=True)
 
                 # 3. Analyze Regime
                 if candles:
@@ -555,8 +555,8 @@ class StrategyRunner:
                     if self.telemetry_callback:
                         asyncio.create_task(self.telemetry_callback("regime_update", self.current_regime_data))
 
-            except Exception as e:
-                logger.error(f"Regime Agent Loop Error: {e}")
+            except Exception:
+                logger.error("Regime Agent Loop Error", exc_info=True)
 
             # Wait for next 15m slice (900s)
             await asyncio.sleep(900)
@@ -607,8 +607,8 @@ class StrategyRunner:
                     analysis_tasks = [analyze_and_update(s, c, tier_key) for s, c in zip(sectors, all_candles)]
                     await asyncio.gather(*analysis_tasks)
 
-            except Exception as e:
-                logger.error(f"Sector Sentiment Loop Error: {e}")
+            except Exception:
+                logger.error("Sector Sentiment Loop Error", exc_info=True)
 
             await asyncio.sleep(900) # 15m interval
 
@@ -647,7 +647,7 @@ class StrategyRunner:
 
             logger.warning(f"Sector Sync: OpenAlgo decommissioned. Skipping sync for {symbol}.")
 
-        except Exception as e:
-            logger.warning(f"Failed to fetch candles for {symbol}: {e}")
+        except Exception:
+            logger.warning("Failed to fetch candles for %s", symbol, exc_info=True)
 
         return []
