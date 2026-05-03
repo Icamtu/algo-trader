@@ -37,8 +37,8 @@ class MarketDataService:
                         ltp = float(quote.get("lp", quote.get("ltp", 0)))
                         if ltp > 0:
                             return ltp
-                except Exception as ne:
-                    logger.debug(f"Native broker quote failed for {symbol}: {ne}")
+                except Exception:
+                    logger.debug("Native broker quote failed for %s", symbol, exc_info=True)
 
             # Try paper broker (sandbox mode)
             if getattr(om, "paper_broker", None):
@@ -48,8 +48,8 @@ class MarketDataService:
                         ltp = float(quote.get("lp", quote.get("ltp", 0)))
                         if ltp > 0:
                             return ltp
-                except Exception as pe:
-                    logger.debug(f"Paper broker quote failed for {symbol}: {pe}")
+                except Exception:
+                    logger.debug("Paper broker quote failed for %s", symbol, exc_info=True)
 
             # Fallback: use WebSocket tick buffer's last known prices
             try:
@@ -58,15 +58,15 @@ class MarketDataService:
                 tick = ws_manager.last_known_ticks.get(symbol, {})
                 ltp = float(tick.get("ltp", 0))
                 if ltp > 0:
-                    logger.info(f"Using WS fallback LTP for {symbol}: {ltp}")
+                    logger.info("Using WS fallback LTP for %s: %s", symbol, ltp)
                     return ltp
             except Exception:
                 pass
 
-            logger.warning(f"Could not fetch LTP for {symbol} from any source.")
+            logger.warning("Could not fetch LTP for %s from any source.", symbol)
             return 0.0
-        except Exception as e:
-            logger.error(f"Error fetching LTP for {symbol}: {e}")
+        except Exception:
+            logger.error("Error fetching LTP for %s", symbol, exc_info=True)
             return 0.0
 
     async def get_option_chain(
@@ -96,8 +96,8 @@ class MarketDataService:
                     if quote:
                         spot_price = float(quote.get("lp", quote.get("ltp", 0)))
                         prev_close = float(quote.get("pc", quote.get("prev_close", spot_price)))
-            except Exception as qe:
-                logger.debug(f"Quote fetch failed for {underlying}: {qe}")
+            except Exception:
+                logger.debug("Quote fetch failed for %s", underlying, exc_info=True)
 
             if spot_price <= 0:
                  spot_price = await self.get_underlying_ltp(underlying, exchange)
@@ -232,8 +232,8 @@ class MarketDataService:
                 "chain": chain
             }
 
-        except Exception as e:
-            logger.error(f"Error building option chain for {underlying}: {e}", exc_info=True)
+        except Exception:
+            logger.error("Error building option chain for %s", underlying, exc_info=True)
             return {"status": "error", "message": "Internal service error"}
 
     async def get_available_expiries(self, underlying: str, exchange: str = "NSE") -> List[str]:
@@ -271,8 +271,8 @@ class MarketDataService:
                 formatted.append("".join(parts).upper())
 
             return sorted(list(set(formatted)))
-        except Exception as e:
-            logger.error(f"Error fetching expiries for {underlying}: {e}")
+        except Exception:
+            logger.error("Error fetching expiries for %s", underlying, exc_info=True)
             return []
 
     async def get_available_underlyings(self, exchange: str = "NSE") -> List[str]:
@@ -297,6 +297,6 @@ class MarketDataService:
             conn.close()
 
             return underlyings
-        except Exception as e:
-            logger.error(f"Error fetching underlyings for {exchange}: {e}")
+        except Exception:
+            logger.error("Error fetching underlyings for %s", exchange, exc_info=True)
             return []
