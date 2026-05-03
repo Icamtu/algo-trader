@@ -40,8 +40,8 @@ def shoonya_auth_init():
         redirect_uri = f"http://{request.host}/api/auth/callback/shoonya"
         auth_url = get_shoonya_auth_code(redirect_uri)
         return jsonify({"status": "success", "auth_url": auth_url}), 200
-    except Exception as e:
-        logger.error(f"Shoonya Auth Init Error: {e}")
+    except Exception:
+        logger.error("Shoonya Auth Init Error", exc_info=True)
         return jsonify({"status": "error", "message": "Internal error"}), 500
 
 @auth_bp.route("/api/auth/callback/shoonya", methods=["GET"])
@@ -57,6 +57,6 @@ def shoonya_callback():
             return redirect(f"{CONFIG.UI_BASE_URL}/openalgo/broker?status=success&message=shoonya_linked")
         else:
             return redirect(f"{CONFIG.UI_BASE_URL}/openalgo/broker?status=error&message=auth_failed")
-    except Exception as e:
-        logger.error(f"Critical failure in Shoonya callback: {e}")
+    except Exception:
+        logger.error("Critical failure in Shoonya callback", exc_info=True)
         return redirect(f"{CONFIG.UI_BASE_URL}/openalgo/broker?status=error&message=internal_error")
