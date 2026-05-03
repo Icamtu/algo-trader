@@ -71,7 +71,7 @@ def vault_content(asset_id):
             return jsonify({"error": "Asset not found"}), 404
 
         vault_base = os.getenv("VAULT_STORAGE_PATH", "/app/storage/vault")
-        abs_path = os.path.abspath(os.path.join(vault_base, details["file_path"]))
+        abs_path = os.path.abspath(os.path.normpath(os.path.join(vault_base, details["file_path"])))
         
         # Defense-in-depth: Ensure path is within vault
         if not abs_path.startswith(os.path.abspath(vault_base)):

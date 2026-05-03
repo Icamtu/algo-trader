@@ -137,8 +137,9 @@ def api_autoresearch_get_iteration(id):
     try:
         strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'strategies'))
         research_dir = os.path.join(strat_dir, 'autoresearch_history')
-        py_path = os.path.join(research_dir, f"{id}.py")
-        json_path = os.path.join(research_dir, f"{id}.json")
+        safe_id = os.path.basename(os.path.normpath(id))
+        py_path = os.path.join(research_dir, f"{safe_id}.py")
+        json_path = os.path.join(research_dir, f"{safe_id}.json")
 
         if not os.path.exists(py_path):
             return jsonify({"error": "Iteration not found"}), 404
@@ -176,7 +177,7 @@ def api_autoresearch_deploy():
 
         strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'strategies', 'AutoResearch'))
         if not os.path.exists(strat_dir): os.makedirs(strat_dir, exist_ok=True)
-        filename = filename.replace(":", "/")
+        filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
         file_path = os.path.join(strat_dir, filename)
 
         # Security check
@@ -236,7 +237,7 @@ def api_autoresearch_base_code():
         if not strategy_name:
             return jsonify({"error": "Missing strategy name"}), 400
 
-        base_name = strategy_name.replace(".py", "")
+        base_name = os.path.basename(os.path.normpath(strategy_name.replace(".py", "")))
         strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'strategies', 'AutoResearch'))
         if not os.path.exists(strat_dir): os.makedirs(strat_dir, exist_ok=True)
         file_path = os.path.join(strat_dir, f"{base_name}.py")
@@ -278,7 +279,7 @@ def api_autoresearch_save_version():
 
         strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'strategies', 'AutoResearch'))
         if not os.path.exists(strat_dir): os.makedirs(strat_dir, exist_ok=True)
-        filename = filename.replace(":", "/")
+        filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
         file_path = os.path.join(strat_dir, filename)
 
         # Security check

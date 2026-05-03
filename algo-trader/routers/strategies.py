@@ -234,7 +234,7 @@ async def liquidate_strategy(request: Optional[StrategyHaltRequest] = Body(None)
 @router.get("/strategies/files/{filename}")
 async def get_strategy_file(filename: str):
     strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
-    filename = filename.replace(":", "/")
+    filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
     file_path = os.path.join(strat_dir, filename)
     if not os.path.exists(file_path):
         if not any(filename.endswith(ext) for ext in (".py", ".json", ".yaml", ".yml")):
@@ -252,7 +252,7 @@ async def get_strategy_file(filename: str):
 @router.put("/strategies/files/{filename}")
 async def save_strategy_file(filename: str, request: FileSaveRequest):
     strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
-    filename = filename.replace(":", "/")
+    filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
     if not any(filename.endswith(ext) for ext in (".py", ".json", ".yaml", ".yml")):
         filename += ".py"
     file_path = os.path.join(strat_dir, filename)
@@ -275,7 +275,7 @@ async def save_strategy_file(filename: str, request: FileSaveRequest):
 @router.delete("/strategies/files/{filename}")
 async def delete_strategy_file(filename: str):
     strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
-    filename = filename.replace(":", "/")
+    filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
     file_path = os.path.join(strat_dir, filename)
     if not os.path.exists(file_path) and not filename.endswith(".py"):
         file_path += ".py"
