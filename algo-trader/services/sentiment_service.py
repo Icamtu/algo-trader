@@ -57,8 +57,8 @@ class SentimentService:
                         "neu": sentiment_scores['neu'],
                         "source": feed_url.split('/')[2]
                     })
-            except Exception as e:
-                logger.error(f"Failed to parse feed {feed_url}: {e}")
+            except Exception:
+                logger.error(f"Failed to parse feed {feed_url}", exc_info=True)
 
         # Sort by sentiment strength
         news_items.sort(key=lambda x: abs(x['sentiment']), reverse=True)
