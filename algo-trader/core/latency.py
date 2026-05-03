@@ -28,7 +28,7 @@ def init_latency_db(db_file: str = LATENCY_DB):
         conn.commit()
         conn.close()
     except Exception as e:
-        logger.error(f"Error initializing latency database: {e}")
+        logger.error("Error initializing latency database", exc_info=True)
 
 def log_latency(event_name: str, packet_time_str: Optional[str], db_file: str = LATENCY_DB):
     """Log a single latency measurement."""
@@ -62,7 +62,7 @@ def log_latency(event_name: str, packet_time_str: Optional[str], db_file: str = 
         conn.commit()
         conn.close()
     except Exception as e:
-        logger.error(f"Error logging latency: {e}")
+        logger.error("Error logging latency", exc_info=True)
 
 def latency_profile(event_name: str):
     """Decorator to profile execution latency for event-driven functions."""
