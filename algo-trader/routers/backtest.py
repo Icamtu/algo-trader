@@ -49,8 +49,8 @@ async def run_backtest(request: BacktestRequest):
 
         result = await engine.run()
         return {"status": "success", "result": result}
-    except Exception as e:
-        logger.error(f"Backtest Error: {e}", exc_info=True)
+    except Exception:
+        logger.error("Backtest Error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/optimize")
@@ -79,8 +79,8 @@ async def optimize_strategy(
             "symbol": symbol,
             "results": results[:20]
         }
-    except Exception as e:
-        logger.error(f"Optimization API Error: {e}", exc_info=True)
+    except Exception:
+        logger.error("Optimization API Error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 @router.post("/walk-forward")
 async def run_walk_forward(request: WalkForwardRequest):
@@ -110,6 +110,6 @@ async def run_walk_forward(request: WalkForwardRequest):
         )
 
         return {"status": "success", "result": result}
-    except Exception as e:
-        logger.error(f"Walk-Forward API Error: {e}", exc_info=True)
+    except Exception:
+        logger.error("Walk-Forward API Error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
