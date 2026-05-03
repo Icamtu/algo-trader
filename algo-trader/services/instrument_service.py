@@ -43,8 +43,8 @@ class InstrumentService:
                     )
                 """)
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_inst_symbol ON instrument_master (tradingsymbol, exchange)")
-        except Exception as e:
-            logger.error(f"Failed to initialize instrument database: {e}")
+        except Exception:
+            logger.error("Failed to initialize instrument database", exc_info=True)
 
     def sync_zerodha_instruments(self) -> bool:
         """Downloads the latest instrument master from Zerodha."""
@@ -53,7 +53,7 @@ class InstrumentService:
         try:
             response = requests.get(url, timeout=60)
             if response.status_code != 200:
-                logger.error(f"Failed to download instruments: {response.status_code}")
+                logger.error("Failed to download instruments: %s", response.status_code)
                 return False
 
             df = pd.read_csv(io.StringIO(response.text))
@@ -66,11 +66,11 @@ class InstrumentService:
                 # Insert from pandas dataframe
                 conn.execute("INSERT INTO instrument_master SELECT *, current_timestamp FROM df")
                 count = conn.execute("SELECT COUNT(*) FROM instrument_master").fetchone()[0]
-                logger.info(f"✅ Synced {count} instruments from Zerodha.")
+                logger.info("✅ Synced %s instruments from Zerodha.", count)
 
             return True
-        except Exception as e:
-            logger.error(f"Critical failure in instrument sync: {e}")
+        except Exception:
+            logger.error("Critical failure in instrument sync", exc_info=True)
             return False
 
     def resolve_token(self, symbol: str, exchange: str = "NSE") -> Optional[int]:
@@ -82,8 +82,8 @@ class InstrumentService:
                     (symbol.upper(), exchange.upper())
                 ).fetchone()
                 return res[0] if res else None
-        except Exception as e:
-            logger.error(f"Error resolving token for {symbol}: {e}")
+        except Exception:
+            logger.error("Error resolving token for %s", symbol, exc_info=True)
             return None
 
     def resolve_symbols(self, tokens: List[int]) -> Dict[int, str]:
@@ -97,8 +97,8 @@ class InstrumentService:
                     tokens
                 ).fetchall()
                 return {r[0]: r[1] for r in res}
-        except Exception as e:
-            logger.error(f"Error resolving symbols for tokens: {e}")
+        except Exception:
+            logger.error("Error resolving symbols for tokens", exc_info=True)
             return {}
 
 # Global singleton
