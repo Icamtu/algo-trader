@@ -112,6 +112,6 @@ async def get_backtest_results(strategy_id: str = Query(None)):
             "trades": result["trades"][-50:],
             "created_at": result.get("created_at"),
         }
-    except Exception as e:
-        logger.error(f"Error fetching backtest results: {e}")
+    except Exception:
+        logger.error("Error fetching backtest results", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
