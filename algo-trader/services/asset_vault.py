@@ -91,8 +91,8 @@ class AssetVault:
 
             logger.info(f"Asset '{name}' [ID: {asset_id}] registered successfully in the vault.")
             return asset_id
-        except Exception as e:
-            logger.error(f"Failed to register asset: {e}")
+        except Exception:
+            logger.error("Failed to register asset", exc_info=True)
             raise
 
     def list_assets(self, asset_type: Optional[str] = None, tags: Optional[List[str]] = None) -> List[Dict[str, Any]]:
@@ -117,8 +117,8 @@ class AssetVault:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute(query, params)
                     return cur.fetchall()
-        except Exception as e:
-            logger.error(f"Failed to list assets: {e}")
+        except Exception:
+            logger.error("Failed to list assets", exc_info=True)
             return []
 
     def get_asset_details(self, asset_id: int) -> Optional[Dict[str, Any]]:
@@ -130,8 +130,8 @@ class AssetVault:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute("SELECT * FROM assets WHERE id = %s", (asset_id,))
                     return cur.fetchone()
-        except Exception as e:
-            logger.error(f"Failed to get asset details: {e}")
+        except Exception:
+            logger.error("Failed to get asset details", exc_info=True)
             return None
 
     def search_assets(self, search_term: str) -> List[Dict[str, Any]]:
@@ -149,8 +149,8 @@ class AssetVault:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute(query, (term, term, search_term))
                     return cur.fetchall()
-        except Exception as e:
-            logger.error(f"Search failed: {e}")
+        except Exception:
+            logger.error("Search failed", exc_info=True)
             return []
 
 # Singleton instance
