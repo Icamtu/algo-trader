@@ -248,8 +248,8 @@ class BaseStrategy(ABC):
 
             if not (start_t <= now <= end_t):
                 return False, f"Outside trading hours ({self.trading_hours['start']} - {self.trading_hours['end']})"
-        except Exception as e:
-            logger.error(f"Error parsing trading hours: {e}")
+        except Exception:
+            logger.error("Error parsing trading hours", exc_info=True)
 
         # 2. Check Trading Mode
         mode = self.trading_mode.lower()
