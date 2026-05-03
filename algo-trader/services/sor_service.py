@@ -59,8 +59,8 @@ class SmartOrderRouter:
                 "routed_to": broker_id,
                 "execution_result": result
             }
-        except Exception as e:
-            logger.error(f"SOR execution failed: {e}")
+        except Exception:
+            logger.error("SOR execution failed", exc_info=True)
             return {"status": "error", "message": "Internal service error"}
 
 # Note: This service is typically initialized by the OrderManager
