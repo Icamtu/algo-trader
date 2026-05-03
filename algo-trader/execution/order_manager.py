@@ -435,7 +435,7 @@ class OrderManager:
         product: str = "MIS",
         exchange: str = "NSE",
     ):
-        """Smart order — OpenAlgo calculates net quantity to reach target position."""
+        """Smart order — calculates net quantity to reach target position."""
         with tracer.start_as_current_span("place_smart_order") as span:
             span.set_attribute("symbol", symbol)
             span.set_attribute("action", action)
@@ -447,40 +447,43 @@ class OrderManager:
                 strategy_name, action, symbol, quantity, position_size,
             )
             try:
-                response = await asyncio.to_thread(
-                    self.client.place_smart_order,
+                # Calculate required quantity
+                current_qty = self.position_manager.get_quantity(symbol)
+                target_qty = position_size if action == "BUY" else -position_size
+                required_qty = target_qty - current_qty
+                
+                if required_qty == 0:
+                    return {"status": "success", "message": "Position already at target"}
+                    
+                exec_action = "BUY" if required_qty > 0 else "SELL"
+                exec_qty = abs(required_qty)
+                
+                return await self.place_order(
+                    strategy_name=strategy_name,
                     symbol=symbol,
-                    action=action,
-                    quantity=quantity,
-                    position_size=position_size,
-                    product=product,
-                    price=price,
+                    action=exec_action,
+                    quantity=exec_qty,
                     order_type=order_type,
-                    exchange=exchange,
-                    strategy=strategy_name,
+                    price=price,
+                    product=product,
+                    exchange=exchange
                 )
-                logger.info("[%s] SmartOrder << %s", strategy_name, response)
-                return response
             except Exception as e:
                 logger.error("[%s] SmartOrder failed: %s", strategy_name, e, exc_info=True)
-                return None
+                return {"status": "error", "message": str(e)}
 
     async def place_basket_order(self, strategy_name: str, orders: list):
-        """Send multiple orders in one API call."""
+        """Send multiple orders sequentially (AetherBridge bulk processing)."""
         with tracer.start_as_current_span("place_basket_order") as span:
             span.set_attribute("order_count", len(orders))
             span.set_attribute("strategy", strategy_name)
 
             logger.info("[%s] BasketOrder >> %d orders", strategy_name, len(orders))
-            try:
-                response = await asyncio.to_thread(
-                    self.client.place_basket_order, orders, strategy_name
-                )
-                logger.info("[%s] BasketOrder << %s", strategy_name, response)
-                return response
-            except Exception as e:
-                logger.error("[%s] BasketOrder failed: %s", strategy_name, e, exc_info=True)
-                return None
+            results = []
+            for o in orders:
+                res = await self.place_order(strategy_name=strategy_name, **o)
+                results.append(res)
+            return {"status": "success", "results": results}
 
     async def modify_order(
         self,
@@ -495,17 +498,24 @@ class OrderManager:
     ):
         logger.info("ModifyOrder %s \u2192 qty=%d price=%s", order_id, quantity, price)
         try:
-            await self.limiter.wait() # Always limit destructive/modifying actions
-            return await asyncio.to_thread(
-                self.client.modify_order,
+            await self.limiter.wait()
+            active_broker = self.native_broker if self.mode == "live" else self.paper_broker
+            if not active_broker: return None
+            
+            from brokers.models import OrderAction, OrderType, ProductType
+            n_action = OrderAction.BUY if action == "BUY" else OrderAction.SELL
+            n_type = getattr(OrderType, order_type.upper(), OrderType.LIMIT)
+            n_product = getattr(ProductType, product.upper(), ProductType.MIS)
+            
+            return await active_broker.modify_order(
                 order_id=order_id,
                 symbol=symbol,
-                action=action,
+                action=n_action,
                 quantity=quantity,
                 price=price,
-                order_type=order_type,
-                product=product,
-                exchange=exchange,
+                order_type=n_type,
+                product=n_product,
+                exchange=exchange
             )
         except Exception as e:
             logger.error("ModifyOrder failed: %s", e, exc_info=True)
@@ -515,7 +525,9 @@ class OrderManager:
         logger.info("CancelOrder \u2192 %s", order_id)
         try:
             await self.limiter.wait()
-            return await asyncio.to_thread(self.client.cancel_order, order_id)
+            active_broker = self.native_broker if self.mode == "live" else self.paper_broker
+            if not active_broker: return None
+            return await active_broker.cancel_order(order_id)
         except Exception as e:
             logger.error("CancelOrder failed: %s", e, exc_info=True)
             return None
@@ -523,7 +535,16 @@ class OrderManager:
     async def cancel_all_orders(self):
         logger.info("CancelAllOrders")
         try:
-            return await asyncio.to_thread(self.client.cancel_all_orders)
+            active_broker = self.native_broker if self.mode == "live" else self.paper_broker
+            if not active_broker: return None
+            # Paper broker doesn't have cancel_all, so we loop
+            if hasattr(active_broker, 'cancel_all_orders'):
+                return await active_broker.cancel_all_orders()
+            else:
+                orders = await self.get_orders()
+                tasks = [active_broker.cancel_order(o["order_id"]) for o in orders if o["status"] in ["OPEN", "PENDING", "MODIFY_PENDING"]]
+                if tasks: await asyncio.gather(*tasks)
+                return {"status": "success", "message": "All orders cancelled"}
         except Exception as e:
             logger.error("CancelAllOrders failed: %s", e, exc_info=True)
             return None
@@ -627,15 +648,22 @@ class OrderManager:
 
     async def get_positions(self):
         """Fetches active positions from the broker."""
-        if self.native_broker:
+        # Use native broker if configured (and not in sandbox mode, or if shadow mode is active)
+        if self.native_broker and (self.mode != "sandbox" or self.shadow_mode):
             try:
                 positions = await self.native_broker.get_positions()
-                return [p.dict() for p in positions]
+                return [p.model_dump() if hasattr(p, "model_dump") else (p.dict() if hasattr(p, "dict") else p) for p in positions]
             except Exception as e:
                 logger.error(f"Native get_positions failed: {e}")
                 if not self.shadow_mode: return []
 
-        return []
+        # Fallback to paper broker for sandbox or as secondary source
+        try:
+            positions = await self.paper_broker.get_positions()
+            return [p.model_dump() if hasattr(p, "model_dump") else (p.dict() if hasattr(p, "dict") else p) for p in positions]
+        except Exception as e:
+            logger.error(f"Paper get_positions failed: {e}")
+            return []
 
     async def get_open_positions_dict(self) -> Dict[str, int]:
         """
@@ -668,30 +696,33 @@ class OrderManager:
         return []
 
     async def get_orders(self):
-        """Fetches order book from the broker."""
-        if self.native_broker:
-            try:
-                orders = await self.native_broker.get_orders()
-                return [o.dict() for o in orders]
-            except Exception as e:
-                logger.error(f"Native get_orders failed: {e}")
-                if not self.shadow_mode: return []
-
-        return []
+        """Fetches order book from the broker or paper broker."""
+        try:
+            active_broker = self.native_broker if (self.mode == "live" or self.shadow_mode) else self.paper_broker
+            if not active_broker: return []
+            
+            orders = await active_broker.get_orders()
+            # Use model_dump() for V2, dict() for V1 fallback
+            return [o.model_dump() if hasattr(o, "model_dump") else (o.dict() if hasattr(o, "dict") else o) for o in orders]
+        except Exception as e:
+            logger.error(f"GetOrders failed: {e}")
+            return []
 
     async def get_trades(self):
         return []
 
     async def get_funds(self):
-        if self.native_broker:
-            try:
-                funds = await self.native_broker.get_funds()
-                return funds
-            except Exception as e:
-                logger.error(f"Native get_funds failed: {e}")
-                if not self.shadow_mode: return {"status": "error", "message": str(e)}
-
-        return {"status": "error", "message": "Funds retrieval not supported or broker unavailable"}
+        """Fetches available funds/margins from the broker."""
+        try:
+            active_broker = self.native_broker if (self.mode == "live" or self.shadow_mode) else self.paper_broker
+            if not active_broker:
+                return {"status": "error", "message": "No active broker available"}
+                
+            funds = await active_broker.get_funds()
+            return funds.model_dump() if hasattr(funds, "model_dump") else (funds.dict() if hasattr(funds, "dict") else funds)
+        except Exception as e:
+            logger.error(f"GetFunds failed: {e}")
+            return {"status": "error", "message": str(e)}
 
     async def get_history(
         self,
@@ -701,25 +732,36 @@ class OrderManager:
         start_date: str = "",
         end_date: str = "",
     ):
-        # Normalize date format for OpenAlgo/Shoonya (expects DD-MM-YYYY)
-        def _normalize_date(d: str) -> str:
-            if not d: return ""
-            try:
-                from datetime import datetime
-                if "T" in d:
-                    dt = datetime.fromisoformat(d.replace("Z", "+00:00"))
-                elif "-" in d and len(d.split("-")[0]) == 4:
-                    dt = datetime.strptime(d, "%Y-%m-%d")
-                else:
+        """Fetches historical candles via the active broker."""
+        try:
+            active_broker = self.native_broker if (self.mode == "live" or self.shadow_mode) else self.paper_broker
+            if not active_broker: return []
+            
+            # Internal normalization for string dates to ISO if needed
+            def _normalize_date(d: str) -> str:
+                if not d: return ""
+                try:
+                    from datetime import datetime
+                    if "T" in d:
+                        dt = datetime.fromisoformat(d.replace("Z", "+00:00"))
+                        return dt.strftime("%Y-%m-%d")
                     return d
-                return dt.strftime("%Y-%m-%d")
-            except:
-                return d
+                except:
+                    return d
 
-        n_start = _normalize_date(start_date)
-        n_end = _normalize_date(end_date)
-
-        return {"status": "error", "message": "Legacy history fetching decommissioned"}
+            n_start = _normalize_date(start_date)
+            n_end = _normalize_date(end_date)
+            
+            return await active_broker.get_historical_candles(
+                symbol=symbol,
+                exchange=exchange,
+                interval=interval,
+                start_time=n_start,
+                end_time=n_end
+            )
+        except Exception as e:
+            logger.error(f"GetHistory failed: {e}")
+            return []
 
     async def toggle_analyzer(self, state: bool):
         return {"status": "success", "message": "Analyzer decommissioned"}
@@ -775,18 +817,32 @@ class OrderManager:
 
             # Simple check: do we have the same symbols and quantities?
             for pos in (broker_positions or []):
-                symbol = pos.get("symbol")
-                if not symbol: continue
-                net_qty = int(float(pos.get("quantity") or pos.get("netqty") or 0))
+                # Handle both dict and Pydantic models/objects
+                if isinstance(pos, dict):
+                    symbol = pos.get("symbol")
+                    if not symbol: continue
+                    net_qty = int(float(pos.get("quantity") or pos.get("netqty") or 0))
+                else:
+                    # Assume it's an object/model
+                    symbol = getattr(pos, "symbol", None)
+                    if not symbol: continue
+                    net_qty = int(float(getattr(pos, "quantity", 0) or 0))
+                
                 local_qty = self.position_manager.get_quantity(symbol)
                 if local_qty != net_qty:
+                    logger.info("Drift detected for %s: local=%d, broker=%d", symbol, local_qty, net_qty)
                     return True
 
             # Also check if we have local positions that don't exist in broker
             local_snapshot = self.position_manager.all_positions()
-            broker_symbols = {p.get("symbol") for p in (broker_positions or []) if p.get("symbol")}
+            broker_symbols = set()
+            for p in (broker_positions or []):
+                s = getattr(p, "symbol", None) if not isinstance(p, dict) else p.get("symbol")
+                if s: broker_symbols.add(s)
+                
             for symbol, pos in local_snapshot.items():
                 if pos.quantity != 0 and symbol not in broker_symbols:
+                    logger.info("Drift detected: local position %s not in broker", symbol)
                     return True
 
             return False
