@@ -22,8 +22,8 @@ def get_explorer_tree():
         return jsonify({"tree": tree}), 200
     except PermissionError:
         return jsonify({"error": "Access denied"}), 403
-    except Exception as e:
-        logger.error(f"Explorer tree error: {e}")
+    except Exception:
+        logger.error("Explorer tree error", exc_info=True)
         return jsonify({"error": "Internal error"}), 500
 
 @explorer_bp.route("/api/v1/explorer/file", methods=["GET"])
