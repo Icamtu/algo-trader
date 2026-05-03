@@ -87,7 +87,7 @@ def create_app():
 
     @app.errorhandler(500)
     def internal_error(e):
-        logger.error(f"Internal Server Error: {e}", exc_info=True)
+        logger.error("Internal Server Error", exc_info=True)
         return jsonify({"status": "error", "message": "Internal server error"}), 500
 
     return app
