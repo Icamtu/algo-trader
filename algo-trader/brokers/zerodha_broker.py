@@ -54,8 +54,8 @@ class ZerodhaBroker(BaseBroker):
                 logger.info(f"Zerodha connected for user: {profile.get('user_name')}")
                 self.is_connected = True
                 return True
-            except Exception as e:
-                logger.error(f"Zerodha session expired or invalid: {e}")
+            except Exception:
+                logger.error("Zerodha session expired or invalid", exc_info=True)
                 self.is_connected = False
                 return False
 
@@ -67,8 +67,8 @@ class ZerodhaBroker(BaseBroker):
             self.kite.invalidate_access_token()
             self.is_connected = False
             return True
-        except Exception as e:
-            logger.error(f"Zerodha logout failed: {e}")
+        except Exception:
+            logger.error("Zerodha profile fetch error", exc_info=True)
             return False
 
     async def place_order(
@@ -123,7 +123,7 @@ class ZerodhaBroker(BaseBroker):
             )
 
         except Exception as e:
-            logger.error(f"Zerodha place_order failed: {e}")
+            logger.error("Order placement failed", exc_info=True)
             return NormalizedOrder(
                 order_id=str(int(time.time() * 1000)),
                 symbol=symbol,
@@ -141,8 +141,8 @@ class ZerodhaBroker(BaseBroker):
         try:
             self.kite.cancel_order(variety=self.kite.VARIETY_REGULAR, order_id=broker_order_id)
             return True
-        except Exception as e:
-            logger.error(f"Zerodha cancel_order failed: {e}")
+        except Exception:
+            logger.error("Zerodha cancel_order failed", exc_info=True)
             return False
 
     async def get_positions(self) -> List[NormalizedPosition]:
@@ -167,8 +167,8 @@ class ZerodhaBroker(BaseBroker):
                     exchange=pos.get("exchange")
                 ))
             return normalized
-        except Exception as e:
-            logger.error(f"Zerodha get_positions failed: {e}")
+        except Exception:
+            logger.error("Zerodha get_positions failed", exc_info=True)
             return []
 
     async def get_margins(self) -> Dict[str, float]:
@@ -180,8 +180,8 @@ class ZerodhaBroker(BaseBroker):
                 "available": float(equity.get("available", {}).get("cash", 0.0)),
                 "used": float(equity.get("utilised", {}).get("debits", 0.0))
             }
-        except Exception as e:
-            logger.error(f"Zerodha get_margins failed: {e}")
+        except Exception:
+            logger.error("Zerodha get_margins failed", exc_info=True)
             return {"available": 0.0, "used": 0.0}
 
     async def subscribe_ticks(self, symbols: List[str], exchange: str = "NSE"):
