@@ -80,8 +80,8 @@ def update_system_metrics():
         CPU_USAGE.set(psutil.cpu_percent())
         FD_COUNT.set(process.num_fds())
         THREAD_COUNT.set(process.num_threads())
-    except Exception as e:
-        logger.error(f"Error updating Prometheus system metrics: {e}")
+    except Exception:
+        logger.error("Error updating Prometheus system metrics", exc_info=True)
 
 logger = logging.getLogger(__name__)
 
@@ -168,8 +168,8 @@ class ConnectionManager:
                     await websocket.send_text(json.dumps(data))
             else:
                 await websocket.send_text(json.dumps(data))
-        except Exception as e:
-            logger.debug(f"Send JSON failed: {e}")
+        except Exception:
+            logger.debug("Send JSON failed", exc_info=True)
             self.disconnect(websocket)
 
     async def broadcast(self, message: str):
@@ -183,8 +183,8 @@ class ConnectionManager:
                         await connection.send_text(message)
                 else:
                     await connection.send_text(message)
-            except Exception as e:
-                logger.debug(f"Broadcast to connection failed: {e}")
+            except Exception:
+                logger.debug("Broadcast to connection failed", exc_info=True)
                 disconnected.append(connection)
 
         for conn in disconnected:
@@ -195,12 +195,12 @@ class ConnectionManager:
             # Wait for auth message - increased to 30s for institutional stability
             logger.debug("WebSocket: Waiting for auth message...")
             msg_text = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
-            logger.info(f"WebSocket: Received auth payload: {msg_text[:50]}...")
+            logger.info("WebSocket: Received auth payload")
 
             try:
                 data = json.loads(msg_text)
             except json.JSONDecodeError:
-                logger.warning(f"WebSocket Auth Failed: invalid JSON: {msg_text[:50]}")
+                logger.warning("WebSocket Auth Failed: invalid JSON")
                 await websocket.close(code=1008, reason="Invalid JSON")
                 return False
 
@@ -229,9 +229,9 @@ class ConnectionManager:
                 jwt.decode(token, JWT_SECRET, algorithms=["HS256"], options={"verify_aud": False, "leeway": 60})
                 logger.info("WebSocket: Authenticated via JWT")
                 return True
-            except jwt.InvalidTokenError as e:
-                logger.warning(f"WebSocket auth failed: Invalid JWT: {e}")
-                await websocket.close(code=1008, reason=f"Invalid token: {e}")
+            except jwt.InvalidTokenError:
+                logger.warning("WebSocket auth failed: Invalid JWT")
+                await websocket.close(code=1008, reason="Invalid token")
                 return False
         except asyncio.TimeoutError:
             logger.warning("WebSocket auth timeout: Client failed to send auth message in 30s")
@@ -240,14 +240,8 @@ class ConnectionManager:
         except WebSocketDisconnect:
             logger.info("WebSocket: Client disconnected during auth phase")
             return False
-        except Exception as e:
-            logger.error(f"WebSocket Auth Unexpected Error: {type(e).__name__}: {e}")
-            await websocket.close(code=1011, reason="Internal server error")
-            return False
-            logger.info("WebSocket client disconnected during auth handshake")
-            return False
-        except Exception as e:
-            logger.warning(f"WebSocket auth failed with exception: {type(e).__name__}: {e}")
+        except Exception:
+            logger.warning("WebSocket auth failed with exception", exc_info=True)
             await websocket.close(code=1008, reason="Auth failure")
             return False
 
@@ -337,8 +331,8 @@ async def zombie_reaper():
 
         except asyncio.CancelledError:
             break
-        except Exception as e:
-            logger.error(f"Zombie Reaper fault: {e}")
+        except Exception:
+            logger.error("Zombie Reaper fault", exc_info=True)
 
 # --- Tick Dispatcher ---
 async def tick_dispatcher():
@@ -370,8 +364,8 @@ async def tick_dispatcher():
                     await manager.broadcast(msg)
         except asyncio.CancelledError:
             break
-        except Exception as e:
-            logger.error(f"FastAPI Tick Dispatcher error: {e}")
+        except Exception:
+            logger.error("FastAPI Tick Dispatcher error", exc_info=True)
 
 async def log_dispatcher():
     """Background task to dispatch latest engine logs every 1s."""
@@ -394,8 +388,8 @@ async def log_dispatcher():
 
         except asyncio.CancelledError:
             break
-        except Exception as e:
-            logger.error(f"FastAPI Log Dispatcher error: {e}")
+        except Exception:
+            logger.error("FastAPI Log Dispatcher error", exc_info=True)
 
 # --- API Application ---
 app = FastAPI(title="AetherDesk Algo Engine", version="1.2.0", lifespan=lifespan)
@@ -498,13 +492,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 continue
             except WebSocketDisconnect:
                 break
-            except Exception as e:
-                logger.error(f"WebSocket session error: {e}")
+            except Exception:
+                logger.error("Connection error. Retrying in 5s...", exc_info=True)
                 break
 
         manager.disconnect(websocket)
-    except Exception as e:
-        logger.error(f"WebSocket session failure: {e}")
+    except Exception:
+        logger.error("WebSocket session failure", exc_info=True)
         manager.disconnect(websocket)
 
 # --- FastAPI REST Endpoints ---
@@ -605,7 +599,7 @@ def set_fastapi_context(strategy_runner, order_manager, position_manager, portfo
                 alert_msg = f"<b>Strategy:</b> {data.get('strategy', 'N/A')}\n"
                 if "reason" in data: alert_msg += f"<b>Reason:</b> {data['reason']}\n"
                 asyncio.create_task(tg.send_alert(title, alert_msg, level="CRITICAL"))
-            except Exception as e:
-                logger.error(f"Telegram broadcast failed: {e}")
+            except Exception:
+                logger.error("Telegram broadcast failed", exc_info=True)
 
     return fastapi_broadcast_tick, fastapi_broadcast_event
