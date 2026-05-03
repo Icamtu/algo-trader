@@ -68,8 +68,8 @@ async def listen():
                 async for message in ws:
                     await on_tick(message)
 
-        except Exception as e:
-            logger.error(f"❌ Connection error: {e}. Retrying in 5s...")
+        except Exception:
+            logger.error("Connection error. Retrying in 5s...", exc_info=True)
             await asyncio.sleep(5)
         finally:
             await ts_logger.disconnect()
