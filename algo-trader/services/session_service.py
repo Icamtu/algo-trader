@@ -58,8 +58,8 @@ class SessionService:
                              self.last_check = datetime.now()
                              self.consecutive_failures = 0
                              return True
-                    except Exception as e:
-                        logger.warning(f"Native broker health check failed: {e}")
+                    except Exception:
+                        logger.warning("Native broker health check failed", exc_info=True)
                         # Fall through to legacy or fail
 
             # 2. Check Legacy Client
@@ -84,8 +84,8 @@ class SessionService:
 
             return False
 
-        except Exception as e:
-            logger.error(f"Session health check fault: {e}")
+        except Exception:
+            logger.error("Session health check fault", exc_info=True)
             self.is_healthy = False
             self.last_error = "Internal service error"
             return False
@@ -115,7 +115,7 @@ class SessionService:
             auth_code = await asyncio.to_thread(get_shoonya_auth_code)
 
             if not auth_code or "ERROR" in str(auth_code) or "FAILURE" in str(auth_code):
-                logger.error(f"Failed to capture auth code: {auth_code}")
+                logger.error("Failed to capture auth code")
                 self.consecutive_failures += 1
                 return False
 
@@ -139,12 +139,12 @@ class SessionService:
 
                 return True
             else:
-                logger.error(f"Session finalization failed: {result.get('message')}")
+                logger.error("Session finalization failed")
                 self.consecutive_failures += 1
                 return False
 
-        except Exception as e:
-            logger.error(f"Re-auth flow encountered a critical error: {e}", exc_info=True)
+        except Exception:
+            logger.error("Re-auth flow encountered a critical error", exc_info=True)
             self.consecutive_failures += 1
             return False
         finally:
