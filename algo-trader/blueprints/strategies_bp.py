@@ -48,8 +48,13 @@ def _load_strategy_class(strategy_id: str) -> Optional[Type]:
 
         # Correct path for strategies
         strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
-        filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
-        file_path = os.path.join(strat_dir, filename)
+        safe_filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
+        file_path = os.path.join(strat_dir, safe_filename)
+        
+        # 3. Final containment check
+        # codeql [py/path-injection] - Containment is verified via abspath and startswith
+        if not os.path.abspath(file_path).startswith(strat_dir):
+            return None
 
         if not os.path.exists(file_path):
             return None
@@ -66,8 +71,8 @@ def _load_strategy_class(strategy_id: str) -> Optional[Type]:
                 return obj
 
         return None
-    except Exception as e:
-        logger.error(f"Error loading strategy class {strategy_id}: {e}")
+    except Exception:
+        logger.error("Error loading strategy class %s", strategy_id, exc_info=True)
         return None
 
 def _find_strategy_by_id(strategy_runner, strategy_id: str):
@@ -143,8 +148,8 @@ def list_strategy_files():
                     rel_path = os.path.relpath(os.path.join(root, f), strat_dir)
                     files.append(rel_path)
         return jsonify({"files": files}), 200
-    except Exception as e:
-        logger.error(f"Error listing strategy files: {e}")
+    except Exception:
+        logger.error("Error listing strategy files", exc_info=True)
         return jsonify({"error": "Failed to list strategy files"}), 500
 
 @strategies_bp.route("/api/v1/strategies/files/<filename>", methods=["GET"])
@@ -161,8 +166,9 @@ def get_strategy_file(filename):
         return jsonify({"filename": os.path.basename(file_path), "content": content})
     except PermissionError as e:
         return jsonify({"status": "error", "message": "Access denied"}), 403
-    except Exception as e:
-        return jsonify({"status": "error", "message": "Internal error"}), 500
+    except Exception:
+        logger.error("Error reading strategy file", exc_info=True)
+        return jsonify({"status": "error", "message": "Failed to read file"}), 500
 
 @strategies_bp.route("/api/v1/strategies/status", methods=["GET"])
 @require_auth
@@ -175,8 +181,8 @@ def get_all_strategies_status():
 
         status_map = strategy_runner.get_strategy_matrix()
         return jsonify(status_map), 200
-    except Exception as e:
-        logger.error(f"Strategy Status Error: {e}")
+    except Exception:
+        logger.error("Strategy Status Error", exc_info=True)
         return jsonify({"error": "Strategy status unavailable"}), 500
 
 @strategies_bp.route("/api/v1/strategies/halt", methods=["POST"])
@@ -191,8 +197,8 @@ async def halt_strategy():
         strategy_runner = app_context.get("strategy_runner")
         success = await strategy_runner.halt_strategy(strategy_name)
         return jsonify({"status": "success" if success else "failed"}), 200 if success else 500
-    except Exception as e:
-        logger.error(f"Internal Kernel Error: {e}"); return jsonify({"error": "Internal kernel exception"}), 500
+    except Exception:
+        logger.error("Internal Kernel Error", exc_info=True); return jsonify({"error": "Internal kernel exception"}), 500
 
 @strategies_bp.route("/api/v1/strategies/unhalt", methods=["POST"])
 @require_auth
@@ -206,8 +212,8 @@ async def unhalt_strategy():
         strategy_runner = app_context.get("strategy_runner")
         success = await strategy_runner.unhalt_strategy(strategy_name)
         return jsonify({"status": "success" if success else "failed"}), 200 if success else 500
-    except Exception as e:
-        logger.error(f"Internal Kernel Error: {e}"); return jsonify({"error": "Internal kernel exception"}), 500
+    except Exception:
+        logger.error("Internal Kernel Error", exc_info=True); return jsonify({"error": "Internal kernel exception"}), 500
 
 @strategies_bp.route("/api/v1/strategies/initialize", methods=["POST"])
 @require_auth
@@ -221,8 +227,8 @@ def initialize_strategy():
         strategy_runner = app_context.get("strategy_runner")
         success = strategy_runner.initialize_strategy(strategy_name)
         return jsonify({"status": "success" if success else "failed"}), 200 if success else 500
-    except Exception as e:
-        logger.error(f"Internal Kernel Error: {e}"); return jsonify({"error": "Internal kernel exception"}), 500
+    except Exception:
+        logger.error("Internal Kernel Error", exc_info=True); return jsonify({"error": "Internal kernel exception"}), 500
 
 @strategies_bp.route("/api/v1/strategies/liquidate", methods=["POST"])
 @require_auth
@@ -236,8 +242,8 @@ async def liquidate_strategy():
         order_manager = app_context.get("order_manager")
         success = await order_manager.liquidate_strategy(strategy_name)
         return jsonify({"status": "success" if success else "failed"}), 200 if success else 500
-    except Exception as e:
-        logger.error(f"Internal Kernel Error: {e}"); return jsonify({"error": "Internal kernel exception"}), 500
+    except Exception:
+        logger.error("Internal Kernel Error", exc_info=True); return jsonify({"error": "Internal kernel exception"}), 500
 
 @strategies_bp.route("/api/v1/strategies/safeguards/<strategy_id>", methods=["GET", "POST"])
 @require_auth
@@ -271,14 +277,15 @@ def save_strategy_file(filename):
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             with open(os.path.join(versions_dir, f"{timestamp}.txt"), "w") as vf:
                 vf.write(content)
-        except Exception as e:
-            logger.warning(f"Backup versioning failed for {filename}: {e}")
+        except Exception:
+            logger.warning(f"Backup versioning failed for {filename}", exc_info=True)
             
         return jsonify({"status": "success", "message": f"Strategy {filename} saved successfully"}), 200
     except PermissionError as e:
         return jsonify({"status": "error", "message": "Access denied"}), 403
-    except Exception as e:
-        return jsonify({"status": "error", "message": "Internal error"}), 500
+    except Exception:
+        logger.error("Error saving strategy file", exc_info=True)
+        return jsonify({"status": "error", "message": "Failed to save file"}), 500
 
 @strategies_bp.route("/api/v1/strategies/files/<filename>", methods=["DELETE"])
 @require_auth
@@ -291,8 +298,9 @@ def delete_strategy_file(filename):
         return jsonify({"status": "error", "message": "File not found"}), 404
     except PermissionError as e:
         return jsonify({"status": "error", "message": "Access denied"}), 403
-    except Exception as e:
-        return jsonify({"status": "error", "message": "Internal error"}), 500
+    except Exception:
+        logger.error("Error deleting strategy file", exc_info=True)
+        return jsonify({"status": "error", "message": "Failed to delete file"}), 500
 
 @strategies_bp.route("/api/v1/strategies", methods=["GET"])
 @require_auth
@@ -336,8 +344,8 @@ def list_strategies():
             })
 
         return jsonify({"strategies": strategies, "count": len(strategies)}), 200
-    except Exception as e:
-        logger.error(f"Error listing strategies: {e}", exc_info=True)
+    except Exception:
+        logger.error("Error listing strategies", exc_info=True)
         return jsonify({"error": "Strategy discovery failed"}), 500
 
 @strategies_bp.route("/api/v1/strategies/<strategy_id>/performance", methods=["GET"])
@@ -352,8 +360,8 @@ def get_strategy_performance_bp(strategy_id):
         metrics = loop.run_until_complete(trade_logger.get_strategy_metrics_async(strategy_id))
         loop.close()
         return jsonify({"status": "success", "strategy": strategy_id, "metrics": metrics})
-    except Exception as e:
-        logger.error(f"Blueprint error fetching performance for {strategy_id}: {e}")
+    except Exception:
+        logger.error("Blueprint error fetching performance for %s", strategy_id, exc_info=True)
         return jsonify({"status": "success", "strategy": strategy_id, "metrics": {"net_pnl": 0.0, "total_trades": 0}})
 
 @strategies_bp.route("/api/v1/strategies/<strategy_id>/orders", methods=["GET"])
@@ -370,8 +378,8 @@ def get_strategy_orders_bp(strategy_id):
             "orders": [t.to_dict() for t in trades],
             "count": len(trades)
         })
-    except Exception as e:
-        logger.error(f"Blueprint error fetching orders for {strategy_id}: {e}")
+    except Exception:
+        logger.error("Blueprint error fetching orders for %s", strategy_id, exc_info=True)
         return jsonify({"status": "success", "orders": [], "count": 0})
 
 @strategies_bp.route("/api/v1/strategies/<strategy_id>", methods=["GET"])
@@ -394,8 +402,8 @@ def get_strategy_details(strategy_id):
             "params": _extract_strategy_params(strategy),
             "is_active": True # If it's in the strategies list, it's active
         }), 200
-    except Exception as e:
-        logger.error(f"Internal Kernel Error: {e}"); return jsonify({"error": "Internal kernel exception"}), 500
+    except Exception:
+        logger.error("Internal Kernel Error", exc_info=True); return jsonify({"error": "Internal kernel exception"}), 500
 
 @strategies_bp.route("/api/v1/strategies/<strategy_id>/start", methods=["POST"])
 @require_auth
@@ -408,8 +416,8 @@ def start_strategy(strategy_id):
 
         success = strategy_runner.initialize_strategy(strategy_id)
         return jsonify({"status": "success" if success else "failed"}), 200 if success else 500
-    except Exception as e:
-        logger.error(f"Internal Kernel Error: {e}"); return jsonify({"error": "Internal kernel exception"}), 500
+    except Exception:
+        logger.error("Internal Kernel Error", exc_info=True); return jsonify({"error": "Internal kernel exception"}), 500
 
 @strategies_bp.route("/api/v1/strategies/<strategy_id>/stop", methods=["POST"])
 @require_auth
@@ -422,8 +430,8 @@ def stop_strategy(strategy_id):
 
         success = strategy_runner.halt_strategy(strategy_id)
         return jsonify({"status": "success" if success else "failed"}), 200 if success else 500
-    except Exception as e:
-        logger.error(f"Internal Kernel Error: {e}"); return jsonify({"error": "Internal kernel exception"}), 500
+    except Exception:
+        logger.error("Internal Kernel Error", exc_info=True); return jsonify({"error": "Internal kernel exception"}), 500
 
 @strategies_bp.route("/api/v1/backtest/run", methods=["POST"])
 @require_auth
@@ -459,8 +467,8 @@ async def run_backtest():
 
         result = await engine.run()
         return jsonify({"status": "success", "result": result}), 200
-    except Exception as e:
-        logger.error(f"Backtest Error: {e}", exc_info=True)
+    except Exception:
+        logger.error("Backtest Error", exc_info=True)
         return jsonify({"status": "error", "message": "Backtest execution failed"}), 500
 @strategies_bp.route("/api/v1/strategies/files/<filename>/versions", methods=["GET"])
 @require_auth
@@ -491,8 +499,8 @@ def get_strategy_versions(filename):
         # sort by timestamp descending
         versions.sort(key=lambda x: x["timestamp"], reverse=True)
         return jsonify({"versions": versions}), 200
-    except Exception as e:
-        logger.error(f"Error fetching strategy versions for {filename}: {e}")
+    except Exception:
+        logger.error("Error fetching strategy versions for %s", filename, exc_info=True)
         return jsonify({"error": "Version history unavailable"}), 500
 
 @strategies_bp.route("/api/v1/strategies/files/<filename>/rename", methods=["POST"])
@@ -519,8 +527,8 @@ def rename_strategy_file(filename):
         return jsonify({"status": "success", "message": f"Strategy renamed successfully"}), 200
     except PermissionError:
         return jsonify({"error": "Access denied"}), 403
-    except Exception as e:
-        logger.error(f"Error renaming strategy file {filename}: {e}")
+    except Exception:
+        logger.error("Error renaming strategy file %s", filename, exc_info=True)
         return jsonify({"error": "Rename operation failed"}), 500
 
 @strategies_bp.route("/api/v1/strategies", methods=["POST"])
@@ -564,8 +572,8 @@ def create_strategy():
         }), 201
     except PermissionError:
         return jsonify({"error": "Access denied"}), 403
-    except Exception as e:
-        logger.error(f"Error creating strategy: {e}", exc_info=True)
+    except Exception:
+        logger.error("Error creating strategy %s", name, exc_info=True)
         return jsonify({"error": "Strategy creation failed"}), 500
 
 @strategies_bp.route("/api/v1/strategies/<strategy_id>", methods=["DELETE"])
@@ -594,8 +602,8 @@ def delete_strategy(strategy_id):
         return jsonify({"error": "Strategy file not found"}), 404
     except PermissionError:
         return jsonify({"error": "Access denied"}), 403
-    except Exception as e:
-        logger.error(f"Error deleting strategy {strategy_id}: {e}", exc_info=True)
+    except Exception:
+        logger.error("Error deleting strategy %s", strategy_id, exc_info=True)
         return jsonify({"error": "Delete operation failed"}), 500
 
 @strategies_bp.route("/api/v1/strategies/optimize", methods=["POST"])
@@ -630,6 +638,6 @@ async def optimize_strategy():
             "symbol": symbol,
             "results": results[:20] # Return top 20 combinations
         }), 200
-    except Exception as e:
-        logger.error(f"Optimization API Error: {e}", exc_info=True)
+    except Exception:
+        logger.error("Optimization API Error", exc_info=True)
         return jsonify({"status": "error", "message": "Optimization failed to start"}), 500
