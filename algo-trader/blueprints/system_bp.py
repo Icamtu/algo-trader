@@ -1,4 +1,5 @@
-from flask import Blueprint, jsonify, request, escape
+from flask import Blueprint, jsonify, request
+from markupsafe import escape
 import logging
 import os
 import requests
@@ -64,12 +65,20 @@ def system_heartbeat():
             # Sanitize input - block long strings or special chars
             _heartbeat_data["status"] = str(escape(data["status"][:50]))
 
-        if "checks" in data:
-            for k, v in data["checks"].items():
+        # Process and sanitize custom checks if provided
+        if "checks" in data and isinstance(data["checks"], dict):
+            # Security: Limit number of checks to prevent resource exhaustion
+            for i, (k, v) in enumerate(data["checks"].items()):
+                if i >= 50: break # Institutional limit
+                
                 # Sanitize keys and values
                 safe_k = str(escape(k[:50]))
                 if isinstance(v, dict):
-                    _heartbeat_data["checks"][safe_k] = {str(escape(sk[:50])): str(escape(str(sv)[:100])) for sk, sv in v.items()}
+                    # Sanitize nested dicts (1 level deep)
+                    _heartbeat_data["checks"][safe_k] = {
+                        str(escape(sk[:50])): str(escape(str(sv)[:100])) 
+                        for j, (sk, sv) in enumerate(v.items()) if j < 20
+                    }
                 else:
                     _heartbeat_data["checks"][safe_k] = str(escape(str(v)[:100]))
         
