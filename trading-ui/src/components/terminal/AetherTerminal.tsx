@@ -44,9 +44,9 @@ export const AetherTerminal: React.FC = () => {
       const apiKey = await tradingService.getApiKey();
       if (apiKey) {
         const res = await tradingService.getOrders(apiKey);
-        if (res?.status === 'success') {
-          setOrders(res.data || []);
-        }
+        const data = res?.data || res;
+        const ordersList = Array.isArray(data?.orders) ? data.orders : (Array.isArray(data) ? data : []);
+        setOrders(ordersList);
       }
     } catch (err) {
       console.error("[AetherTerminal] Fetch error:", err);
