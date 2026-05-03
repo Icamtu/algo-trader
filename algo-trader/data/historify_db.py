@@ -34,7 +34,7 @@ def _get_persistent_conn():
             _thread_local.conn = duckdb.connect(HISTORIFY_DB_PATH, read_only=False)
             _thread_local.conn.execute("SET threads=2;")
         except Exception as e:
-            logger.error(f"DuckDB Connect Error: {e}")
+            logger.error("DuckDB Connect Error", exc_info=True)
             raise
     return _thread_local.conn
 
@@ -44,7 +44,7 @@ def get_duckdb_conn():
         conn = _get_persistent_conn()
         yield conn
     except Exception as e:
-        logger.error(f"DuckDB Session Error: {e}")
+        logger.error("DuckDB Session Error", exc_info=True)
         _thread_local.conn = None
         raise
 
@@ -83,7 +83,7 @@ def upsert_market_data(data, symbol, exchange, interval):
                                  (symbol.upper(), exchange.upper(), interval, row['timestamp'], row['open'], row['high'], row['low'], row['close'], row['volume'], row.get('oi', 0)))
                 return len(data)
         except Exception as e:
-            logger.error(f"upsert_market_data error: {e}")
+            logger.error("upsert_market_data error", exc_info=True)
             return 0
     return 0
 
@@ -276,7 +276,7 @@ def get_market_breadth(interval):
                 "ratio": ratio
             }
     except Exception as e:
-        logger.error(f"Error getting market breadth: {e}")
+        logger.error("Error getting market breadth", exc_info=True)
         return {"advances": 0, "declines": 0, "unchanged": 0, "ratio": 0.5}
 
 def cleanup_stale_jobs(timeout_minutes=15):
