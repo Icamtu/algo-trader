@@ -42,9 +42,9 @@ class TelegramService:
                 if response.status_code == 200:
                     return True
                 else:
-                    logger.error(f"Telegram API Error: {response.status_code} - {response.text}")
-        except Exception as e:
-            logger.error(f"Failed to send Telegram message: {e}")
+                    logger.error("Telegram API Error: %s", response.status_code)
+        except Exception:
+            logger.error("Failed to send Telegram message", exc_info=True)
 
         return False
 
