@@ -37,8 +37,8 @@ class PerformanceCalculator:
                 self.df = pd.DataFrame.from_records(cleaned_logs)
             else:
                 self.df = pd.DataFrame()
-        except Exception as e:
-            logger.error(f"PerformanceCalculator DataFrame creation failed: {e}")
+        except Exception:
+            logger.error("PerformanceCalculator DataFrame creation failed", exc_info=True)
             self.df = pd.DataFrame()
 
     def calculate_metrics(self) -> Dict[str, Any]:
