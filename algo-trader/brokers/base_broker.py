@@ -111,5 +111,5 @@ class BaseBroker(abc.ABC):
         error_info = {"broker": self.broker_id, "message": message}
         if context:
             error_info.update(context)
-        logger.error(f"Broker Error: {message} | {context}")
+        logger.error("Broker Error: %s | %s", message, context)
         return error_info
