@@ -43,8 +43,8 @@ class AlertService:
                 else:
                     logger.error(f"Telegram API Error: {response.status_code} - {response.text}")
                     return False
-        except Exception as e:
-            logger.error(f"Failed to send Telegram message: {e}")
+        except Exception:
+            logger.error("Failed to send Telegram message", exc_info=True)
             return False
 
     async def dispatch_alert(self, alert_data: Dict[str, Any]) -> bool:
@@ -125,12 +125,12 @@ class AlertService:
                     _prev_prices[symbol] = price
 
                     if self._evaluate(alert, price):
-                        logger.info(f"Alert triggered: {alert.get('id')} {symbol} {alert.get('condition')} @ {price}")
+                        logger.info("Alert triggered: %s %s %s @ %s", alert.get('id'), symbol, alert.get('condition'), price)
                         await self.dispatch_alert({**alert, "value": price})
                         self.db_logger.acknowledge_alert(int(alert["id"]))
 
-            except Exception as e:
-                logger.error(f"Alert monitoring loop error: {e}")
+            except Exception:
+                logger.error("Alert monitoring loop error", exc_info=True)
 
             await asyncio.sleep(interval)
 
