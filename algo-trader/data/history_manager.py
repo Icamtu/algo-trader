@@ -83,8 +83,8 @@ class HistoryManager:
                 if not df.empty:
                     logger.info(f"Historify VECTOR HIT: Retrieved {len(df)} rows for {symbol}.")
                     return df
-            except Exception as e:
-                logger.warning(f"Historify Vector Read failed: {e}")
+            except Exception:
+                logger.warning("Historify Vector Read failed", exc_info=True)
 
         # 2. Fallback to list-based retrieval if DuckDB is empty or fails
         candles = self.get_candles(symbol, interval, start_date, end_date)
@@ -125,8 +125,8 @@ class HistoryManager:
                         "oi": int(r[6])
                     } for r in res
                 ]
-        except Exception as e:
-            logger.error(f"DuckDB Read Error: {e}")
+        except Exception:
+            logger.error("DuckDB Read Error", exc_info=True)
             return []
 
     def _save_to_duckdb(self, symbol: str, candles: List[Dict[str, Any]], interval: str = "1m"):
@@ -139,8 +139,8 @@ class HistoryManager:
             # exchange defaults to NSE for unified storage
             hdb.upsert_market_data(df, symbol, "NSE", interval)
             logger.info(f"Saved {len(candles)} rows for {symbol} to Historify market_data.")
-        except Exception as e:
-            logger.error(f"DuckDB Save Error: {e}")
+        except Exception:
+            logger.error("DuckDB Save Error", exc_info=True)
 
 
     def _fetch_from_yfinance(self, symbol: str, interval: str, start: str, end: str) -> List[Dict[str, Any]]:
@@ -210,8 +210,8 @@ class HistoryManager:
             try:
                 df['time'] = pd.to_datetime(df[date_col], utc=True).astype('int64') // 10**9
                 df['timestamp'] = df['time']
-            except Exception as e:
-                logger.error(f"Timestamp conversion error for {yf_symbol}: {e}")
+            except Exception:
+                logger.error("Timestamp conversion error for %s", yf_symbol, exc_info=True)
                 return []
             
             # Required fields
@@ -219,6 +219,6 @@ class HistoryManager:
                 df['oi'] = 0
             
             return df[['timestamp', 'time', 'open', 'high', 'low', 'close', 'volume', 'oi']].to_dict('records')
-        except Exception as e:
-            logger.error(f"yfinance Fetch Error for {symbol}: {e}")
+        except Exception:
+            logger.error("yfinance Fetch Error for %s", symbol, exc_info=True)
             return []
