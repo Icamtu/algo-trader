@@ -29,7 +29,7 @@ class DeadLetterQueueService:
 
     def enqueue(self, order_params: Dict[str, Any], error: str):
         """Adds a failed order to the DLQ."""
-        logger.warning(f"DLQ: Enqueueing failed order for {order_params.get('symbol')}. Error: {error}")
+        logger.warning("DLQ: Enqueueing failed order for %s", order_params.get('symbol'))
         self.queue.append(DLQEntry(order_params, error))
 
     async def start_processor(self, order_manager: Any, interval: int = 10):
@@ -48,38 +48,38 @@ class DeadLetterQueueService:
                 for entry in to_retry:
                     # Remove if expired
                     if now - entry.created_at > self.expiration_seconds:
-                        logger.error(f"DLQ: Order for {entry.order_params.get('symbol')} expired after {self.expiration_seconds}s")
+                        logger.error("DLQ: Order for %s expired after %ss", entry.order_params.get('symbol'), self.expiration_seconds)
                         self.queue.remove(entry)
                         continue
 
                     # Remove if max retries exceeded
                     if entry.attempts >= self.max_retries:
-                        logger.error(f"DLQ: Max retries ({self.max_retries}) reached for {entry.order_params.get('symbol')}")
+                        logger.error("DLQ: Max retries (%s) reached for %s", self.max_retries, entry.order_params.get('symbol'))
                         self.queue.remove(entry)
                         continue
 
                     # Attempt retry
                     entry.attempts += 1
                     entry.last_attempt_at = now
-                    logger.info(f"DLQ: Retrying order for {entry.order_params.get('symbol')} (Attempt {entry.attempts})")
+                    logger.info("DLQ: Retrying order for %s (Attempt %s)", entry.order_params.get('symbol'), entry.attempts)
 
                     try:
                         # Call place_order again
                         result = await order_manager.place_order(**entry.order_params, retry_from_dlq=True)
                         if result.get("status") == "success":
-                            logger.info(f"DLQ: Retry successful for {entry.order_params.get('symbol')}")
+                            logger.info("DLQ: Retry successful for %s", entry.order_params.get('symbol'))
                             self.queue.remove(entry)
                         else:
                             # Update next retry with exponential backoff (30s, 60s, 120s...)
                             delay = 30 * (2 ** (entry.attempts - 1))
                             entry.next_retry_at = now + delay
-                            logger.warning(f"DLQ: Retry failed for {entry.order_params.get('symbol')}, next retry in {delay}s")
-                    except Exception as e:
-                        logger.error(f"DLQ: Error during retry execution: {e}")
+                            logger.warning("DLQ: Retry failed for %s, next retry in %ss", entry.order_params.get('symbol'), delay)
+                    except Exception:
+                        logger.error("DLQ: Error during retry execution", exc_info=True)
 
                 await asyncio.sleep(interval)
-            except Exception as e:
-                logger.error(f"DLQ loop error: {e}")
+            except Exception:
+                logger.error("DLQ loop error", exc_info=True)
                 await asyncio.sleep(interval)
 
 # Singleton
