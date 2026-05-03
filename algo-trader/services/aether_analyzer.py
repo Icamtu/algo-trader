@@ -49,8 +49,8 @@ class AetherAnalyzer:
             # AetherBridge: Use native history if available, else skip
             try:
                 history_data = await om.native_broker.get_history(symbol, exchange, interval="5")
-            except Exception as he:
-                logger.warning(f"History fetch failed for {symbol}: {he}")
+            except Exception:
+                logger.warning(f"History fetch failed for {symbol}", exc_info=True)
                 history_data = {"data": []}
 
             candles = history_data.get("data", [])
@@ -121,8 +121,8 @@ class AetherAnalyzer:
             log_api_call("NeuralScan", {"symbol": symbol, "timeframe": timeframe}, result, strategy="AetherAnalyzer")
             return result
 
-        except Exception as e:
-            logger.error(f"Neural Scan Fault for {symbol}: {e}")
+        except Exception:
+            logger.error(f"Neural Scan Fault for {symbol}", exc_info=True)
             return self._generate_fallback_analysis(symbol, timeframe, 0.0)
 
     def _generate_fallback_analysis(self, symbol: str, timeframe: str, price: float) -> Dict[str, Any]:
