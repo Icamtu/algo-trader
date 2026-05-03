@@ -50,8 +50,8 @@ def require_auth(f):
         except jwt.ExpiredSignatureError:
             logger.warning("Auth: Token has expired")
             return False, (jsonify({"status": "error", "message": "Token has expired"}), 401)
-        except jwt.InvalidTokenError as e:
-            logger.warning(f"Auth Failure for Token [{token[:10]}...]: {e}")
+        except jwt.InvalidTokenError:
+            logger.warning("Auth Failure for Token [%s...]", token[:10], exc_info=True)
             return False, (jsonify({"status": "error", "message": "Authentication failed"}), 401)
 
     @wraps(f)
