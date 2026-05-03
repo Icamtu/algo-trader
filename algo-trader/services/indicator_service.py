@@ -8,6 +8,7 @@ import importlib.util
 import ast
 import pandas as pd
 import logging
+import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
@@ -57,20 +58,30 @@ print(result.to_json())
         """
         Normalizes and validates the path to prevent traversal attacks.
         """
-        # 1. Sanitize the name: take only the basename and remove dynamic directory markers
-        safe_name = os.path.basename(os.path.normpath(name)).lower()
+        # 1. Sanitize the name: strictly take only the basename and validate regex
+        clean_name = os.path.basename(name)
+        if not clean_name or clean_name.startswith('.'):
+             raise PermissionError("Access denied: Invalid indicator name.")
+             
+        # Regex validation for name: alphanumeric, underscores, dashes, and .py extension
+        if not re.match(r"^[a-z0-9_-]+(?:\.py)?$", clean_name.lower()):
+            raise PermissionError("Access denied: Indicator name contains illegal characters.")
+
+        safe_name = clean_name.lower()
         if not safe_name.endswith(".py"):
             safe_name += ".py"
         
-        # 2. Join with the indicators directory
-        target_path = os.path.normpath(os.path.join(self.indicators_dir, safe_name))
+        # 2. Join with the indicators directory and get canonical paths
+        base_dir = os.path.realpath(self.indicators_dir)
+        target_path = os.path.join(base_dir, safe_name)
+        target_real = os.path.realpath(target_path)
         
-        # 3. Final safety check: must be inside indicators_dir
-        base_dir = os.path.abspath(self.indicators_dir)
-        if not os.path.abspath(target_path).startswith(base_dir):
-            raise PermissionError("Access denied: Invalid indicator path.")
+        # 3. Final containment check: target_real must be inside base_dir
+        # codeql [py/path-injection] - Containment is verified using os.path.commonpath and realpath
+        if os.path.commonpath([base_dir, target_real]) != base_dir:
+            raise PermissionError("Access denied: Path traversal detected.")
             
-        return target_path
+        return target_real
 
     def save_indicator(self, name: str, code: str) -> str:
         """Saves a new custom indicator code to disk."""
@@ -82,7 +93,7 @@ print(result.to_json())
         with open(file_path, "w") as f:
             f.write(code)
 
-        logger.info(f"Custom indicator {name} saved to {file_path}")
+        logger.info("Custom indicator %s saved to %s", name, file_path)
         return file_path
 
     def get_indicators(self) -> List[str]:
