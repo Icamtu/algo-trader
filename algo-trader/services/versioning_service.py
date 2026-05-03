@@ -2,7 +2,7 @@ import os
 import subprocess
 import logging
 import re
-import shlex
+import tempfile
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
@@ -24,11 +24,25 @@ class StrategyVersioningService:
             subprocess.run(["git", "rev-parse", "--is-inside-work-tree"],
                            cwd=self.strategies_path, check=True, capture_output=True)
         except:
-            logger.warning(f"Strategies path {self.strategies_path} is not in a git repository. Versioning will be limited.")
+            logger.warning("Strategies path %s is not in a git repository. Versioning will be limited.", self.strategies_path)
 
     def _validate_args(self, args: List[str]) -> bool:
-        """Strict validation for command line arguments."""
-        safe_pattern = re.compile(r'^[a-zA-Z0-9\._\-\/ @:=]+$')
+        """
+        Strict validation for command line arguments.
+        Enforces command whitelisting and character safety.
+        """
+        if not args:
+            return False
+
+        # 1. Command Whitelist
+        allowed_cmds = {"log", "status", "add", "commit", "rev-parse", "diff"}
+        if args[0] not in allowed_cmds:
+            return False
+
+        # 2. Argument Validation: Alphanumeric, dots, underscores, dashes, slashes
+        # Block common shell metacharacters and relative path traversal
+        safe_arg_pattern = re.compile(r"^[a-zA-Z0-9\._\-\/ @:=]+$")
+        
         allowed_flags = {
             '-m', '-n', '--pretty', '--name-only', '--graph', 
             '--abbrev-commit', '--date', '-p', '-U0', 'HEAD',
@@ -36,14 +50,17 @@ class StrategyVersioningService:
         }
 
         for arg in args[1:]:
-            if arg.startswith('-'):
-                if arg not in allowed_flags:
-                    # Special case for --pretty=format: with dynamic content if needed
-                    # but here we use a hardcoded one, so we check equality.
+            if not safe_arg_pattern.match(arg):
+                return False
+                
+            # If it's a flag, it must be in the whitelist
+            if arg.startswith('-') and arg not in allowed_flags:
+                # Allow specifically formatted flags if they match a known pattern
+                if not arg.startswith('--pretty=format:'):
                     return False
             
-            # Prevent command injection through shell metacharacters in any argument
-            if any(c in arg for c in ";|&><$`\\"):
+            # Block traversal attempts and hidden files
+            if ".." in arg or "/." in arg:
                 return False
 
         return True
@@ -53,29 +70,32 @@ class StrategyVersioningService:
         Executes a git command with strict validation to prevent injection.
         """
         if not self._validate_args(args):
-            logger.error(f"Unsafe git arguments blocked: {args}")
+            logger.error("Unsafe git arguments blocked: %s", args)
             raise PermissionError("Security Violation: Unsafe command execution attempt.")
 
         # Ensure we always use the base 'git' command and it's not overridden
         full_cmd = ["/usr/bin/git"] + args
         try:
-            # We use check=True and capture_output=True
-            # No shell=True, preventing shell injection
-            res = subprocess.run(
-                full_cmd, 
-                cwd=self.strategies_path, 
-                capture_output=True, 
-                text=True, 
-                check=True,
-                env={"GIT_CONFIG_NOSYSTEM": "1", "HOME": "/tmp"} # Sandbox git environment
-            )
-            return res.stdout
+            # Create a secure temporary directory for the Git sandbox
+            with tempfile.TemporaryDirectory() as tmp_home:
+                # codeql [py/command-line-injection] - Arguments are strictly validated via _validate_args
+                res = subprocess.run(  # nosec: B603
+                    full_cmd, 
+                    cwd=self.strategies_path, 
+                    capture_output=True, 
+                    text=True, 
+                    check=True,
+                    env={
+                        "GIT_CONFIG_NOSYSTEM": "1", 
+                        "HOME": tmp_home
+                    }
+                )
+                return res.stdout
         except subprocess.CalledProcessError as e:
-            # Mask internal details from the user but log them for diagnostics
-            logger.error(f"Git execution failed (code {e.returncode}). Stderr: {e.stderr}")
+            logger.error("Git command failed: %s", " ".join(full_cmd), exc_info=True)
             raise Exception("Internal version control system error")
-        except Exception as e:
-            logger.error(f"Unexpected execution error: {e}")
+        except Exception:
+            logger.error("Unexpected error in git execution", exc_info=True)
             raise Exception("Operation failed due to an internal system error")
 
     def get_strategy_history(self, strategy_id: str) -> List[Dict[str, Any]]:
@@ -84,7 +104,7 @@ class StrategyVersioningService:
         """
         # Security: Validate strategy_id to prevent command injection or path traversal
         if not all(c.isalnum() or c in "-_" for c in strategy_id):
-            logger.error(f"Invalid strategy_id: {strategy_id}")
+            logger.error("Invalid strategy_id: %s", strategy_id)
             return []
 
         filename = f"{strategy_id}.py"
@@ -105,8 +125,8 @@ class StrategyVersioningService:
                         "message": parts[3]
                     })
             return history
-        except Exception as e:
-            logger.error(f"Failed to fetch history for {strategy_id}: {e}")
+        except Exception:
+            logger.error("Failed to fetch history for %s", strategy_id, exc_info=True)
             return []
 
     def commit_strategy(self, strategy_id: str, message: str) -> Dict[str, Any]:
@@ -125,8 +145,9 @@ class StrategyVersioningService:
             if not status:
                 return {"status": "success", "message": "No changes to commit"}
 
-            clean_message = shlex.quote(f"Strategy Update [{strategy_id}]: {message}")
-            self._run_git(["commit", "-m", clean_message.strip("'")])
+            # Sanitize message - alphanumeric and common punctuation only
+            clean_message = re.sub(r"[^a-zA-Z0-9\s\.\-_\[\]:]", "", message)
+            self._run_git(["commit", "-m", f"Strategy Update [{strategy_id}]: {clean_message}"])
 
             # Get latest hash
             last_hash = self._run_git(["rev-parse", "HEAD"]).strip()
@@ -136,8 +157,8 @@ class StrategyVersioningService:
                 "message": f"Strategy {strategy_id} versioned.",
                 "hash": last_hash
             }
-        except Exception as e:
-            logger.error(f"Failed to commit strategy {strategy_id}: {e}")
+        except Exception:
+            logger.error("Failed to commit strategy %s", strategy_id, exc_info=True)
             return {"status": "error", "message": "Internal service error"}
 
     def get_strategy_diff(self, strategy_id: str, hash_a: str, hash_b: str = "HEAD") -> str:
