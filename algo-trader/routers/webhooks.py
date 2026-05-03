@@ -96,8 +96,8 @@ async def tradingview_webhook(data: Dict[str, Any]):
         ))
 
         return {"status": "accepted", "message": "Order queued for execution"}
-    except Exception as e:
-        logger.error(f"Webhook processing error: {e}")
+    except Exception:
+        logger.error("Webhook processing error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/external-event")
@@ -114,5 +114,5 @@ async def dispatch_outbound_webhook(url: str, payload: Dict[str, Any]):
     try:
         async with httpx.AsyncClient() as client:
             await client.post(url, json=payload, timeout=5.0)
-    except Exception as e:
-        logger.error(f"Failed to dispatch outbound webhook to {url}: {e}")
+    except Exception:
+        logger.error("Failed to dispatch outbound webhook", exc_info=True)
