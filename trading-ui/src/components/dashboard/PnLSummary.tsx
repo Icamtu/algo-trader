@@ -1,5 +1,5 @@
 import React from "react";
-import { useTelemetryPnl } from "@/features/openalgo/hooks/useTrading";
+import { useTelemetryPnl } from "@/features/aetherdesk/hooks/useTrading";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -86,7 +86,8 @@ const PnLCard = ({ label, value, charges, unrealized, icon, loading }: PnLCardPr
 };
 
 export const PnLSummary = () => {
-  const { data, isLoading, error } = useTelemetryPnl();
+  const { data: rawData, isLoading, error } = useTelemetryPnl();
+  const data = rawData?.data || rawData;
 
   if (error) return null;
 
@@ -94,33 +95,33 @@ export const PnLSummary = () => {
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
       <PnLCard
         label="Today"
-        value={data?.daily.net ?? 0}
-        charges={data?.daily.charges ?? 0}
-        unrealized={data?.all_time.unrealized ?? 0}
+        value={data?.daily?.net ?? 0}
+        charges={data?.daily?.charges ?? 0}
+        unrealized={data?.all_time?.unrealized ?? 0}
         icon={<Clock className="w-3.5 h-3.5" />}
         loading={isLoading}
       />
       <PnLCard
         label="Weekly"
-        value={data?.weekly.net ?? 0}
-        charges={data?.weekly.charges ?? 0}
-        unrealized={data?.all_time.unrealized ?? 0}
+        value={data?.weekly?.net ?? 0}
+        charges={data?.weekly?.charges ?? 0}
+        unrealized={data?.all_time?.unrealized ?? 0}
         icon={<Calendar className="w-3.5 h-3.5" />}
         loading={isLoading}
       />
       <PnLCard
         label="Monthly"
-        value={data?.monthly.net ?? 0}
-        charges={data?.monthly.charges ?? 0}
-        unrealized={data?.all_time.unrealized ?? 0}
+        value={data?.monthly?.net ?? 0}
+        charges={data?.monthly?.charges ?? 0}
+        unrealized={data?.all_time?.unrealized ?? 0}
         icon={<BarChart3 className="w-3.5 h-3.5" />}
         loading={isLoading}
       />
       <PnLCard
         label="All Time"
-        value={data?.all_time.net ?? 0}
-        charges={data?.all_time.charges ?? 0}
-        unrealized={data?.all_time.unrealized ?? 0}
+        value={data?.all_time?.net ?? 0}
+        charges={data?.all_time?.charges ?? 0}
+        unrealized={data?.all_time?.unrealized ?? 0}
         icon={<Globe className="w-3.5 h-3.5" />}
         loading={isLoading}
       />
