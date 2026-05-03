@@ -509,16 +509,17 @@ async def websocket_endpoint(websocket: WebSocket):
 
 # --- FastAPI REST Endpoints ---
 # Core Health & Diagnostics (Multiple paths for backward compatibility)
-app.include_router(health_router, prefix="/api/v1/health")
-app.include_router(health_router, prefix="/health/api")
-app.include_router(health_router, prefix="/health")
+# Core Health & Diagnostics (Multiple paths for backward compatibility)
+app.include_router(health_router, prefix="/api/v1")
+app.include_router(health_router, prefix="/health/api") # Kept for legacy
+app.include_router(health_router)
 
 # Domain Feature Routers (Migrated from Flask)
 # We mount at /api/v1 because the routers themselves provide the feature paths
 app.include_router(strategies_router, prefix="/api/v1")
 app.include_router(analytics_router, prefix="/api/v1")
 app.include_router(analytics_router) # Handle root-level routes for institutional analytics
-app.include_router(action_center_router, prefix="/api/v1/actioncenter")
+app.include_router(action_center_router, prefix="/api/v1")
 app.include_router(orders_router, prefix="/api/v1")
 app.include_router(portfolio_router, prefix="/api/v1")
 app.include_router(risk_router, prefix="/api/v1")
@@ -532,12 +533,12 @@ app.include_router(system_router, prefix="/api/v1")
 app.include_router(system_no_prefix)
 app.include_router(intel_router, prefix="/api/v1")
 app.include_router(sentiment_router, prefix="/api/v1")
-app.include_router(indicators_router, prefix="/api/v1/indicators")
+app.include_router(indicators_router, prefix="/api/v1")
 app.include_router(reports_router, prefix="/api/v1/reports")
 app.include_router(master_contract_router, prefix="/api")
-app.include_router(analyzer_router, prefix="/api/v1/analyzer")
-app.include_router(playground_router, prefix="/api/v1/playground")
-app.include_router(playground_router, prefix="/playground")
+app.include_router(analyzer_router, prefix="/api/v1")
+app.include_router(playground_router, prefix="/api/v1")
+app.include_router(playground_router)
 
 @app.get("/metrics")
 async def metrics():
