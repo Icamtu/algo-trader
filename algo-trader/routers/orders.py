@@ -75,8 +75,8 @@ async def api_place_order(
             mode=mode_override
         )
         return result
-    except Exception as e:
-        logger.error(f"API order placement failed: {e}", exc_info=True)
+    except Exception:
+        logger.error("API order placement failed", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/placesmartorder")
@@ -108,8 +108,8 @@ async def api_place_smart_order(
             exchange=request.exchange,
         )
         return result
-    except Exception as e:
-        logger.error(f"API smart order placement failed: {e}", exc_info=True)
+    except Exception:
+        logger.error("API smart order placement failed", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/orders")
@@ -131,8 +131,8 @@ async def get_orders(request: Request = None):
                 "count": len(orders)
             }
         }
-    except Exception as e:
-        logger.error(f"Error fetching orders: {e}")
+    except Exception:
+        logger.error("Error fetching orders", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/tradebook")
@@ -167,8 +167,8 @@ async def get_tradebook(request: Request = None):
                 "count": len(mode_trades)
             }
         }
-    except Exception as e:
-        logger.error(f"Error fetching tradebook: {e}", exc_info=True)
+    except Exception:
+        logger.error("Error fetching tradebook", exc_info=True)
         return {
             "status": "success",
             "mode": order_manager.mode if order_manager else "sandbox",
@@ -199,8 +199,8 @@ async def get_sandbox_trades():
                 "count": len(sandbox_trades)
             }
         }
-    except Exception as e:
-        logger.error(f"Error fetching sandbox trades: {e}")
+    except Exception:
+        logger.error("Error fetching sandbox trades", exc_info=True)
         return {"status": "success", "mode": "sandbox", "data": {"trades": [], "count": 0}}
 
 @router.get("/sandbox/positions")
@@ -234,8 +234,8 @@ async def get_sandbox_positions():
                 "count": len(formatted_positions)
             }
         }
-    except Exception as e:
-        logger.error(f"Error fetching sandbox positions: {e}")
+    except Exception:
+        logger.error("Error fetching sandbox positions", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/sandbox/summary")
@@ -292,8 +292,8 @@ async def get_sandbox_summary():
                 "positions": open_positions
             }
         }
-    except Exception as e:
-        logger.error(f"Error fetching sandbox summary: {e}", exc_info=True)
+    except Exception:
+        logger.error("Error fetching sandbox summary", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/splitorder")
@@ -337,8 +337,8 @@ async def api_split_order(
             "message": f"Split order into {len(results)} chunks",
             "results": results
         }
-    except Exception as e:
-        logger.error(f"Split order execution failed: {e}", exc_info=True)
+    except Exception:
+        logger.error("Split order execution failed", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/orders/{order_id}/cancel")
@@ -351,8 +351,8 @@ async def cancel_order(order_id: str):
     try:
         result = await order_manager.cancel_order(order_id)
         return result
-    except Exception as e:
-        logger.error(f"Error cancelling order {order_id}: {e}")
+    except Exception:
+        logger.error(f"Error cancelling order {order_id}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 @router.get("/sandbox/pnl/api/data")
 async def get_sandbox_pnl_data():
@@ -440,8 +440,8 @@ async def get_sandbox_pnl_data():
                 ]
             }
         }
-    except Exception as e:
-        logger.error(f"Error fetching sandbox pnl data: {e}", exc_info=True)
+    except Exception:
+        logger.error("Error fetching sandbox pnl data", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/sandbox/api/configs")
