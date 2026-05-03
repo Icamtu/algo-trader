@@ -106,8 +106,8 @@ class RiskManager:
             if "risk_per_trade_inr" in persistent: self.risk_per_trade_inr = float(persistent["risk_per_trade_inr"])
             if "strategy_max_daily_loss" in persistent: self.strategy_max_daily_loss = float(persistent["strategy_max_daily_loss"])
             if "max_symbol_notional" in persistent: self.max_symbol_notional = float(persistent["max_symbol_notional"])
-        except Exception as e:
-            logger.error(f"RiskManager: Could not load persistent settings: {e}")
+        except Exception:
+            logger.error("RiskManager: Could not load persistent settings", exc_info=True)
 
         # Daily counters — reset automatically when date changes
         self._today: date = date.today()
@@ -361,10 +361,10 @@ class RiskManager:
                 db.update_risk_setting("max_daily_loss", self.max_daily_loss)
 
             self._log_risk_change(old_snapshot, updates)
-            logger.info(f"RiskManager: Updated limits - {updates}")
-        except Exception as e:
-            logger.error(f"RiskManager: Error updating limits: {e}")
-            raise e
+            logger.info("RiskManager: Updated limits - %s", updates)
+        except Exception:
+            logger.error("RiskManager: Error updating limits", exc_info=True)
+            raise
 
     def _log_risk_change(self, old: Dict[str, Any], new: Dict[str, Any]):
         """Persist a risk limit change record to the audit log table."""
@@ -376,8 +376,8 @@ class RiskManager:
                 "INSERT INTO risk_audit_log (changed_at, changes) VALUES (?, ?)",
                 [datetime.utcnow().isoformat(), json.dumps(changes)]
             )
-        except Exception as e:
-            logger.warning(f"Risk audit log write failed: {e}")
+        except Exception:
+            logger.warning("Risk audit log write failed", exc_info=True)
 
     def is_circuit_broken(self) -> bool:
         """
@@ -416,7 +416,7 @@ class RiskManager:
             if current_dd >= max_dd_limit:
                 self._breached_strategies.add(strategy_id)
                 self._db.update_strategy_safeguard(strategy_id, {"last_breach_at": datetime.utcnow().isoformat()})
-                logger.critical(f"Strategy {strategy_id} BREACHED Safeguard: Max Drawdown ({current_dd:.2f}%) hit the limit ({max_dd_limit:.2f}%)")
+                logger.critical("Strategy %s BREACHED Safeguard: Max Drawdown (%.2f%%) hit the limit (%.2f%%)", strategy_id, current_dd, max_dd_limit)
                 return {"status": "breached", "reason": f"Max Drawdown ({current_dd:.2f}%) hit/exceeded the {max_dd_limit:.2f}% limit"}
 
             # Breach 2: Net Loss INR
@@ -426,12 +426,12 @@ class RiskManager:
             if max_loss_limit > 0 and net_pnl <= -max_loss_limit:
                 self._breached_strategies.add(strategy_id)
                 self._db.update_strategy_safeguard(strategy_id, {"last_breach_at": datetime.utcnow().isoformat()})
-                logger.critical(f"Strategy {strategy_id} BREACHED Safeguard: Net Loss (₹{abs(net_pnl):,.2f}) hit the limit (₹{max_loss_limit:,.2f})")
+                logger.critical("Strategy %s BREACHED Safeguard: Net Loss (₹%s) hit the limit (₹%s)", strategy_id, f"{abs(net_pnl):,.2f}", f"{max_loss_limit:,.2f}")
                 return {"status": "breached", "reason": f"Net Loss (₹{abs(net_pnl):,.2f}) has reached/exceeded the ₹{max_loss_limit:,.2f} safeguard limit"}
 
             return {"status": "safe", "metrics": metrics}
-        except Exception as e:
-            logger.error(f"Error checking safeguards for {strategy_id}: {e}")
+        except Exception:
+            logger.error("Error checking safeguards for %s", strategy_id, exc_info=True)
             return {"status": "error", "reason": "Internal error"}
 
     def halt_strategy(self, strategy_id: str):
@@ -442,4 +442,4 @@ class RiskManager:
         """Clear a manual or automated breach to allow trading again."""
         if strategy_id in self._breached_strategies:
             self._breached_strategies.remove(strategy_id)
-            logger.info(f"Strategy {strategy_id} risk breach cleared. Trading resumed.")
+            logger.info("Strategy %s risk breach cleared. Trading resumed.", strategy_id)
