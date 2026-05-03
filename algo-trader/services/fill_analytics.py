@@ -67,8 +67,8 @@ class FillAnalyticsService:
                 "recent_slippage_events": df.sort_values('slippage_abs', ascending=False).head(10)[['timestamp', 'symbol', 'side', 'slippage_pct']].to_dict('records')
             }
 
-        except Exception as e:
-            logger.error(f"Fill quality analysis failed: {e}")
+        except Exception:
+            logger.error("Fill quality analysis failed", exc_info=True)
             return {"status": "error", "message": "Internal service error"}
 
 # Singleton
