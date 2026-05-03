@@ -3,9 +3,9 @@ name: "CodeQL Analysis"
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "security/hardening-and-cleanup" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "security/hardening-and-cleanup" ]
   schedule:
     - cron: '21 16 * * 4'
 
