@@ -58,8 +58,8 @@ async def export_trades_csv(
             media_type="text/csv",
             headers={"Content-Disposition": "attachment; filename=trades.csv"},
         )
-    except Exception as e:
-        logger.error(f"CSV export error: {e}")
+    except Exception:
+        logger.error("CSV export error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 
@@ -95,6 +95,6 @@ async def export_trades_xlsx(
         )
     except ImportError:
         raise HTTPException(status_code=501, detail="openpyxl not installed — install it to enable Excel export")
-    except Exception as e:
-        logger.error(f"XLSX export error: {e}")
+    except Exception:
+        logger.error("XLSX export error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
