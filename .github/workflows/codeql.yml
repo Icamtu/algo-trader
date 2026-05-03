@@ -1,8 +1,6 @@
-# Trigger: 2026-04-27T04:25:00Z
 name: "CodeQL Analysis"
 
 on:
-  workflow_dispatch:
   push:
     branches: [ "main", "security/hardening-and-cleanup" ]
   pull_request:
@@ -15,7 +13,6 @@ jobs:
   analyze:
     name: Analyze
     runs-on: ubuntu-latest
-  workflow_dispatch:
     timeout-minutes: 360
     permissions:
       actions: read
