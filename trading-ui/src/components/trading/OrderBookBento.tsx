@@ -27,7 +27,8 @@ interface OrderBookBentoProps {
   onAbortAll?: () => void;
 }
 
-export const OrderBookBento: React.FC<OrderBookBentoProps> = ({ orders, className, onAbort, onAbortAll }) => {
+export const OrderBookBento: React.FC<OrderBookBentoProps> = ({ orders: rawOrders, className, onAbort, onAbortAll }) => {
+  const orders = Array.isArray(rawOrders) ? rawOrders : [];
   const pendingOrders = orders.filter(o =>
     !['complete', 'cancelled', 'rejected'].includes(o.order_status?.toLowerCase())
   );
