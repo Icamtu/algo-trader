@@ -78,12 +78,12 @@ async def api_place_order(mode_override=None):
                 mode=mode_override
             )
             return jsonify(result), 200
-        except Exception as e:
-            logger.error(f"API order placement failed: {e}")
-            return jsonify({"status": "error", "message": "Internal error"}), 500
+        except Exception:
+            logger.error("API order placement failed", exc_info=True)
+            return jsonify({"status": "error", "message": "Order placement failed"}), 500
 
-    except Exception as e:
-        logger.error(f"PlaceOrder failed: {e}", exc_info=True)
+    except Exception:
+        logger.error("PlaceOrder failed", exc_info=True)
         return jsonify({"error": "Internal error"}), 500
 
 @orders_bp.route("/api/v1/placesmartorder", methods=["POST"])
@@ -123,8 +123,8 @@ async def get_orders():
 
         orders = await order_manager.get_orders()
         return jsonify(orders), 200
-    except Exception as e:
-        logger.error(f"Error fetching orders: {e}")
+    except Exception:
+        logger.error("Error fetching orders", exc_info=True)
         return jsonify({"status": "error", "message": "Internal error"}), 500
 
 @orders_bp.route("/api/v1/orders/<order_id>/cancel", methods=["POST"])
@@ -138,6 +138,6 @@ async def cancel_order(order_id):
 
         result = await order_manager.cancel_order(order_id)
         return jsonify(result), 200
-    except Exception as e:
-        logger.error(f"Error cancelling order {order_id}: {e}")
-        return jsonify({"status": "error", "message": "Internal error"}), 500
+    except Exception:
+        logger.error(f"Error cancelling order {order_id}", exc_info=True)
+        return jsonify({"status": "error", "message": "Cancel failed"}), 500
