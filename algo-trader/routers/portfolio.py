@@ -25,8 +25,8 @@ def _require_admin(request: Request):
         payload = jwt.decode(token, _JWT_SECRET, algorithms=["HS256"], options={"verify_aud": False})
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError as e:
-        logger.warning(f"Auth failure (invalid token): {e}")
+    except jwt.InvalidTokenError:
+        logger.warning("Auth failure (invalid token)", exc_info=True)
         raise HTTPException(status_code=401, detail="Authentication failed")
     role = payload.get("role", "viewer").lower()
     if role not in ("admin", "internal"):
@@ -63,8 +63,8 @@ async def get_engine_positions(request: Request = None):
                 "count": len(pos_list)
             }
         }
-    except Exception as e:
-        logger.error(f"Error fetching engine positions: {e}")
+    except Exception:
+        logger.error("Error fetching engine positions", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/tradebook/open")
@@ -124,8 +124,8 @@ async def get_open_position(symbol: Optional[str] = Query(None)):
                 "count": len(open_list)
             }
         }
-    except Exception as e:
-        logger.error(f"Error fetching open positions: {e}")
+    except Exception:
+        logger.error("Error fetching open positions", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/broker/positions")
@@ -138,8 +138,8 @@ async def get_broker_positions():
     try:
         positions = await order_manager.get_positions()
         return positions
-    except Exception as e:
-        logger.error(f"Error fetching broker positions: {e}")
+    except Exception:
+        logger.error("Error fetching broker positions", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/system/reconcile")
@@ -169,8 +169,8 @@ async def system_reconcile(request: Request):
                 "positions": broker_pos
             }
         }
-    except Exception as e:
-        logger.error(f"Reconcile failure: {e}", exc_info=True)
+    except Exception:
+        logger.error("Reconcile failure", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/system/reset-positions")
@@ -186,8 +186,8 @@ async def system_reset_positions():
             order_manager.position_manager.positions = {}
 
         return {"status": "success", "message": "All local positions reset to zero"}
-    except Exception as e:
-        logger.error(f"Reset positions failure: {e}", exc_info=True)
+    except Exception:
+        logger.error("Reset positions failure", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 @router.get("/portfolio/risk")
 async def get_portfolio_risk(confidence: float = 0.95, horizon: int = 1):
@@ -229,6 +229,6 @@ async def get_portfolio_risk(confidence: float = 0.95, horizon: int = 1):
             horizon_days=horizon
         )
         return risk_data
-    except Exception as e:
-        logger.error(f"Portfolio risk endpoint failure: {e}")
+    except Exception:
+        logger.error("Portfolio risk endpoint failure", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
