@@ -25,4 +25,5 @@ export const CONFIG = {
     WS_URL: `${wsProtocol}//${host}/algo-ws`,
     // Security: API_KEY must be provided via .env (VITE_AETHERDESK_API_KEY)
     API_KEY: import.meta.env.VITE_AETHERDESK_API_KEY || "",
+    DEBUG: import.meta.env.VITE_DEBUG === "true",
 };
