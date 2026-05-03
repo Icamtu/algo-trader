@@ -363,39 +363,44 @@ export class MarketDataManager {
           }
           break
 
-        case 'market_data': {
-          const symbol = (data.symbol as string).toUpperCase()
-          const exchange = (data.exchange as string).toUpperCase()
-          const marketDataPayload = (data.data || {}) as MarketData
-          const dataKey = `${exchange}:${symbol}`
+        case 'market_data':
+        case 'market_data_batch': {
+          const ticks = typeStr === 'market_data_batch' ? (data.data as any[]) : [data]
+          
+          ticks.forEach(tick => {
+            const symbol = (tick.symbol as string).toUpperCase()
+            const exchange = (tick.exchange as string).toUpperCase()
+            const marketDataPayload = (tick.data || {}) as MarketData
+            const dataKey = `${exchange}:${symbol}`
 
-          const existing = this.dataCache.get(dataKey) || { symbol, exchange, data: {} }
-          const newData = { ...existing.data }
+            const existing = this.dataCache.get(dataKey) || { symbol, exchange, data: {} }
+            const newData = { ...existing.data }
 
-          Object.assign(newData, {
-            ltp: marketDataPayload.ltp ?? newData.ltp,
-            open: marketDataPayload.open ?? newData.open,
-            high: marketDataPayload.high ?? newData.high,
-            low: marketDataPayload.low ?? newData.low,
-            close: marketDataPayload.close ?? newData.close,
-            volume: marketDataPayload.volume ?? newData.volume,
-            change: marketDataPayload.change ?? newData.change,
-            change_percent: marketDataPayload.change_percent ?? newData.change_percent,
-            timestamp: marketDataPayload.timestamp ?? newData.timestamp,
-            bid_price: marketDataPayload.bid_price ?? newData.bid_price,
-            ask_price: marketDataPayload.ask_price ?? newData.ask_price,
-            bid_size: marketDataPayload.bid_size ?? newData.bid_size,
-            ask_size: marketDataPayload.ask_size ?? newData.ask_size,
-            depth: marketDataPayload.depth ?? newData.depth,
-          })
+            Object.assign(newData, {
+              ltp: marketDataPayload.ltp ?? newData.ltp,
+              open: marketDataPayload.open ?? newData.open,
+              high: marketDataPayload.high ?? newData.high,
+              low: marketDataPayload.low ?? newData.low,
+              close: marketDataPayload.close ?? newData.close,
+              volume: marketDataPayload.volume ?? newData.volume,
+              change: marketDataPayload.change ?? newData.change,
+              change_percent: marketDataPayload.change_percent ?? newData.change_percent,
+              timestamp: marketDataPayload.timestamp ?? newData.timestamp,
+              bid_price: marketDataPayload.bid_price ?? newData.bid_price,
+              ask_price: marketDataPayload.ask_price ?? newData.ask_price,
+              bid_size: marketDataPayload.bid_size ?? newData.bid_size,
+              ask_size: marketDataPayload.ask_size ?? newData.ask_size,
+              depth: marketDataPayload.depth ?? newData.depth,
+            })
 
-          const updatedSymbolData: SymbolData = { ...existing, data: newData, lastUpdate: Date.now() }
-          this.dataCache.set(dataKey, updatedSymbolData)
+            const updatedSymbolData: SymbolData = { ...existing, data: newData, lastUpdate: Date.now() }
+            this.dataCache.set(dataKey, updatedSymbolData)
 
-          this.subscriptions.forEach((entry) => {
-            if (entry.symbol === symbol && entry.exchange === exchange) {
-              entry.callbacks.forEach(cb => cb(updatedSymbolData))
-            }
+            this.subscriptions.forEach((entry) => {
+              if (entry.symbol === symbol && entry.exchange === exchange) {
+                entry.callbacks.forEach(cb => cb(updatedSymbolData))
+              }
+            })
           })
           break
         }
