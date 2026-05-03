@@ -58,6 +58,19 @@ pnpm-debug.log*
 *.swp
 *.sw?
 .DS_Store
+routes.txt
+audit-backend.py
+mongodb_data_backup/
+trading-ui/build_error.txt
+trading-ui/build_log.txt
+trading-ui/screenshots/
+trading-ui/audit-landing.png
+trading-ui/audit-pages.ts
+trading-ui/register-user.ts
+database/
+observability/loki/data/
+*.db-wal
+*.db-shm
 
 # IDEs
 .idea/
