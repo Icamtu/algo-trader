@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional, Type
 from core.context import app_context
 from utils.auth import require_auth
 from database.trade_logger import get_trade_logger
+from services.versioning_service import versioning_service
 
 logger = logging.getLogger(__name__)
 strategies_bp = Blueprint('strategies_bp', __name__)
@@ -102,6 +103,29 @@ def _get_strategy_description(strategy_name: str) -> str:
     else:
         return "User-defined trading strategy."
 
+# --- Security Helpers ---
+
+STRAT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
+
+def _get_safe_path(filename: str) -> str:
+    """Ensures the filename is safe and stays within the strategy directory."""
+    # Normalize path and extract only the filename part to prevent ../ traversal
+    safe_filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
+    
+    # Re-check extension for safety
+    if not any(safe_filename.endswith(ext) for ext in (".py", ".json", ".yaml", ".yml")):
+         # Default to .py if no extension
+         if "." not in safe_filename:
+             safe_filename += ".py"
+             
+    target_path = os.path.abspath(os.path.join(STRAT_DIR, safe_filename))
+    
+    # Final check: Must start with STRAT_DIR
+    if not target_path.startswith(STRAT_DIR):
+        raise PermissionError("Path Traversal Attempt Detected")
+        
+    return target_path
+
 
 # --- Routes ---
 
@@ -120,33 +144,25 @@ def list_strategy_files():
                     files.append(rel_path)
         return jsonify({"files": files}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Error listing strategy files: {e}")
+        return jsonify({"error": "Failed to list strategy files"}), 500
 
 @strategies_bp.route("/api/v1/strategies/files/<filename>", methods=["GET"])
 @require_auth
 def get_strategy_file(filename):
     """Returns the content of a specific strategy file."""
     try:
-        strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
-        filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
-        file_path = os.path.join(strat_dir, filename)
-
+        file_path = _get_safe_path(filename)
         if not os.path.exists(file_path):
-            allowed_exts = (".py", ".json", ".yaml", ".yml")
-            if not any(filename.endswith(ext) for ext in allowed_exts):
-                file_path += ".py"
-
-        if not os.path.abspath(file_path).startswith(os.path.abspath(strat_dir)):
-            return jsonify({"error": "Forbidden path"}), 403
-
-        if not os.path.exists(file_path):
-            return jsonify({"error": "File not found"}), 404
-
+            return jsonify({"status": "error", "message": "File not found"}), 404
+            
         with open(file_path, "r") as f:
             content = f.read()
-        return jsonify({"filename": filename, "content": content}), 200
+        return jsonify({"filename": os.path.basename(file_path), "content": content})
+    except PermissionError as e:
+        return jsonify({"status": "error", "message": "Access denied"}), 403
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"status": "error", "message": "Internal error"}), 500
 
 @strategies_bp.route("/api/v1/strategies/status", methods=["GET"])
 @require_auth
@@ -161,7 +177,7 @@ def get_all_strategies_status():
         return jsonify(status_map), 200
     except Exception as e:
         logger.error(f"Strategy Status Error: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Strategy status unavailable"}), 500
 
 @strategies_bp.route("/api/v1/strategies/halt", methods=["POST"])
 @require_auth
@@ -176,7 +192,7 @@ async def halt_strategy():
         success = await strategy_runner.halt_strategy(strategy_name)
         return jsonify({"status": "success" if success else "failed"}), 200 if success else 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Internal Kernel Error: {e}"); return jsonify({"error": "Internal kernel exception"}), 500
 
 @strategies_bp.route("/api/v1/strategies/unhalt", methods=["POST"])
 @require_auth
@@ -191,7 +207,7 @@ async def unhalt_strategy():
         success = await strategy_runner.unhalt_strategy(strategy_name)
         return jsonify({"status": "success" if success else "failed"}), 200 if success else 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Internal Kernel Error: {e}"); return jsonify({"error": "Internal kernel exception"}), 500
 
 @strategies_bp.route("/api/v1/strategies/initialize", methods=["POST"])
 @require_auth
@@ -206,7 +222,7 @@ def initialize_strategy():
         success = strategy_runner.initialize_strategy(strategy_name)
         return jsonify({"status": "success" if success else "failed"}), 200 if success else 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Internal Kernel Error: {e}"); return jsonify({"error": "Internal kernel exception"}), 500
 
 @strategies_bp.route("/api/v1/strategies/liquidate", methods=["POST"])
 @require_auth
@@ -221,7 +237,7 @@ async def liquidate_strategy():
         success = await order_manager.liquidate_strategy(strategy_name)
         return jsonify({"status": "success" if success else "failed"}), 200 if success else 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Internal Kernel Error: {e}"); return jsonify({"error": "Internal kernel exception"}), 500
 
 @strategies_bp.route("/api/v1/strategies/safeguards/<strategy_id>", methods=["GET", "POST"])
 @require_auth
@@ -238,64 +254,45 @@ def manage_strategy_safeguards(strategy_id):
 @strategies_bp.route("/api/v1/strategies/files/<filename>", methods=["POST", "PUT"])
 @require_auth
 def save_strategy_file(filename):
-    """Saves/Updates the content of a specific strategy file."""
+    data = request.json
+    content = data.get("content", "")
+    message = data.get("message", "Update via Trading UI")
+    
     try:
-        allowed_exts = (".py", ".json", ".yaml", ".yml")
-        if not filename.endswith(allowed_exts):
-            filename += ".py"
-
-        data = request.json
-        if not data or "content" not in data:
-            return jsonify({"error": "No content provided"}), 400
-
-        strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
-        filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
-        file_path = os.path.join(strat_dir, filename)
-
-        if not os.path.abspath(file_path).startswith(os.path.abspath(strat_dir)):
-            return jsonify({"error": "Forbidden path"}), 403
-
+        file_path = _get_safe_path(filename)
         with open(file_path, "w") as f:
-            f.write(data["content"])
-
+            f.write(content)
+            
+        # Versioning
         try:
+            strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
             versions_dir = os.path.join(strat_dir, ".versions", filename)
             os.makedirs(versions_dir, exist_ok=True)
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             with open(os.path.join(versions_dir, f"{timestamp}.txt"), "w") as vf:
-                vf.write(data["content"])
-        except Exception as backup_e:
-            logger.warning(f"Failed to backup version: {backup_e}")
-
+                vf.write(content)
+        except Exception as e:
+            logger.warning(f"Backup versioning failed for {filename}: {e}")
+            
         return jsonify({"status": "success", "message": f"Strategy {filename} saved successfully"}), 200
+    except PermissionError as e:
+        return jsonify({"status": "error", "message": "Access denied"}), 403
     except Exception as e:
-        logger.error(f"Error saving strategy file: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"status": "error", "message": "Internal error"}), 500
 
 @strategies_bp.route("/api/v1/strategies/files/<filename>", methods=["DELETE"])
 @require_auth
 def delete_strategy_file(filename):
-    """Deletes a specific strategy file."""
     try:
-        allowed_exts = (".py", ".json", ".yaml", ".yml")
-        if not filename.endswith(allowed_exts):
-            filename += ".py"
-
-        strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
-        filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
-        file_path = os.path.join(strat_dir, filename)
-
-        if not os.path.abspath(file_path).startswith(os.path.abspath(strat_dir)):
-            return jsonify({"error": "Forbidden path"}), 403
-
+        file_path = _get_safe_path(filename)
         if os.path.exists(file_path):
             os.remove(file_path)
-            return jsonify({"status": "success", "message": f"Strategy {filename} deleted successfully"}), 200
-        else:
-            return jsonify({"error": "File not found"}), 404
+            return jsonify({"status": "success", "message": f"Strategy {filename} deleted"})
+        return jsonify({"status": "error", "message": "File not found"}), 404
+    except PermissionError as e:
+        return jsonify({"status": "error", "message": "Access denied"}), 403
     except Exception as e:
-        logger.error(f"Error deleting strategy file: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"status": "error", "message": "Internal error"}), 500
 
 @strategies_bp.route("/api/v1/strategies", methods=["GET"])
 @require_auth
@@ -341,7 +338,7 @@ def list_strategies():
         return jsonify({"strategies": strategies, "count": len(strategies)}), 200
     except Exception as e:
         logger.error(f"Error listing strategies: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Strategy discovery failed"}), 500
 
 @strategies_bp.route("/api/v1/strategies/<strategy_id>/performance", methods=["GET"])
 def get_strategy_performance_bp(strategy_id):
@@ -398,7 +395,7 @@ def get_strategy_details(strategy_id):
             "is_active": True # If it's in the strategies list, it's active
         }), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Internal Kernel Error: {e}"); return jsonify({"error": "Internal kernel exception"}), 500
 
 @strategies_bp.route("/api/v1/strategies/<strategy_id>/start", methods=["POST"])
 @require_auth
@@ -412,7 +409,7 @@ def start_strategy(strategy_id):
         success = strategy_runner.initialize_strategy(strategy_id)
         return jsonify({"status": "success" if success else "failed"}), 200 if success else 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Internal Kernel Error: {e}"); return jsonify({"error": "Internal kernel exception"}), 500
 
 @strategies_bp.route("/api/v1/strategies/<strategy_id>/stop", methods=["POST"])
 @require_auth
@@ -426,7 +423,7 @@ def stop_strategy(strategy_id):
         success = strategy_runner.halt_strategy(strategy_id)
         return jsonify({"status": "success" if success else "failed"}), 200 if success else 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Internal Kernel Error: {e}"); return jsonify({"error": "Internal kernel exception"}), 500
 
 @strategies_bp.route("/api/v1/backtest/run", methods=["POST"])
 @require_auth
@@ -464,7 +461,7 @@ async def run_backtest():
         return jsonify({"status": "success", "result": result}), 200
     except Exception as e:
         logger.error(f"Backtest Error: {e}", exc_info=True)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": "Backtest execution failed"}), 500
 @strategies_bp.route("/api/v1/strategies/files/<filename>/versions", methods=["GET"])
 @require_auth
 def get_strategy_versions(filename):
@@ -495,49 +492,36 @@ def get_strategy_versions(filename):
         versions.sort(key=lambda x: x["timestamp"], reverse=True)
         return jsonify({"versions": versions}), 200
     except Exception as e:
-        logger.error(f"Error fetching strategy versions: {e}")
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Error fetching strategy versions for {filename}: {e}")
+        return jsonify({"error": "Version history unavailable"}), 500
 
 @strategies_bp.route("/api/v1/strategies/files/<filename>/rename", methods=["POST"])
 @require_auth
 def rename_strategy_file(filename):
     """Renames a specific strategy file."""
     try:
-        allowed_exts = (".py", ".json", ".yaml", ".yml")
-        if not filename.endswith(allowed_exts):
-            filename += ".py"
-
-        data = request.json
+        file_path = _get_safe_path(filename)
+        
+        data = request.json or {}
         new_filename = data.get("new_filename")
         if not new_filename:
             return jsonify({"error": "No new_filename provided"}), 400
 
-        if not new_filename.endswith(allowed_exts):
-            new_filename += ".py"
-
-        strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
-        filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
-        new_filename = os.path.basename(os.path.normpath(new_filename.replace(":", "/")))
-        file_path = os.path.join(strat_dir, filename)
-        new_file_path = os.path.join(strat_dir, new_filename)
-
-        # Security check
-        if not os.path.abspath(file_path).startswith(os.path.abspath(strat_dir)) or \
-           not os.path.abspath(new_file_path).startswith(os.path.abspath(strat_dir)):
-            return jsonify({"error": "Forbidden path"}), 403
+        new_file_path = _get_safe_path(new_filename)
 
         if not os.path.exists(file_path):
-            return jsonify({"error": "File not found"}), 404
+            return jsonify({"error": "Source file not found"}), 404
 
         if os.path.exists(new_file_path):
             return jsonify({"error": "Destination file already exists"}), 400
 
         os.rename(file_path, new_file_path)
-
-        return jsonify({"status": "success", "message": f"Strategy {filename} renamed to {new_filename} successfully"}), 200
+        return jsonify({"status": "success", "message": f"Strategy renamed successfully"}), 200
+    except PermissionError:
+        return jsonify({"error": "Access denied"}), 403
     except Exception as e:
-        logger.error(f"Error renaming strategy file: {e}")
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Error renaming strategy file {filename}: {e}")
+        return jsonify({"error": "Rename operation failed"}), 500
 
 @strategies_bp.route("/api/v1/strategies", methods=["POST"])
 @require_auth
@@ -549,45 +533,44 @@ def create_strategy():
     try:
         data = request.json or {}
         name = data.get("name")
-        template = data.get("template", "aether_scalper") # Default template
+        template = data.get("template", "aether_scalper")
 
         if not name:
             return jsonify({"error": "Strategy name required"}), 400
 
-        # Clean name and prevent path traversal
-        name = os.path.basename(os.path.normpath(name.replace(".py", "").replace(" ", "_").lower()))
-        filename = f"{name}.py"
-        strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
-        file_path = os.path.join(strat_dir, filename)
-
+        file_path = _get_safe_path(name)
         if os.path.exists(file_path):
-            return jsonify({"error": f"Strategy {filename} already exists"}), 400
+            return jsonify({"error": "Strategy already exists"}), 400
 
-        # Load template
-        template = os.path.basename(os.path.normpath(template))
-        template_path = os.path.join(strat_dir, f"{template}.py")
+        # Load template safely
+        template_filename = os.path.basename(os.path.normpath(template))
+        if not template_filename.endswith(".py"):
+            template_filename += ".py"
+        
+        template_path = os.path.join(STRAT_DIR, template_filename)
         if not os.path.exists(template_path):
-            template_path = os.path.join(strat_dir, "aether_scalper.py") # Fallback
+            template_path = os.path.join(STRAT_DIR, "aether_scalper.py")
 
         with open(template_path, "r") as f:
             content = f.read()
 
         # Simple template replacement
-        content = content.replace("AetherScalper", name.capitalize())
+        safe_class_name = re.sub(r'[^a-zA-Z0-9]', '', name.title())
+        content = content.replace("AetherScalper", safe_class_name)
 
         with open(file_path, "w") as f:
             f.write(content)
 
-        logger.info(f"Created new strategy from template: {filename}")
-
         return jsonify({
             "status": "success",
-            "message": f"Strategy {filename} created",
-            "id": name
+            "message": "Strategy created",
+            "id": os.path.basename(file_path).replace(".py", "")
         }), 201
+    except PermissionError:
+        return jsonify({"error": "Access denied"}), 403
     except Exception as e:
         logger.error(f"Error creating strategy: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Strategy creation failed"}), 500
 
 @strategies_bp.route("/api/v1/strategies/<strategy_id>", methods=["DELETE"])
 @require_auth
@@ -604,27 +587,20 @@ def delete_strategy(strategy_id):
             if strategy and hasattr(strategy, "stop"):
                 strategy.stop()
 
-        # Find the file
-        safe_id = os.path.basename(os.path.normpath(strategy_id.replace('-', '_')))
-        filename = f"{safe_id}.py"
-        strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
-        file_path = os.path.join(strat_dir, filename)
-
-        # Try removing with .py if not exists, try without
-        if not os.path.exists(file_path):
-             files = [f for f in os.listdir(strat_dir) if f.startswith(strategy_id.replace('-', '_'))]
-             if files:
-                 file_path = os.path.join(strat_dir, files[0])
+        # Find and delete the file safely
+        file_path = _get_safe_path(strategy_id)
 
         if os.path.exists(file_path):
             os.remove(file_path)
             logger.info(f"Deleted strategy file: {file_path}")
-            return jsonify({"status": "success", "message": f"Strategy {strategy_id} deleted"}), 200
+            return jsonify({"status": "success", "message": "Strategy deleted"}), 200
 
-        return jsonify({"error": f"Strategy {strategy_id} file not found"}), 404
+        return jsonify({"error": "Strategy file not found"}), 404
+    except PermissionError:
+        return jsonify({"error": "Access denied"}), 403
     except Exception as e:
         logger.error(f"Error deleting strategy {strategy_id}: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Delete operation failed"}), 500
 
 @strategies_bp.route("/api/v1/strategies/optimize", methods=["POST"])
 @require_auth
@@ -660,4 +636,4 @@ async def optimize_strategy():
         }), 200
     except Exception as e:
         logger.error(f"Optimization API Error: {e}", exc_info=True)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": "Optimization failed to start"}), 500

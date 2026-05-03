@@ -52,6 +52,29 @@ def _infer_strategy_mode(strategy_name: str) -> str:
     if "long" in name_lower or "position" in name_lower: return "Position"
     return "Custom"
 
+# --- Security Helpers ---
+
+STRAT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
+
+def _get_safe_path(filename: str) -> str:
+    """Ensures the filename is safe and stays within the strategy directory."""
+    # Normalize path and extract only the filename part to prevent ../ traversal
+    safe_filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
+    
+    # Re-check extension for safety
+    if not any(safe_filename.endswith(ext) for ext in (".py", ".json", ".yaml", ".yml")):
+         # Default to .py if no extension
+         if "." not in safe_filename:
+             safe_filename += ".py"
+             
+    target_path = os.path.abspath(os.path.join(STRAT_DIR, safe_filename))
+    
+    # Final check: Must start with STRAT_DIR
+    if not target_path.startswith(STRAT_DIR):
+        raise HTTPException(status_code=403, detail="Path Traversal Attempt Detected")
+        
+    return target_path
+
 # --- Routes ---
 
 @router.get("/strategies/files")
@@ -233,59 +256,48 @@ async def liquidate_strategy(request: Optional[StrategyHaltRequest] = Body(None)
 
 @router.get("/strategies/files/{filename}")
 async def get_strategy_file(filename: str):
-    strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
-    filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
-    file_path = os.path.join(strat_dir, filename)
-    if not os.path.exists(file_path):
-        if not any(filename.endswith(ext) for ext in (".py", ".json", ".yaml", ".yml")):
-            file_path += ".py"
+    try:
+        file_path = _get_safe_path(filename)
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="File not found")
 
-    if not os.path.abspath(file_path).startswith(os.path.abspath(strat_dir)):
-        raise HTTPException(status_code=403, detail="Forbidden path")
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found")
-
-    with open(file_path, "r") as f:
-        content = f.read()
-    return {"filename": filename, "content": content}
+        with open(file_path, "r") as f:
+            content = f.read()
+        return {"filename": os.path.basename(file_path), "content": content}
+    except HTTPException: raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/strategies/files/{filename}")
 async def save_strategy_file(filename: str, request: FileSaveRequest):
-    strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
-    filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
-    if not any(filename.endswith(ext) for ext in (".py", ".json", ".yaml", ".yml")):
-        filename += ".py"
-    file_path = os.path.join(strat_dir, filename)
-
-    if not os.path.abspath(file_path).startswith(os.path.abspath(strat_dir)):
-        raise HTTPException(status_code=403, detail="Forbidden path")
-
-    with open(file_path, "w") as f:
-        f.write(request.content)
-
-    # Versioning via Git
     try:
-        strategy_id = filename.replace(".py", "")
-        versioning_service.commit_strategy(strategy_id, request.message)
-    except Exception as e:
-        logger.warning(f"Git versioning failed for {filename}: {e}")
+        file_path = _get_safe_path(filename)
+        with open(file_path, "w") as f:
+            f.write(request.content)
 
-    return {"status": "success", "message": f"Strategy {filename} saved"}
+        # Versioning via Git
+        try:
+            strategy_id = os.path.basename(file_path).replace(".py", "")
+            versioning_service.commit_strategy(strategy_id, request.message)
+        except Exception as e:
+            logger.warning(f"Git versioning failed for {filename}: {e}")
+
+        return {"status": "success", "message": f"Strategy {filename} saved"}
+    except HTTPException: raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/strategies/files/{filename}")
 async def delete_strategy_file(filename: str):
-    strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
-    filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
-    file_path = os.path.join(strat_dir, filename)
-    if not os.path.exists(file_path) and not filename.endswith(".py"):
-        file_path += ".py"
-
-    if not os.path.abspath(file_path).startswith(os.path.abspath(strat_dir)):
-        raise HTTPException(status_code=403, detail="Forbidden path")
-    if os.path.exists(file_path):
-        os.remove(file_path)
-        return {"status": "success", "message": f"Strategy {filename} deleted"}
-    raise HTTPException(status_code=404, detail="File not found")
+    try:
+        file_path = _get_safe_path(filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            return {"status": "success", "message": f"Strategy {filename} deleted"}
+        raise HTTPException(status_code=404, detail="File not found")
+    except HTTPException: raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/strategies/history/{strategy_id}")
 async def get_strategy_version_history(strategy_id: str):

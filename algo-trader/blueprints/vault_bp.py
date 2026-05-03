@@ -17,7 +17,7 @@ def vault_list():
         assets = get_vault().list_assets(asset_type, tags if tags else None)
         return jsonify({"status": "success", "assets": assets}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500
 
 @vault_bp.route("/api/v1/vault/register", methods=["POST"])
 @require_auth
@@ -38,7 +38,7 @@ def vault_register():
         )
         return jsonify({"status": "success", "asset_id": asset_id}), 201
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500
 
 @vault_bp.route("/api/v1/vault/details/<int:asset_id>", methods=["GET"])
 @require_auth
@@ -49,7 +49,7 @@ def vault_details(asset_id):
             return jsonify({"error": "Asset not found"}), 404
         return jsonify({"status": "success", "asset": details}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500
 
 @vault_bp.route("/api/v1/vault/search", methods=["POST"])
 @require_auth
@@ -60,7 +60,7 @@ def vault_search():
         results = get_vault().search_assets(term)
         return jsonify({"status": "success", "assets": results}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500
 
 @vault_bp.route("/api/v1/vault/content/<int:asset_id>", methods=["GET"])
 @require_auth
@@ -84,4 +84,4 @@ def vault_content(asset_id):
             content = f.read()
         return jsonify({"status": "success", "content": content}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500

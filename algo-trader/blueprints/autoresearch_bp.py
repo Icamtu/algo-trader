@@ -129,7 +129,7 @@ def api_autoresearch_history():
         history.sort(key=lambda x: x['id'].split('_')[-2] + x['id'].split('_')[-1], reverse=True)
         return jsonify({"history": history}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500
 
 @autoresearch_bp.route("/api/v1/autoresearch/history/<id>", methods=["GET"])
 @require_auth
@@ -154,7 +154,7 @@ def api_autoresearch_get_iteration(id):
 
         return jsonify({"code": code, "metrics": meta.get("metrics"), "metadata": meta}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500
 
 @autoresearch_bp.route("/api/v1/autoresearch/deploy", methods=["POST"])
 @require_auth
@@ -223,7 +223,7 @@ def api_autoresearch_deploy():
         }), 200
     except Exception as e:
         logger.error(f"Deployment queue fault: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500
 
 @autoresearch_bp.route("/api/v1/autoresearch/base-code", methods=["GET"])
 @require_auth
@@ -254,7 +254,7 @@ def api_autoresearch_base_code():
 
         return jsonify({"status": "success", "code": code, "name": base_name}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500
 
 @autoresearch_bp.route("/api/v1/autoresearch/save-version", methods=["POST"])
 @require_auth
@@ -310,4 +310,4 @@ def api_autoresearch_save_version():
         }), 200
     except Exception as e:
         logger.error(f"Save-version fault: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500

@@ -124,14 +124,24 @@ export default function ApiKeys() {
     }
   };
 
-  const generateWebhookSecret = async () => {
-    setGeneratingSecret(true);
+  // --- Security Helpers ---
+  const generateSecureRandomString = (length: number) => {
+    const charset = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    const values = new Uint8Array(length);
+    window.crypto.getRandomValues(values);
+    for (let i = 0; i < length; i++) {
+      result += charset[values[i] % charset.length];
+    }
+    return result;
+  };
+
+  const generateWebhookSecret = () => {
     try {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      const secret = `wh_secret_${Math.random().toString(36).substring(2, 15)}`;
+      const secret = `wh_secret_${generateSecureRandomString(12)}`;
       setWebhookForm(prev => ({ ...prev, secret }));
-    } finally {
-      setGeneratingSecret(false);
+    } catch (error) {
+      console.error("Secure random generation failed:", error);
     }
   };
 
@@ -175,7 +185,7 @@ export default function ApiKeys() {
       scopes: tokenForm.scopes,
       created: new Date().toISOString().split('T')[0],
       lastUsed: 'Never',
-      preview: `sk_live_****${Math.random().toString(36).substring(2, 6)}`,
+      preview: `sk_live_****${generateSecureRandomString(4)}`,
       expiresAt: tokenForm.expiry === 'never' ? null : new Date(Date.now() + (parseInt(tokenForm.expiry) * 24 * 60 * 60 * 1000)).toISOString().split('T')[0],
     };
     setTokens([...tokens, newToken]);

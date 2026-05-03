@@ -70,7 +70,7 @@ class StatArbEngine:
             }
         except Exception as e:
             logger.error(f"Cointegration test failed for {symbol1}-{symbol2}: {e}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal service error"}
 
     async def calculate_current_zscore(self, symbol1: str, symbol2: str, window: int = 20, interval: str = "1h") -> Dict[str, Any]:
         """
@@ -109,7 +109,7 @@ class StatArbEngine:
             }
         except Exception as e:
             logger.error(f"Z-score calculation failed for {symbol1}-{symbol2}: {e}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal service error"}
 
     async def scan_market_for_pairs(self, universe: List[str], interval: str = "1h") -> Dict[str, Any]:
         """

@@ -167,7 +167,7 @@ class PortfolioAnalyticsService:
 
         except Exception as e:
             logger.error(f"Portfolio risk calculation failed: {e}", exc_info=True)
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal service error"}
 
 # Singleton
 portfolio_analytics = PortfolioAnalyticsService()

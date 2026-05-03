@@ -87,7 +87,7 @@ class SessionService:
         except Exception as e:
             logger.error(f"Session health check fault: {e}")
             self.is_healthy = False
-            self.last_error = str(e)
+            self.last_error = "Internal service error"
             return False
 
     async def run_reauth_flow(self) -> bool:

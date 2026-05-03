@@ -35,7 +35,7 @@ def get_engine_positions():
         }), 200
     except Exception as e:
         logger.error(f"Error fetching engine positions: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": "Internal error"}), 500
 
 @portfolio_bp.route("/api/v1/broker/positions", methods=["GET"])
 @require_auth
@@ -50,7 +50,7 @@ async def get_broker_positions():
         return jsonify(positions), 200
     except Exception as e:
         logger.error(f"Error fetching broker positions: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": "Internal error"}), 500
 
 @portfolio_bp.route("/api/v1/system/reconcile", methods=["POST"])
 @require_auth
@@ -80,7 +80,7 @@ async def system_reconcile():
         }), 200
     except Exception as e:
         logger.error(f"Reconcile failure: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500
 
 @portfolio_bp.route("/api/v1/system/reset-positions", methods=["POST"])
 @require_auth
@@ -98,4 +98,4 @@ async def system_reset_positions():
         return jsonify({"status": "success", "message": "All local positions reset to zero"}), 200
     except Exception as e:
         logger.error(f"Reset positions failure: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500

@@ -1,6 +1,8 @@
 import os
 import subprocess
 import logging
+import re
+import shlex
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
@@ -24,52 +26,49 @@ class StrategyVersioningService:
         except:
             logger.warning(f"Strategies path {self.strategies_path} is not in a git repository. Versioning will be limited.")
 
-    def _run_git(self, cmd: str, args: List[str]) -> str:
-        """
-        Executes a git command with strict validation to prevent injection.
-        Uses a mapping to ensure the command itself is never tainted.
-        """
-        COMMAND_MAP = {
-            "log": "log",
-            "add": "add",
-            "status": "status",
-            "commit": "commit",
-            "rev-parse": "rev-parse",
-            "diff": "diff",
-            "show": "show"
+    def _validate_args(self, args: List[str]) -> bool:
+        """Strict validation for command line arguments."""
+        safe_pattern = re.compile(r'^[a-zA-Z0-9\._\-\/ @:=]+$')
+        allowed_flags = {
+            '-m', '-n', '--pretty', '--name-only', '--graph', 
+            '--abbrev-commit', '--date', '-p', '-U0', 'HEAD',
+            '--short', '--pretty=format:%H|%an|%ai|%s', '--'
         }
         
-        if cmd not in COMMAND_MAP:
-            logger.error(f"Unauthorized Git command attempted: {cmd}")
-            raise PermissionError(f"Git command '{cmd}' is not allowed.")
-
-        safe_cmd = COMMAND_MAP[cmd]
-
-        # Flag and argument validation
         for arg in args:
-            # Prevent shell injection characters
+            # Prevent shell injection characters explicitly
             if any(c in arg for c in ";;|&><`$()"):
-                 logger.error(f"Unsafe character in git argument: {arg}")
-                 raise PermissionError(f"Unsafe character in git argument: {arg}")
+                return False
             
-            # Prevent dangerous git flags
-            if arg.startswith("-"):
-                # Only allow specific safe patterns for flags
-                if not all(c.isalnum() or c in "-=_:" for c in arg[1:]):
-                     logger.warning(f"Potentially unsafe git flag rejected: {arg}")
-                     raise PermissionError(f"Potentially unsafe git flag detected: {arg}")
+            # Match against alphanumeric pattern
+            if not safe_pattern.match(arg):
+                return False
+            
+            # Prevent dangerous git flags starting with --
+            if arg.startswith('-'):
+                if arg not in allowed_flags and not re.match(r'^-[0-9]+$', arg):
+                    # Check if it's a dynamic but safe flag like --pretty=format:...
+                    if not arg.startswith('--pretty=format:'):
+                        return False
+        return True
 
-        full_cmd = ["git", safe_cmd] + args
+    def _run_git(self, args: List[str]) -> str:
+        """
+        Executes a git command with strict validation to prevent injection.
+        """
+        if not self._validate_args(args):
+            logger.error(f"Invalid git arguments: {args}")
+            raise PermissionError("Unsafe git arguments detected.")
+
+        full_cmd = ["git"] + args
         try:
-            # Use check=True for automatic error handling
-            # Use shell=False (default) to prevent shell-based injection
             res = subprocess.run(full_cmd, cwd=self.strategies_path, capture_output=True, text=True, check=True)
             return res.stdout
         except subprocess.CalledProcessError as e:
-            logger.error(f"Git Error ({safe_cmd}): {e.stderr}")
+            logger.error(f"Git Error: {e.stderr}")
             raise Exception(f"Git Error: {e.stderr}")
         except Exception as e:
-            logger.error(f"Execution Error ({safe_cmd}): {e}")
+            logger.error(f"Execution Error: {e}")
             raise
 
     def get_strategy_history(self, strategy_id: str) -> List[Dict[str, Any]]:
@@ -84,7 +83,7 @@ class StrategyVersioningService:
         filename = f"{strategy_id}.py"
         try:
             # git log --pretty=format:"%H|%an|%ad|%s" filename
-            output = self._run_git("log", ["--pretty=format:%H|%an|%ai|%s", "--", filename])
+            output = self._run_git(["log", "--pretty=format:%H|%an|%ai|%s", "--", filename])
 
             history = []
             if not output: return history
@@ -113,16 +112,17 @@ class StrategyVersioningService:
 
         filename = f"{strategy_id}.py"
         try:
-            self._run_git("add", [filename])
+            self._run_git(["add", filename])
             # Check if there are changes to commit
-            status = self._run_git("status", ["--short", filename])
+            status = self._run_git(["status", "--short", filename])
             if not status:
                 return {"status": "success", "message": "No changes to commit"}
 
-            self._run_git("commit", ["-m", f"Strategy Update [{strategy_id}]: {message}"])
+            clean_message = shlex.quote(f"Strategy Update [{strategy_id}]: {message}")
+            self._run_git(["commit", "-m", clean_message.strip("'")])
 
             # Get latest hash
-            last_hash = self._run_git("rev-parse", ["HEAD"]).strip()
+            last_hash = self._run_git(["rev-parse", "HEAD"]).strip()
 
             return {
                 "status": "success",
@@ -131,7 +131,7 @@ class StrategyVersioningService:
             }
         except Exception as e:
             logger.error(f"Failed to commit strategy {strategy_id}: {e}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal service error"}
 
     def get_strategy_diff(self, strategy_id: str, hash_a: str, hash_b: str = "HEAD") -> str:
         """
@@ -147,9 +147,9 @@ class StrategyVersioningService:
 
         filename = f"{strategy_id}.py"
         try:
-            return self._run_git("diff", [hash_a, hash_b, "--", filename])
+            return self._run_git(["diff", hash_a, hash_b, "--", filename])
         except Exception as e:
-            return f"Error fetching diff: {str(e)}"
+            return "Error fetching diff: Internal service error"
 
 # Singleton
 versioning_service = StrategyVersioningService()

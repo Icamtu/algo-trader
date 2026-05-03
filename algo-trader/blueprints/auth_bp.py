@@ -28,7 +28,7 @@ def get_broker_config():
         config = db_logger.get_broker_config()
         return jsonify(config), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500
 
 @auth_bp.route("/api/v1/brokers/shoonya/auth", methods=["POST"])
 @require_auth
@@ -42,7 +42,7 @@ def shoonya_auth_init():
         return jsonify({"status": "success", "auth_url": auth_url}), 200
     except Exception as e:
         logger.error(f"Shoonya Auth Init Error: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": "Internal error"}), 500
 
 @auth_bp.route("/api/auth/callback/shoonya", methods=["GET"])
 def shoonya_callback():

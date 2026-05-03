@@ -69,7 +69,7 @@ class FillAnalyticsService:
 
         except Exception as e:
             logger.error(f"Fill quality analysis failed: {e}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal service error"}
 
 # Singleton
 fill_analytics = FillAnalyticsService()

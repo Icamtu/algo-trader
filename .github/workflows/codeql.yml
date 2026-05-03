@@ -2,17 +2,20 @@
 name: "CodeQL Analysis"
 
 on:
+  workflow_dispatch:
   push:
     branches: [ "main", "security/hardening-and-cleanup" ]
   pull_request:
     branches: [ "main", "security/hardening-and-cleanup" ]
   schedule:
     - cron: '21 16 * * 4'
+  workflow_dispatch:
 
 jobs:
   analyze:
     name: Analyze
     runs-on: ubuntu-latest
+  workflow_dispatch:
     timeout-minutes: 360
     permissions:
       actions: read

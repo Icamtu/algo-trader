@@ -15,7 +15,7 @@ def calculate_indicators():
         # Implementation logic would go here
         return jsonify({"status": "success", "indicators": {}}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500
 
 @indicators_bp.route("/api/v1/options/greeks", methods=["GET"])
 @require_auth
@@ -26,4 +26,4 @@ def get_option_greeks():
         # Implementation logic would go here
         return jsonify({"status": "success", "greeks": {}}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500

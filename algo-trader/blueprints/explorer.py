@@ -24,7 +24,7 @@ def get_explorer_tree():
         return jsonify({"error": "Access denied"}), 403
     except Exception as e:
         logger.error(f"Explorer tree error: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500
 
 @explorer_bp.route("/api/v1/explorer/file", methods=["GET"])
 @require_auth
@@ -39,7 +39,7 @@ def get_explorer_file():
     except FileNotFoundError:
         return jsonify({"error": "File not found"}), 404
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500
 
 @explorer_bp.route("/api/v1/explorer/save", methods=["POST"])
 @require_auth
@@ -54,7 +54,7 @@ def save_explorer_file():
         fs.write_file(path, content)
         return jsonify({"status": "success", "path": path}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500
 
 @explorer_bp.route("/api/v1/explorer/delete", methods=["DELETE"])
 @require_auth
@@ -67,4 +67,4 @@ def delete_explorer_item():
         fs.delete_item(path)
         return jsonify({"status": "success"}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500

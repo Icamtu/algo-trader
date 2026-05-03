@@ -341,11 +341,11 @@ class HistorifyService:
 
         except Exception as e:
             logger.error(f"Critical Ingestion Error {job_id}: {e}", exc_info=True)
-            hdb.upsert_job(job_id, "FAILED", total_symbols=len(symbols), completed_symbols=0, error_message=str(e), interval=interval, start_date=from_date, end_date=to_date)
+            hdb.upsert_job(job_id, "FAILED", total_symbols=len(symbols), completed_symbols=0, error_message="Internal service error", interval=interval, start_date=from_date, end_date=to_date)
 
             # Broadcast failure event
             if self.broadcast_callback:
-                fail_data = {"job_id": job_id, "status": "FAILED", "error": str(e)}
+                fail_data = {"job_id": job_id, "status": "FAILED", "error": "Internal service error"}
                 if asyncio.iscoroutinefunction(self.broadcast_callback) and loop and loop.is_running():
                     asyncio.run_coroutine_threadsafe(self.broadcast_callback("historify_job_failed", fail_data), loop)
                 elif not asyncio.iscoroutinefunction(self.broadcast_callback):
@@ -430,7 +430,7 @@ class HistorifyService:
             hdb.add_to_watchlist(normalized_symbol, normalized_exchange)
             return {"status": "success", "message": f"Symbol {normalized_symbol} added to watchlist."}
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal service error"}
 
     def bulk_add_to_watchlist(self, symbols: List[str], exchange: str = "NSE") -> Dict[str, Any]:
         """Add multiple symbols to local DuckDB watchlist."""
@@ -456,7 +456,7 @@ class HistorifyService:
             hdb.remove_from_watchlist(symbol, exchange)
             return {"status": "success", "message": f"Symbol {symbol} removed from watchlist."}
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal service error"}
 
     def bulk_remove_from_watchlist(self, symbols: List[str], exchange: str = None) -> Dict[str, Any]:
         """Remove multiple symbols from local DuckDB watchlist."""
@@ -485,7 +485,7 @@ class HistorifyService:
             return {"status": "success", "message": f"Historical data for {symbol} ({interval}) deleted."}
         except Exception as e:
             logger.error(f"Failed to delete catalog entry: {e}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal service error"}
 
     def seed_and_ingest(self, intervals: List[str] = ["5m", "D"]) -> Dict[str, Any]:
         """Seeds the watchlist and triggers an immediate ingestion for seeded symbols."""
@@ -524,7 +524,7 @@ class HistorifyService:
             }
         except Exception as e:
             logger.error(f"Historify: Seed and ingest failed: {e}")
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal service error"}
 
     def get_stats(self) -> Dict[str, Any]:
         """Fetch database statistics with enhanced service metadata."""
@@ -542,7 +542,7 @@ class HistorifyService:
             hdb.enforce_retention_policy(max_days=days)
             return {"status": "success", "message": f"Data older than {days} days purged."}
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal service error"}
 
     def get_records(
         self,

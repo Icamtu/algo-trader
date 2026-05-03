@@ -234,7 +234,7 @@ class MarketDataService:
 
         except Exception as e:
             logger.error(f"Error building option chain for {underlying}: {e}", exc_info=True)
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal service error"}
 
     async def get_available_expiries(self, underlying: str, exchange: str = "NSE") -> List[str]:
         """Fetch available unique expiry dates for an underlying."""

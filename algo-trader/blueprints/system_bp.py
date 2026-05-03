@@ -107,7 +107,7 @@ def aether_analyze():
         }), 200
     except Exception as e:
         logger.error(f"Aether Analyze Error: {e}", exc_info=True)
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": "Neural scan failed"}), 500
 
 @system_bp.route("/api/v1/terminal/command", methods=["POST"])
 @require_auth
@@ -165,7 +165,7 @@ async def terminal_command():
 
     except Exception as e:
         logger.error(f"Terminal Command Error: {e}")
-        return jsonify({"status": "EXEC_FAILURE", "output": f"KERNEL_EXCEPTION: {str(e)}"}), 500
+        return jsonify({"status": "EXEC_FAILURE", "output": "Internal kernel exception"}), 500
 
 @system_bp.route("/api/v1/telemetry", methods=["GET"])
 @system_bp.route("/api/v1/system/telemetry", methods=["GET"])
@@ -217,7 +217,7 @@ async def get_telemetry():
         return jsonify(telemetry), 200
     except Exception as e:
         logger.error(f"Telemetry API Error: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Failed to fetch telemetry"}), 500
 
 @system_bp.route("/api/v1/telemetry/pnl", methods=["GET"])
 @require_auth
@@ -263,12 +263,16 @@ def proxy_to_openalgo():
             timeout=5
         )
 
-        # Security: Harden proxy response against XSS
+        # Security: Harden proxy response against XSS and sniffing
         from flask import Response
+        headers = {k: v for k, v in resp.headers.items() if k.lower() not in ('content-encoding', 'set-cookie')}
+        headers['X-Content-Type-Options'] = 'nosniff'
+        headers['Content-Security-Policy'] = "default-src 'self'; frame-ancestors 'none';"
+        
         return Response(
             resp.content,
             status=resp.status_code,
-            headers={k: v for k, v in resp.headers.items() if k.lower() != 'content-encoding'}
+            headers=headers
         )
     except Exception as e:
         logger.error(f"Proxy Error for {request.path}: {e}")
@@ -337,7 +341,7 @@ async def get_total_funds():
         return jsonify(funds), 200
     except Exception as e:
         logger.error(f"Error fetching funds: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": "Broker funds unavailable"}), 500
 
 @system_bp.route("/api/v1/analyzertoggle", methods=["POST"])
 @require_auth
@@ -359,7 +363,7 @@ async def api_analyzer_toggle():
         }), 200
     except Exception as e:
         logger.error(f"Error toggling analyzer: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": "Configuration update failed"}), 500
 
 @system_bp.route("/api/v1/analyzerstatus", methods=["GET"])
 @require_auth
@@ -383,7 +387,7 @@ async def api_analyzer_status():
         }), 200
     except Exception as e:
         logger.error(f"Error getting analyzer status: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": "Status unavailable"}), 500
 
 @system_bp.route("/api/v1/market_regime", methods=["GET"])
 @require_auth
@@ -402,7 +406,7 @@ async def api_market_regime():
         }), 200
     except Exception as e:
         logger.error(f"Error getting market regime: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": "Regime data unavailable"}), 500
 
 @system_bp.route("/api/v1/aether/governance/heartbeat", methods=["GET"])
 @require_auth
@@ -413,7 +417,8 @@ def get_governance_heartbeat():
         health = get_current_health()
         return jsonify({"status": "success", "data": health}), 200
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        logger.error(f"Governance Heartbeat Error: {e}")
+        return jsonify({"status": "error", "message": "Health check failed"}), 500
 
 @system_bp.route("/api/system/metrics", methods=["GET"])
 def get_system_metrics():

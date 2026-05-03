@@ -14,7 +14,7 @@ def run_scanner():
         data = request.json
         return jsonify({"status": "success", "results": []}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500
 
 @scanner_bp.route("/api/scanner/indices", methods=["GET"])
 @require_auth
@@ -30,4 +30,4 @@ def scanner_analyze():
         data = request.json
         return jsonify({"status": "success", "analysis": {}}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500

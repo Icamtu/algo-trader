@@ -80,11 +80,11 @@ async def api_place_order(mode_override=None):
             return jsonify(result), 200
         except Exception as e:
             logger.error(f"API order placement failed: {e}")
-            return jsonify({"status": "error", "message": str(e)}), 500
+            return jsonify({"status": "error", "message": "Internal error"}), 500
 
     except Exception as e:
         logger.error(f"PlaceOrder failed: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500
 
 @orders_bp.route("/api/v1/placesmartorder", methods=["POST"])
 @require_auth
@@ -110,7 +110,7 @@ async def api_place_smart_order(mode_override=None):
         )
         return jsonify(result), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500
 
 @orders_bp.route("/api/v1/orders", methods=["GET"])
 @require_auth
@@ -125,7 +125,7 @@ async def get_orders():
         return jsonify(orders), 200
     except Exception as e:
         logger.error(f"Error fetching orders: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": "Internal error"}), 500
 
 @orders_bp.route("/api/v1/orders/<order_id>/cancel", methods=["POST"])
 @require_auth
@@ -140,4 +140,4 @@ async def cancel_order(order_id):
         return jsonify(result), 200
     except Exception as e:
         logger.error(f"Error cancelling order {order_id}: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": "Internal error"}), 500
