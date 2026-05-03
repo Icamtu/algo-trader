@@ -35,8 +35,8 @@ class BrokerFactory:
                 elif broker_name == "paper":
                     from .paper_broker import PaperBroker
                     cls.register("paper", PaperBroker)
-            except ImportError as e:
-                logger.error(f"Could not import adapter for {broker_name}: {e}")
+            except Exception:
+                logger.error("Broker adapter import failure", exc_info=True)
                 raise ValueError(f"Broker adapter '{broker_name}' not found or dependencies missing.")
 
         adapter_class = cls._registry.get(broker_name)
