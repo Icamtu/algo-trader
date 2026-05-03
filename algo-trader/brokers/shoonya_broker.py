@@ -70,10 +70,10 @@ class ShoonyaBroker(BaseBroker):
                 logger.info(f"Shoonya Login Successful: {res.get('uname')}")
                 return True
             else:
-                logger.error(f"Shoonya Login Failed: {res.get('emsg')}")
+                logger.error("Shoonya Login Failed: %s", res.get('emsg'))
                 return False
-        except Exception as e:
-            logger.error(f"Shoonya Login Exception: {e}")
+        except Exception:
+            logger.error("Shoonya Login Exception", exc_info=True)
             return False
 
     async def logout(self) -> bool:
@@ -162,7 +162,7 @@ class ShoonyaBroker(BaseBroker):
             logger.info(f"Shoonya Order Cancelled: {broker_order_id}")
             return True
         else:
-            logger.error(f"Shoonya Order Cancellation Failed: {res.get('emsg')}")
+            logger.error("Shoonya Order Cancellation Failed: %s", res.get('emsg'))
             return False
 
     async def get_orders(self) -> List[NormalizedOrder]:
@@ -347,7 +347,7 @@ class ShoonyaBroker(BaseBroker):
         logger.info("Shoonya WebSocket Connected")
 
     def _on_ws_error(self, error):
-        logger.error(f"Shoonya WebSocket Error: {error}")
+        logger.error("Shoonya WebSocket Error: %s", error)
 
     def _on_ws_close(self):
         logger.warning("Shoonya WebSocket Closed")
