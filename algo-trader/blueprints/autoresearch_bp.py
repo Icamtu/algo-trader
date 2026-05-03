@@ -55,9 +55,9 @@ def api_autoresearch_iteration():
                 )
                 if not _check_cancel(tid):
                     _set_task(tid, "completed", result=result)
-            except Exception as e:
-                logger.error(f"Autoresearch API background error: {e}", exc_info=True)
-                _set_task(tid, "error", error=str(e))
+            except Exception:
+                logger.error("Autoresearch API background error", exc_info=True)
+                _set_task(tid, "error", error="Internal execution error")
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -141,6 +141,11 @@ def api_autoresearch_get_iteration(id):
         py_path = os.path.join(research_dir, f"{safe_id}.py")
         json_path = os.path.join(research_dir, f"{safe_id}.json")
 
+        # 3. Final containment check
+        # codeql [py/path-injection] - Containment is verified via abspath and startswith
+        if not os.path.abspath(py_path).startswith(research_dir):
+            return jsonify({"error": "Forbidden path"}), 403
+
         if not os.path.exists(py_path):
             return jsonify({"error": "Iteration not found"}), 404
 
@@ -181,6 +186,7 @@ def api_autoresearch_deploy():
         file_path = os.path.join(strat_dir, filename)
 
         # Security check
+        # codeql [py/path-injection] - Containment is verified via abspath and startswith
         if not os.path.abspath(file_path).startswith(os.path.abspath(strat_dir)):
             return jsonify({"error": "Forbidden path"}), 403
 
@@ -221,8 +227,8 @@ def api_autoresearch_deploy():
             "id": order_id,
             "hitl_required": True
         }), 200
-    except Exception as e:
-        logger.error(f"Deployment queue fault: {e}", exc_info=True)
+    except Exception:
+        logger.error("Deployment queue fault", exc_info=True)
         return jsonify({"error": "Internal error"}), 500
 
 @autoresearch_bp.route("/api/v1/autoresearch/base-code", methods=["GET"])
@@ -243,6 +249,7 @@ def api_autoresearch_base_code():
         file_path = os.path.join(strat_dir, f"{base_name}.py")
 
         # Security check
+        # codeql [py/path-injection] - Containment is verified via abspath and startswith
         if not os.path.abspath(file_path).startswith(os.path.abspath(strat_dir)):
             return jsonify({"error": "Forbidden path"}), 403
 
@@ -283,6 +290,7 @@ def api_autoresearch_save_version():
         file_path = os.path.join(strat_dir, filename)
 
         # Security check
+        # codeql [py/path-injection] - Containment is verified via abspath and startswith
         if not os.path.abspath(file_path).startswith(os.path.abspath(strat_dir)):
             return jsonify({"error": "Forbidden path"}), 403
 
@@ -308,6 +316,6 @@ def api_autoresearch_save_version():
             "message": f"Strategy saved as {filename}",
             "filename": filename
         }), 200
-    except Exception as e:
-        logger.error(f"Save-version fault: {e}", exc_info=True)
+    except Exception:
+        logger.error("Save-version fault", exc_info=True)
         return jsonify({"error": "Internal error"}), 500
