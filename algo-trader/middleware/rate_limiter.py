@@ -195,5 +195,5 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
 
             except asyncio.CancelledError:
                 break
-            except Exception as e:
-                logger.error(f"Rate Limiter cleanup error: {e}")
+            except Exception:
+                logger.error("Rate Limiter cleanup error", exc_info=True)
