@@ -27,35 +27,49 @@ class StrategyVersioningService:
     def _run_git(self, cmd: str, args: List[str]) -> str:
         """
         Executes a git command with strict validation to prevent injection.
+        Uses a mapping to ensure the command itself is never tainted.
         """
-        ALLOWED_COMMANDS = {"log", "add", "status", "commit", "rev-parse", "diff", "show"}
+        COMMAND_MAP = {
+            "log": "log",
+            "add": "add",
+            "status": "status",
+            "commit": "commit",
+            "rev-parse": "rev-parse",
+            "diff": "diff",
+            "show": "show"
+        }
         
-        if cmd not in ALLOWED_COMMANDS:
+        if cmd not in COMMAND_MAP:
             logger.error(f"Unauthorized Git command attempted: {cmd}")
             raise PermissionError(f"Git command '{cmd}' is not allowed.")
 
-        # Flag validation: only allow safe flags, prevent dangerous ones like --ext-diff
+        safe_cmd = COMMAND_MAP[cmd]
+
+        # Flag and argument validation
         for arg in args:
+            # Prevent shell injection characters
+            if any(c in arg for c in ";;|&><`$()"):
+                 logger.error(f"Unsafe character in git argument: {arg}")
+                 raise PermissionError(f"Unsafe character in git argument: {arg}")
+            
+            # Prevent dangerous git flags
             if arg.startswith("-"):
-                # Basic safety: only allow alphanumeric flags and common delimiters
+                # Only allow specific safe patterns for flags
                 if not all(c.isalnum() or c in "-=_:" for c in arg[1:]):
                      logger.warning(f"Potentially unsafe git flag rejected: {arg}")
                      raise PermissionError(f"Potentially unsafe git flag detected: {arg}")
-            
-            # Shell injection character prevention
-            if any(c in arg for c in ";;|&><`$"):
-                 logger.error(f"Unsafe character in git argument: {arg}")
-                 raise PermissionError(f"Unsafe character in git argument: {arg}")
 
-        full_cmd = ["git", cmd] + args
+        full_cmd = ["git", safe_cmd] + args
         try:
+            # Use check=True for automatic error handling
+            # Use shell=False (default) to prevent shell-based injection
             res = subprocess.run(full_cmd, cwd=self.strategies_path, capture_output=True, text=True, check=True)
             return res.stdout
         except subprocess.CalledProcessError as e:
-            logger.error(f"Git Error ({cmd}): {e.stderr}")
+            logger.error(f"Git Error ({safe_cmd}): {e.stderr}")
             raise Exception(f"Git Error: {e.stderr}")
         except Exception as e:
-            logger.error(f"Execution Error ({cmd}): {e}")
+            logger.error(f"Execution Error ({safe_cmd}): {e}")
             raise
 
     def get_strategy_history(self, strategy_id: str) -> List[Dict[str, Any]]:
