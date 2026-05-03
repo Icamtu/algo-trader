@@ -157,8 +157,8 @@ async def get_underlyings(exchange: str = "NSE"):
             "underlyings": data, # Frontend compatibility
             "data": data
         }
-    except Exception as e:
-        logger.error(f"Error fetching underlyings: {e}")
+    except Exception:
+        logger.error("Error fetching underlyings", exc_info=True)
         return {"status": "error", "message": "Failed to fetch underlyings"}
 
 @router.get("/search/api/expiries")
@@ -172,8 +172,8 @@ async def get_expiries(underlying: str, exchange: str = "NSE"):
             "expiries": data, # Frontend compatibility
             "data": data
         }
-    except Exception as e:
-        logger.error(f"Error fetching expiries: {e}")
+    except Exception:
+        logger.error("Error fetching expiries", exc_info=True)
         return {"status": "error", "message": "Failed to fetch expiries"}
 
 @router.post("/gex/api/gex-data")
@@ -222,8 +222,8 @@ async def get_gex_and_oi_data(request: Request):
 
         return results
 
-    except Exception as e:
-        logger.error(f"GEX/OI API Critical Error: {e}", exc_info=True)
+    except Exception:
+        logger.error("GEX/OI API Critical Error", exc_info=True)
         return {"status": "error", "message": "Internal analytical failure"}
 
 @router.post("/iv-smile/smile-data")
@@ -238,8 +238,8 @@ async def get_iv_smile(
         chain = await ds.get_option_chain(underlying, exchange, expiry_date)
         results = _analytics_engine.calculate_iv_smile(chain)
         return results
-    except Exception as e:
-        logger.error(f"IV Smile Error: {e}")
+    except Exception:
+        logger.error("IV Smile Error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/vol-surface/api/surface-data")
@@ -265,8 +265,8 @@ async def get_vol_surface_data(
                     "atm_strike": smile.get("atm_strike", chain.get("atm_strike", 0)),
                     "chain": smile.get("chain", []),
                 }
-            except Exception as fe:
-                logger.warning(f"Failed to fetch chain for {expiry}: {fe}")
+            except Exception:
+                logger.warning("Failed to fetch chain for expiry", exc_info=True)
                 return None
 
         # Fetch all chains in parallel for institutional performance (Phase 16 Sync)
@@ -278,8 +278,8 @@ async def get_vol_surface_data(
              return {"status": "error", "message": "No valid option data found for selected expiries.", "data": []}
 
         return _analytics_engine.calculate_vol_surface(surfaces)
-    except Exception as e:
-        logger.error(f"Vol Surface API Error: {e}", exc_info=True)
+    except Exception:
+        logger.error("Vol Surface API Error", exc_info=True)
         return {"status": "error", "message": "Failed to calculate vol surface", "data": []}
 
 @router.post("/iv-chart/api/chart-data")
@@ -298,8 +298,8 @@ async def get_iv_chart_data(
             return {"status": "error", "message": chain.get("message", "Failed to load option chain"), "data": []}
         history_rows = _get_history_rows(underlying, exchange, interval, days)
         return _analytics_engine.calculate_iv_chart(chain, history_rows)
-    except Exception as e:
-        logger.error(f"IV Chart API Error: {e}", exc_info=True)
+    except Exception:
+        logger.error("IV Chart API Error", exc_info=True)
         return {"status": "error", "message": "Failed to generate IV chart", "data": []}
 
 @router.post("/straddle-chart/api/data")
@@ -318,8 +318,8 @@ async def get_straddle_chart_data(
             return {"status": "error", "message": chain.get("message", "Failed to load option chain"), "data": []}
         history_rows = _get_history_rows(underlying, exchange, interval, days)
         return _analytics_engine.calculate_straddle_chart(chain, history_rows)
-    except Exception as e:
-        logger.error(f"Straddle Chart API Error: {e}", exc_info=True)
+    except Exception:
+        logger.error("Straddle Chart API Error", exc_info=True)
         return {"status": "error", "message": "Failed to generate straddle chart", "data": []}
 
 @router.post("/analytics/greeks")
@@ -340,8 +340,8 @@ async def get_chain_greeks(
 
         results = _analytics_engine.calculate_chain_greeks(chain)
         return results
-    except Exception as e:
-        logger.error(f"Greeks API Error: {e}")
+    except Exception:
+        logger.error("Greeks API Error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/historify/watchlist")
@@ -438,8 +438,8 @@ async def get_historify_stats():
     try:
         stats = historify_service.get_stats()
         return {"status": "success", "data": stats}
-    except Exception as e:
-        logger.error(f"Error fetching Historify stats: {e}")
+    except Exception:
+        logger.error("Error fetching Historify stats", exc_info=True)
         return {"status": "error", "message": "Failed to fetch stats"}
 
 @router.get("/historify/symbols")
@@ -462,8 +462,8 @@ async def get_historify_symbols():
             symbols[sym]["records"] += item["record_count"]
 
         return {"status": "success", "data": list(symbols.values())}
-    except Exception as e:
-        logger.error(f"Error fetching Historify symbols: {e}")
+    except Exception:
+        logger.error("Error fetching Historify symbols", exc_info=True)
         return {"status": "error", "message": "Internal error"}
 
 @router.get("/historify/records")
@@ -507,8 +507,8 @@ def cancel_historify_job(job_id: str):
     try:
         upsert_job(job_id, "CANCELLED")
         return {"status": "success", "message": f"Job {job_id} cancelled."}
-    except Exception as e:
-        logger.error(f"Error cancelling job: {e}")
+    except Exception:
+        logger.error("Error cancelling job", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/historify/export")
@@ -654,8 +654,8 @@ async def get_standard_option_chain(
             "timestamp": datetime.now().isoformat()
         }
 
-    except Exception as e:
-        logger.error(f"OptionChain Critical Error: {e}", exc_info=True)
+    except Exception:
+        logger.error("OptionChain Critical Error", exc_info=True)
         return {"status": "error", "message": "Internal error"}
 
 @router.get("/status")
@@ -679,8 +679,8 @@ async def get_analyzer_status():
             "bias": telemetry.get("bias", "NEUTRAL"),
             "timestamp": datetime.now().isoformat()
         }
-    except Exception as e:
-        logger.error(f"Error getting analyzer status: {e}")
+    except Exception:
+        logger.error("Error getting analyzer status", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/analytics/fill-quality")
@@ -694,8 +694,8 @@ async def get_fill_quality(
     try:
         results = await fill_analytics.get_fill_quality_report(strategy, limit)
         return results
-    except Exception as e:
-        logger.error(f"Fill Quality API Error: {e}")
+    except Exception:
+        logger.error("Fill Quality API Error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 @router.post("/analytics/correlation")
 async def get_correlation_matrix(
@@ -711,8 +711,8 @@ async def get_correlation_matrix(
         if results.get("status") == "error":
             raise HTTPException(status_code=500, detail=results.get("message"))
         return results
-    except Exception as e:
-        logger.error(f"Correlation API Error: {e}")
+    except Exception:
+        logger.error("Correlation API Error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/analytics/convergence")
@@ -726,6 +726,6 @@ async def get_signal_convergence(
     try:
         results = correlation_engine.analyze_signal_convergence(multi_tf_signals)
         return results
-    except Exception as e:
-        logger.error(f"Convergence API Error: {e}")
+    except Exception:
+        logger.error("Convergence API Error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
