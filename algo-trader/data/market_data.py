@@ -164,8 +164,8 @@ class MarketDataStream:
                     "symbols": symbol_payload
                 }))
                 logger.info(f"Subscribed to Indices: {idx_list}")
-        except Exception as e:
-            logger.error(f"Failed to send dynamic subscription: {e}")
+        except Exception:
+            logger.error("Failed to send dynamic subscription", exc_info=True)
 
     def unsubscribe(self, symbols: List[str], callback: Callable):
         """
@@ -281,11 +281,11 @@ class MarketDataStream:
 
             except json.JSONDecodeError:
                 logger.warning(f"Received invalid JSON message: {message}")
-            except (websockets.exceptions.ConnectionClosed, BrokenPipeError, ConnectionResetError) as e:
-                logger.info(f"Market Data connection closed during recv: {e}")
+            except (websockets.exceptions.ConnectionClosed, BrokenPipeError, ConnectionResetError):
+                logger.info("Market Data connection closed during recv", exc_info=True)
                 break
             except Exception as e:
-                logger.warning(f"Error handling WS message: {e}")
+                logger.warning("Error handling WS message", exc_info=True)
                 if "BrokenResourceError" in str(e):
                     break
 
@@ -313,7 +313,7 @@ class MarketDataStream:
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for i, res in enumerate(results):
                 if isinstance(res, Exception):
-                    logger.error(f"Strategy callback {cbs[i].__name__} failed for {tick_data.symbol}: {res}")
+                    logger.error("Strategy callback %s failed for %s", cbs[i].__name__, tick_data.symbol, exc_info=True)
 
         # Dispatch as a single parallel task
         async def _tracked_execute():
@@ -430,11 +430,11 @@ class DuckDBIngestor:
                         conn.execute("DELETE FROM market_data WHERE interval = 'TICK' AND timestamp < ?", [cutoff])
                         logger.info("DuckDB Historify: Cleaned up ticks older than 24h.")
                     self._last_cleanup = time.time()
-                except Exception as cleanup_err:
-                    logger.warning(f"Historify Cleanup Warning: {cleanup_err}")
+                except Exception:
+                    logger.warning("Historify Cleanup Warning", exc_info=True)
 
-        except Exception as e:
-            logger.error(f"Historify Flush Error for {symbol}: {e}")
+        except Exception:
+            logger.error("Historify Flush Error for %s", symbol, exc_info=True)
 
 # Example usage for testing
 if __name__ == "__main__":
