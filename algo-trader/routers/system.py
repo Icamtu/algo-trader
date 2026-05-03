@@ -138,7 +138,7 @@ async def terminal_command(cmd_req: TerminalCommandRequest, request: Request):
         return {"status": "CMD_UNKNOWN", "output": f"COMMAND_NOT_RECOGNIZED: {cmd}"}
     except Exception as e:
         logger.error(f"Terminal Command Error: {e}")
-        raise HTTPException(status_code=500, detail=f"KERNEL_EXCEPTION: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/ticker/config")
 async def get_ticker_config():
@@ -186,7 +186,7 @@ async def get_telemetry():
         return telemetry
     except Exception as e:
         logger.error(f"Telemetry API Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/pnl")
 @router.get("/telemetry/pnl")
@@ -218,7 +218,8 @@ async def test_alert(request: TestAlertRequest):
         success = await alert_service.send_telegram(f"[{request.type}] {request.message}")
         return {"status": "success" if success else "failed"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Alert test error: {e}")
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/alerts")
 async def get_alerts(limit: int = Query(50)):
@@ -235,7 +236,7 @@ async def get_alerts(limit: int = Query(50)):
         return {"status": "success", "data": [dict(row) for row in rows]}
     except Exception as e:
         logger.error(f"Error fetching alerts: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 from fastapi import Header
 from core.rbac import PERMISSIONS, Role
@@ -327,7 +328,7 @@ async def get_mode_status():
         }
     except Exception as e:
         logger.error(f"Error getting mode status: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/settings")
 async def get_settings():
@@ -348,7 +349,7 @@ async def get_settings():
         logger.error(f"Error fetching settings: {e}")
         return {
             "status": "error",
-            "message": str(e),
+            "message": "Internal error",
             "decision_mode": "human",
             "llm_model": "qwen3.5-claude:latest",
             "provider": "ollama",
@@ -372,7 +373,7 @@ async def update_settings(data: Dict[str, Any] = Body(...)):
         return {"status": "success" if success else "partial_success"}
     except Exception as e:
         logger.error(f"Error updating settings: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/apikey")
 @router_no_prefix.get("/apikey")

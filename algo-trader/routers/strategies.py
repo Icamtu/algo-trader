@@ -90,7 +90,8 @@ async def list_strategy_files():
                     files.append(rel_path)
         return {"files": files}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error listing strategy files: {e}")
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/strategies/status")
 async def get_all_strategies_status():
@@ -101,7 +102,7 @@ async def get_all_strategies_status():
         return strategy_runner.get_strategy_matrix()
     except Exception as e:
         logger.error(f"Strategy Status Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/strategies/halt")
 @router.post("/strategies/{strategy_id}/halt")
@@ -125,7 +126,7 @@ async def halt_strategy(request: Optional[StrategyHaltRequest] = Body(None), str
         return {"status": "success" if success else "failed"}
     except Exception as e:
         logger.error(f"FATAL ERROR in halt_strategy: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/strategies/unhalt")
 @router.post("/strategies/{strategy_id}/unhalt")
@@ -149,7 +150,7 @@ async def unhalt_strategy(request: Optional[StrategyHaltRequest] = Body(None), s
         return {"status": "success" if success else "failed"}
     except Exception as e:
         logger.error(f"FATAL ERROR in unhalt_strategy: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/strategies")
 async def list_strategies():
@@ -188,7 +189,7 @@ async def list_strategies():
         return {"strategies": strategies, "count": len(strategies)}
     except Exception as e:
         logger.error(f"Error listing strategies: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/strategies/{strategy_id}/performance")
 async def get_strategy_performance(strategy_id: str):
@@ -252,7 +253,8 @@ async def liquidate_strategy(request: Optional[StrategyHaltRequest] = Body(None)
         result = await order_manager.liquidate_strategy(target_strategy)
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Liquidate strategy failure: {e}")
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/strategies/files/{filename}")
 async def get_strategy_file(filename: str):
@@ -266,7 +268,8 @@ async def get_strategy_file(filename: str):
         return {"filename": os.path.basename(file_path), "content": content}
     except HTTPException: raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error reading strategy file {filename}: {e}")
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.put("/strategies/files/{filename}")
 async def save_strategy_file(filename: str, request: FileSaveRequest):
@@ -285,7 +288,8 @@ async def save_strategy_file(filename: str, request: FileSaveRequest):
         return {"status": "success", "message": f"Strategy {filename} saved"}
     except HTTPException: raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error saving strategy file {filename}: {e}")
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.delete("/strategies/files/{filename}")
 async def delete_strategy_file(filename: str):
@@ -297,7 +301,8 @@ async def delete_strategy_file(filename: str):
         raise HTTPException(status_code=404, detail="File not found")
     except HTTPException: raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error deleting strategy file {filename}: {e}")
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/strategies/history/{strategy_id}")
 async def get_strategy_version_history(strategy_id: str):

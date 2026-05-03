@@ -28,7 +28,7 @@ async def get_action_center_data(
         }
     except Exception as e:
         logger.error(f"ActionCenter GET Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/approve")
 @router.post("/approve/{order_id}")
@@ -58,7 +58,7 @@ async def approve_order(
         raise HTTPException(status_code=400, detail="Missing order ID or batch IDs")
     except Exception as e:
         logger.error(f"ActionCenter Approval Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/reject")
 @router.post("/reject/{order_id}")
@@ -83,7 +83,8 @@ async def reject_order(
 
         raise HTTPException(status_code=400, detail="Missing order ID or batch IDs")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"ActionCenter Reject Error: {e}")
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/auto")
 def toggle_auto_execution(enabled: bool = Body(..., embed=True)):
@@ -92,7 +93,8 @@ def toggle_auto_execution(enabled: bool = Body(..., embed=True)):
         action_manager.set_auto_execute(enabled)
         return {"status": "success", "auto_execute": action_manager.auto_execute}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"ActionCenter Auto-Execution Toggle Error: {e}")
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/lock")
 def toggle_risk_lock(locked: bool = Body(..., embed=True)):
@@ -101,7 +103,8 @@ def toggle_risk_lock(locked: bool = Body(..., embed=True)):
         action_manager.set_risk_lock(locked)
         return {"status": "success", "risk_lock": action_manager.risk_lock}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"ActionCenter Risk-Lock Toggle Error: {e}")
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/drift")
 async def get_drift_audit(limit: int = Query(50)):
@@ -111,4 +114,4 @@ async def get_drift_audit(limit: int = Query(50)):
         return {"status": "success", "data": events}
     except Exception as e:
         logger.error(f"ActionCenter Drift Audit Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")

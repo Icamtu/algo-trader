@@ -61,7 +61,8 @@ def get_current_health():
         else:
             report["broker"] = "session_missing"
     except Exception as e:
-        report["broker"] = f"error: {str(e)}"
+        logger.error(f"Error checking broker session: {e}")
+        report["broker"] = "error"
 
     # 2. Check Database Connectivity
     try:

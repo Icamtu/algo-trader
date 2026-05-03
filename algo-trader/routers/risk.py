@@ -101,7 +101,7 @@ async def risk_matrix():
         }
     except Exception as e:
         logger.error(f"Risk matrix failure: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 
 @router.get("/status")
@@ -124,4 +124,4 @@ async def get_risk_status() -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"Risk status endpoint failure: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")

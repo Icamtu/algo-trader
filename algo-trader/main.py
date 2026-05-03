@@ -48,7 +48,7 @@ async def system_health_monitor(order_manager):
             if ss_status["is_healthy"]:
                 health_update["broker"] = {"status": "HEALTHY", "details": "Active Session"}
             else:
-                health_update["broker"] = {"status": "OFFLINE", "details": ss_status["last_error"] or "Auth Required"}
+                health_update["broker"] = {"status": "OFFLINE", "details": "Authentication required"}
 
             # 2. Check APIs (Async)
             async def check_api(name, url, timeout=2.0):
@@ -60,8 +60,8 @@ async def system_health_monitor(order_manager):
                         if resp.status_code < 400:
                             return name, {"status": "HEALTHY", "latency": latency}
                         return name, {"status": "ERROR", "details": f"HTTP {resp.status_code}"}
-                except Exception as e:
-                    return name, {"status": "OFFLINE", "details": str(e)}
+                except Exception:
+                    return name, {"status": "OFFLINE", "details": "Connection error"}
 
             checks = [
                 check_api("ollama_local", "http://local_ollama:11434/api/tags"),
@@ -73,7 +73,7 @@ async def system_health_monitor(order_manager):
             for i, res in enumerate(results):
                 if isinstance(res, Exception):
                     name = ["ollama_local", "openclaw_agent"][i]
-                    health_update[name] = {"status": "OFFLINE", "details": str(res)}
+                    health_update[name] = {"status": "OFFLINE", "details": "Service unreachable"}
                 else:
                     name, status_dict = res
                     health_update[name] = status_dict
@@ -89,10 +89,10 @@ async def system_health_monitor(order_manager):
                     "integrity": db_stats.get("integrity", "STABLE"),
                     "details": f"{db_stats.get('market_records', 0)} Records | {db_stats.get('disk_usage_mb', 0)} MB"
                 }
-            except Exception as e:
+            except Exception:
                 health_update["database"] = {
                     "status": "OFFLINE",
-                    "details": str(e),
+                    "details": "Database error",
                     "integrity": "DISCONNECTED"
                 }
 

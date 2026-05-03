@@ -29,7 +29,7 @@ async def vault_list(type: Optional[str] = None, tags: Optional[List[str]] = Que
         return {"status": "success", "assets": assets}
     except Exception as e:
         logger.error(f"Vault list error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/register")
 async def vault_register(request: VaultRegisterRequest):
@@ -47,7 +47,7 @@ async def vault_register(request: VaultRegisterRequest):
         return {"status": "success", "asset_id": asset_id}
     except Exception as e:
         logger.error(f"Vault register error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/details/{asset_id}")
 async def vault_details(asset_id: int):
@@ -60,7 +60,7 @@ async def vault_details(asset_id: int):
     except HTTPException: raise
     except Exception as e:
         logger.error(f"Vault details error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/search")
 async def vault_search(request: VaultSearchRequest):
@@ -70,7 +70,7 @@ async def vault_search(request: VaultSearchRequest):
         return {"status": "success", "assets": results}
     except Exception as e:
         logger.error(f"Vault search error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/content/{asset_id}")
 async def vault_content(asset_id: int):
@@ -91,4 +91,4 @@ async def vault_content(asset_id: int):
     except HTTPException: raise
     except Exception as e:
         logger.error(f"Vault content error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")

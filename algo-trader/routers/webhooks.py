@@ -98,7 +98,7 @@ async def tradingview_webhook(data: Dict[str, Any]):
         return {"status": "accepted", "message": "Order queued for execution"}
     except Exception as e:
         logger.error(f"Webhook processing error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/external-event")
 async def register_outbound_webhook(config: Dict[str, Any]):

@@ -26,8 +26,8 @@ def _require_auth(request: Request):
         jwt.decode(token, _JWT_SECRET, algorithms=["HS256"], options={"verify_aud": False})
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError as e:
-        raise HTTPException(status_code=401, detail=f"Auth failure: {e}")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Authentication failed")
 
 
 @router.get("/trades.csv")
@@ -60,7 +60,7 @@ async def export_trades_csv(
         )
     except Exception as e:
         logger.error(f"CSV export error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 
 @router.get("/trades.xlsx")
@@ -97,4 +97,4 @@ async def export_trades_xlsx(
         raise HTTPException(status_code=501, detail="openpyxl not installed — install it to enable Excel export")
     except Exception as e:
         logger.error(f"XLSX export error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")

@@ -53,10 +53,31 @@ print(result.to_json())
         with open(os.path.join(self.indicators_dir, "__init__.py"), "a") as f:
             pass
 
+    def _get_safe_path(self, name: str) -> str:
+        """
+        Normalizes and validates the path to prevent traversal attacks.
+        """
+        # 1. Sanitize the name: take only the basename and remove dynamic directory markers
+        safe_name = os.path.basename(os.path.normpath(name)).lower()
+        if not safe_name.endswith(".py"):
+            safe_name += ".py"
+        
+        # 2. Join with the indicators directory
+        target_path = os.path.normpath(os.path.join(self.indicators_dir, safe_name))
+        
+        # 3. Final safety check: must be inside indicators_dir
+        base_dir = os.path.abspath(self.indicators_dir)
+        if not os.path.abspath(target_path).startswith(base_dir):
+            raise PermissionError("Access denied: Invalid indicator path.")
+            
+        return target_path
+
     def save_indicator(self, name: str, code: str) -> str:
         """Saves a new custom indicator code to disk."""
-        filename = f"{name.lower()}.py"
-        file_path = os.path.join(self.indicators_dir, filename)
+        file_path = self._get_safe_path(name)
+
+        # Security: validate imports before saving
+        self._validate_imports(code)
 
         with open(file_path, "w") as f:
             f.write(code)
@@ -104,7 +125,7 @@ print(result.to_json())
         interpolated into Python source, preventing code-injection through
         DataFrame contents or parameter values.
         """
-        file_path = os.path.join(self.indicators_dir, f"{name.lower()}.py")
+        file_path = self._get_safe_path(name)
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"Indicator {name} not found at {file_path}")
 

@@ -77,7 +77,7 @@ async def api_place_order(
         return result
     except Exception as e:
         logger.error(f"API order placement failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/placesmartorder")
 async def api_place_smart_order(
@@ -110,7 +110,7 @@ async def api_place_smart_order(
         return result
     except Exception as e:
         logger.error(f"API smart order placement failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/orders")
 @router.post("/orders")
@@ -133,7 +133,7 @@ async def get_orders(request: Request = None):
         }
     except Exception as e:
         logger.error(f"Error fetching orders: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/tradebook")
 @router.post("/tradebook")
@@ -236,7 +236,7 @@ async def get_sandbox_positions():
         }
     except Exception as e:
         logger.error(f"Error fetching sandbox positions: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/sandbox/summary")
 async def get_sandbox_summary():
@@ -294,7 +294,7 @@ async def get_sandbox_summary():
         }
     except Exception as e:
         logger.error(f"Error fetching sandbox summary: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/splitorder")
 async def api_split_order(
@@ -339,7 +339,7 @@ async def api_split_order(
         }
     except Exception as e:
         logger.error(f"Split order execution failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/orders/{order_id}/cancel")
 async def cancel_order(order_id: str):
@@ -353,7 +353,7 @@ async def cancel_order(order_id: str):
         return result
     except Exception as e:
         logger.error(f"Error cancelling order {order_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 @router.get("/sandbox/pnl/api/data")
 async def get_sandbox_pnl_data():
     """GET /api/v1/sandbox/pnl/api/data - Unified sandbox PnL and analytics data."""
@@ -442,7 +442,7 @@ async def get_sandbox_pnl_data():
         }
     except Exception as e:
         logger.error(f"Error fetching sandbox pnl data: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/sandbox/api/configs")
 async def get_sandbox_configs():

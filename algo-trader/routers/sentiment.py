@@ -1,6 +1,9 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional, Dict
+import logging
 from services.sentiment_service import sentiment_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -13,7 +16,8 @@ async def get_news_sentiment(
         results = await sentiment_service.get_latest_news_sentiment(query)
         return {"status": "success", "count": len(results), "news": results}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"News Sentiment Error: {e}")
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/aggregate")
 async def get_aggregated_sentiment(
@@ -24,4 +28,5 @@ async def get_aggregated_sentiment(
         result = await sentiment_service.get_aggregated_sentiment(symbol)
         return {"status": "success", "data": result}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Aggregated Sentiment Error: {e}")
+        raise HTTPException(status_code=500, detail="An internal error occurred")

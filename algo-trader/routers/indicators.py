@@ -1,7 +1,10 @@
 from fastapi import APIRouter, HTTPException, Body
 from typing import List, Dict, Any, Optional
+import logging
 import pandas as pd
 from services.indicator_service import indicator_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -20,7 +23,8 @@ async def save_indicator(
         path = indicator_service.save_indicator(name, code)
         return {"status": "success", "path": path}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Save Indicator Error: {e}")
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/calculate")
 async def calculate_indicator(
@@ -46,4 +50,5 @@ async def calculate_indicator(
 
         return {"status": "success", "result": res_list}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Calculate Indicator Error: {e}")
+        raise HTTPException(status_code=500, detail="Internal error")

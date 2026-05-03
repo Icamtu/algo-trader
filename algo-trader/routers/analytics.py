@@ -159,7 +159,7 @@ async def get_underlyings(exchange: str = "NSE"):
         }
     except Exception as e:
         logger.error(f"Error fetching underlyings: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": "Failed to fetch underlyings"}
 
 @router.get("/search/api/expiries")
 async def get_expiries(underlying: str, exchange: str = "NSE"):
@@ -174,7 +174,7 @@ async def get_expiries(underlying: str, exchange: str = "NSE"):
         }
     except Exception as e:
         logger.error(f"Error fetching expiries: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": "Failed to fetch expiries"}
 
 @router.post("/gex/api/gex-data")
 @router.get("/oi-tracker/api/data")
@@ -224,7 +224,7 @@ async def get_gex_and_oi_data(request: Request):
 
     except Exception as e:
         logger.error(f"GEX/OI API Critical Error: {e}", exc_info=True)
-        return {"status": "error", "message": f"Critical analytical failure: {str(e)}"}
+        return {"status": "error", "message": "Internal analytical failure"}
 
 @router.post("/iv-smile/smile-data")
 async def get_iv_smile(
@@ -239,7 +239,8 @@ async def get_iv_smile(
         results = _analytics_engine.calculate_iv_smile(chain)
         return results
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"IV Smile Error: {e}")
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/vol-surface/api/surface-data")
 async def get_vol_surface_data(
@@ -279,7 +280,7 @@ async def get_vol_surface_data(
         return _analytics_engine.calculate_vol_surface(surfaces)
     except Exception as e:
         logger.error(f"Vol Surface API Error: {e}", exc_info=True)
-        return {"status": "error", "message": str(e), "data": []}
+        return {"status": "error", "message": "Failed to calculate vol surface", "data": []}
 
 @router.post("/iv-chart/api/chart-data")
 async def get_iv_chart_data(
@@ -299,7 +300,7 @@ async def get_iv_chart_data(
         return _analytics_engine.calculate_iv_chart(chain, history_rows)
     except Exception as e:
         logger.error(f"IV Chart API Error: {e}", exc_info=True)
-        return {"status": "error", "message": str(e), "data": []}
+        return {"status": "error", "message": "Failed to generate IV chart", "data": []}
 
 @router.post("/straddle-chart/api/data")
 async def get_straddle_chart_data(
@@ -319,7 +320,7 @@ async def get_straddle_chart_data(
         return _analytics_engine.calculate_straddle_chart(chain, history_rows)
     except Exception as e:
         logger.error(f"Straddle Chart API Error: {e}", exc_info=True)
-        return {"status": "error", "message": str(e), "data": []}
+        return {"status": "error", "message": "Failed to generate straddle chart", "data": []}
 
 @router.post("/analytics/greeks")
 async def get_chain_greeks(
@@ -341,7 +342,7 @@ async def get_chain_greeks(
         return results
     except Exception as e:
         logger.error(f"Greeks API Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/historify/watchlist")
 def get_watchlist(request: Request):
@@ -439,7 +440,7 @@ async def get_historify_stats():
         return {"status": "success", "data": stats}
     except Exception as e:
         logger.error(f"Error fetching Historify stats: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": "Failed to fetch stats"}
 
 @router.get("/historify/symbols")
 async def get_historify_symbols():
@@ -463,7 +464,7 @@ async def get_historify_symbols():
         return {"status": "success", "data": list(symbols.values())}
     except Exception as e:
         logger.error(f"Error fetching Historify symbols: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": "Internal error"}
 
 @router.get("/historify/records")
 def get_historify_records(
@@ -507,7 +508,8 @@ def cancel_historify_job(job_id: str):
         upsert_job(job_id, "CANCELLED")
         return {"status": "success", "message": f"Job {job_id} cancelled."}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error cancelling job: {e}")
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/historify/export")
 def export_historify_data(
@@ -654,7 +656,7 @@ async def get_standard_option_chain(
 
     except Exception as e:
         logger.error(f"OptionChain Critical Error: {e}", exc_info=True)
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": "Internal error"}
 
 @router.get("/status")
 @router.get("/analyzerstatus")
@@ -679,7 +681,7 @@ async def get_analyzer_status():
         }
     except Exception as e:
         logger.error(f"Error getting analyzer status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/analytics/fill-quality")
 async def get_fill_quality(
@@ -694,7 +696,7 @@ async def get_fill_quality(
         return results
     except Exception as e:
         logger.error(f"Fill Quality API Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 @router.post("/analytics/correlation")
 async def get_correlation_matrix(
     symbols: List[str] = Body(...),
@@ -711,7 +713,7 @@ async def get_correlation_matrix(
         return results
     except Exception as e:
         logger.error(f"Correlation API Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/analytics/convergence")
 async def get_signal_convergence(
@@ -726,4 +728,4 @@ async def get_signal_convergence(
         return results
     except Exception as e:
         logger.error(f"Convergence API Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")

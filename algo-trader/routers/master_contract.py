@@ -36,7 +36,7 @@ async def get_master_contract_status():
         return {"status": "success", "data": status}
     except Exception as e:
         logger.error(f"Error getting master contract status: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": "Internal error"}
 
 @router.post("/master-contract/download")
 async def download_master_contract(request: Request):
@@ -52,7 +52,7 @@ async def download_master_contract(request: Request):
             return {"status": "error", "message": "Master contract sync failed"}
     except Exception as e:
         logger.error(f"Error downloading master contract: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": "Internal error"}
 
 @router.get("/cache/health")
 async def get_cache_health():
@@ -70,7 +70,7 @@ async def get_cache_health():
         }
     except Exception as e:
         logger.error(f"Error getting cache health: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": "Internal error"}
 
 @router.post("/cache/reload")
 async def reload_cache():
@@ -80,4 +80,4 @@ async def reload_cache():
         return {"status": "success", "message": "Cache reload triggered"}
     except Exception as e:
         logger.error(f"Error reloading cache: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": "Internal error"}

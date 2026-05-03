@@ -52,7 +52,7 @@ def require_auth(f):
             return False, (jsonify({"status": "error", "message": "Token has expired"}), 401)
         except jwt.InvalidTokenError as e:
             logger.warning(f"Auth Failure for Token [{token[:10]}...]: {e}")
-            return False, (jsonify({"status": "error", "message": f"Auth Failure: {str(e)}"}), 401)
+            return False, (jsonify({"status": "error", "message": "Authentication failed"}), 401)
 
     @wraps(f)
     async def async_wrapper(*args, **kwargs):

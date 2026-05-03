@@ -47,7 +47,7 @@ async def get_broker_config():
         return config
     except Exception as e:
         logger.error(f"Broker config error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/brokers/shoonya/auth")
 async def shoonya_auth_init(request: Request):
@@ -64,7 +64,7 @@ async def shoonya_auth_init(request: Request):
         raise
     except Exception as e:
         logger.error(f"Shoonya Auth Init Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/auth/callback/shoonya")
 async def shoonya_callback(code: str = Query(None)):
@@ -107,7 +107,7 @@ async def zerodha_auth_init(request: Request):
         raise
     except Exception as e:
         logger.error(f"Zerodha Auth Init Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/auth/callback/zerodha")
 async def zerodha_callback(request: Request, request_token: str = Query(None)):

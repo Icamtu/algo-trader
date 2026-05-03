@@ -114,4 +114,4 @@ async def get_backtest_results(strategy_id: str = Query(None)):
         }
     except Exception as e:
         logger.error(f"Error fetching backtest results: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")

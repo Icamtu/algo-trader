@@ -34,22 +34,18 @@ class StrategyVersioningService:
             '--abbrev-commit', '--date', '-p', '-U0', 'HEAD',
             '--short', '--pretty=format:%H|%an|%ai|%s', '--'
         }
-        
-        for arg in args:
-            # Prevent shell injection characters explicitly
-            if any(c in arg for c in ";;|&><`$()"):
-                return False
-            
-            # Match against alphanumeric pattern
-            if not safe_pattern.match(arg):
-                return False
-            
-            # Prevent dangerous git flags starting with --
+
+        for arg in args[1:]:
             if arg.startswith('-'):
-                if arg not in allowed_flags and not re.match(r'^-[0-9]+$', arg):
-                    # Check if it's a dynamic but safe flag like --pretty=format:...
-                    if not arg.startswith('--pretty=format:'):
-                        return False
+                if arg not in allowed_flags:
+                    # Special case for --pretty=format: with dynamic content if needed
+                    # but here we use a hardcoded one, so we check equality.
+                    return False
+            
+            # Prevent command injection through shell metacharacters in any argument
+            if any(c in arg for c in ";|&><$`\\"):
+                return False
+
         return True
 
     def _run_git(self, args: List[str]) -> str:
@@ -57,19 +53,30 @@ class StrategyVersioningService:
         Executes a git command with strict validation to prevent injection.
         """
         if not self._validate_args(args):
-            logger.error(f"Invalid git arguments: {args}")
-            raise PermissionError("Unsafe git arguments detected.")
+            logger.error(f"Unsafe git arguments blocked: {args}")
+            raise PermissionError("Security Violation: Unsafe command execution attempt.")
 
-        full_cmd = ["git"] + args
+        # Ensure we always use the base 'git' command and it's not overridden
+        full_cmd = ["/usr/bin/git"] + args
         try:
-            res = subprocess.run(full_cmd, cwd=self.strategies_path, capture_output=True, text=True, check=True)
+            # We use check=True and capture_output=True
+            # No shell=True, preventing shell injection
+            res = subprocess.run(
+                full_cmd, 
+                cwd=self.strategies_path, 
+                capture_output=True, 
+                text=True, 
+                check=True,
+                env={"GIT_CONFIG_NOSYSTEM": "1", "HOME": "/tmp"} # Sandbox git environment
+            )
             return res.stdout
         except subprocess.CalledProcessError as e:
-            logger.error(f"Git Error: {e.stderr}")
-            raise Exception(f"Git Error: {e.stderr}")
+            # Mask internal details from the user but log them for diagnostics
+            logger.error(f"Git execution failed (code {e.returncode}). Stderr: {e.stderr}")
+            raise Exception("Internal version control system error")
         except Exception as e:
-            logger.error(f"Execution Error: {e}")
-            raise
+            logger.error(f"Unexpected execution error: {e}")
+            raise Exception("Operation failed due to an internal system error")
 
     def get_strategy_history(self, strategy_id: str) -> List[Dict[str, Any]]:
         """

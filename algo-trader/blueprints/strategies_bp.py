@@ -472,9 +472,9 @@ def get_strategy_versions(filename):
             filename += ".py"
         strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
         filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
-        versions_dir = os.path.join(strat_dir, ".versions", filename)
+        versions_dir = os.path.normpath(os.path.join(strat_dir, ".versions", filename))
 
-        if not os.path.abspath(versions_dir).startswith(os.path.abspath(strat_dir)):
+        if not versions_dir.startswith(strat_dir):
             return jsonify({"error": "Forbidden path"}), 403
 
         versions = []
@@ -543,11 +543,7 @@ def create_strategy():
             return jsonify({"error": "Strategy already exists"}), 400
 
         # Load template safely
-        template_filename = os.path.basename(os.path.normpath(template))
-        if not template_filename.endswith(".py"):
-            template_filename += ".py"
-        
-        template_path = os.path.join(STRAT_DIR, template_filename)
+        template_path = _get_safe_path(template)
         if not os.path.exists(template_path):
             template_path = os.path.join(STRAT_DIR, "aether_scalper.py")
 

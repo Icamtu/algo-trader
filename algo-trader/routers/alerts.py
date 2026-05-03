@@ -38,7 +38,8 @@ def _authenticate(request: Request, allowed_roles: tuple) -> dict:
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError as e:
-        raise HTTPException(status_code=401, detail=f"Auth failure: {e}")
+        logger.warning(f"Auth failure (invalid token): {e}")
+        raise HTTPException(status_code=401, detail="Authentication failed")
 
     role = payload.get("role", "viewer").lower()
     if role != "internal" and role not in allowed_roles:
@@ -69,7 +70,7 @@ async def get_alerts(request: Request, limit: int = 100):
         return {"status": "success", "alerts": alerts}
     except Exception as e:
         logger.error(f"Error fetching alerts: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("")
 async def create_alert(request: Request, alert: AlertCreate):
@@ -117,7 +118,7 @@ async def create_alert(request: Request, alert: AlertCreate):
         raise
     except Exception as e:
         logger.error(f"Error creating alert: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.delete("/{alert_id}")
 async def delete_alert(request: Request, alert_id: int):
@@ -135,7 +136,7 @@ async def delete_alert(request: Request, alert_id: int):
         raise
     except Exception as e:
         logger.error(f"Error deleting alert {alert_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/{alert_id}/acknowledge")
 async def acknowledge_alert(request: Request, alert_id: int):
@@ -152,4 +153,4 @@ async def acknowledge_alert(request: Request, alert_id: int):
         raise
     except Exception as e:
         logger.error(f"Error acknowledging alert {alert_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal error")

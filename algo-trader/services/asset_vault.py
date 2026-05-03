@@ -64,10 +64,12 @@ class AssetVault:
                 filename += ".blob"
 
             rel_path = os.path.join(asset_type, filename)
-            abs_path = os.path.join(VAULT_STORAGE_PATH, rel_path)
+            abs_path = os.path.normpath(os.path.join(VAULT_STORAGE_PATH, rel_path))
 
-            # Ensure the final path is still within VAULT_STORAGE_PATH
-            if not os.path.abspath(abs_path).startswith(os.path.abspath(VAULT_STORAGE_PATH)):
+            # Ensure the final path is strictly within VAULT_STORAGE_PATH
+            # Using commonpath is more robust than startswith for path validation
+            vault_base = os.path.abspath(VAULT_STORAGE_PATH)
+            if os.path.commonpath([vault_base, os.path.abspath(abs_path)]) != vault_base:
                 raise PermissionError("Access denied: Invalid path construction.")
 
             with open(abs_path, "w") as f:

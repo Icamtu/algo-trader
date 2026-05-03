@@ -432,7 +432,7 @@ class RiskManager:
             return {"status": "safe", "metrics": metrics}
         except Exception as e:
             logger.error(f"Error checking safeguards for {strategy_id}: {e}")
-            return {"status": "error", "reason": str(e)}
+            return {"status": "error", "reason": "Internal error"}
 
     def halt_strategy(self, strategy_id: str):
         """Manually halt a strategy by adding it to the breach list."""
