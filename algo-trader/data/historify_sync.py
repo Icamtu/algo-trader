@@ -65,8 +65,8 @@ def sync_data():
                 
                 conn_nat.commit()
                 logger.info("Metadata merge complete.")
-            except Exception as e:
-                logger.error(f"Metadata merge failed: {e}")
+            except Exception:
+                logger.error("Metadata merge failed", exc_info=True)
             finally:
                 conn_leg.close()
                 conn_nat.close()
