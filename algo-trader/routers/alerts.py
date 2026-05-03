@@ -37,8 +37,8 @@ def _authenticate(request: Request, allowed_roles: tuple) -> dict:
         )
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError as e:
-        logger.warning(f"Auth failure (invalid token): {e}")
+    except jwt.InvalidTokenError:
+        logger.warning("Auth failure (invalid token)", exc_info=True)
         raise HTTPException(status_code=401, detail="Authentication failed")
 
     role = payload.get("role", "viewer").lower()
@@ -68,8 +68,8 @@ async def get_alerts(request: Request, limit: int = 100):
         import asyncio
         alerts = await asyncio.to_thread(logger_db.get_alerts, limit)
         return {"status": "success", "alerts": alerts}
-    except Exception as e:
-        logger.error(f"Error fetching alerts: {e}")
+    except Exception:
+        logger.error("Error fetching alerts", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("")
@@ -116,8 +116,8 @@ async def create_alert(request: Request, alert: AlertCreate):
         return {"status": "success", "id": alert_id}
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error creating alert: {e}")
+    except Exception:
+        logger.error("Error creating alert", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.delete("/{alert_id}")
@@ -134,8 +134,8 @@ async def delete_alert(request: Request, alert_id: int):
         return {"status": "success", "message": f"Alert {alert_id} deleted"}
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error deleting alert {alert_id}: {e}")
+    except Exception:
+        logger.error(f"Error deleting alert {alert_id}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/{alert_id}/acknowledge")
@@ -151,6 +151,6 @@ async def acknowledge_alert(request: Request, alert_id: int):
         return {"status": "success", "message": f"Alert {alert_id} acknowledged"}
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error acknowledging alert {alert_id}: {e}")
+    except Exception:
+        logger.error(f"Error acknowledging alert {alert_id}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
