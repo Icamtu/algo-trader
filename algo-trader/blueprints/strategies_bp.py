@@ -474,6 +474,7 @@ def get_strategy_versions(filename):
         if not filename.endswith(allowed_exts):
             filename += ".py"
         strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
+        filename = os.path.basename(filename.replace(":", "/"))
         versions_dir = os.path.join(strat_dir, ".versions", filename)
 
         if not os.path.abspath(versions_dir).startswith(os.path.abspath(strat_dir)):
@@ -515,6 +516,8 @@ def rename_strategy_file(filename):
             new_filename += ".py"
 
         strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
+        filename = os.path.basename(filename.replace(":", "/"))
+        new_filename = os.path.basename(new_filename.replace(":", "/"))
         file_path = os.path.join(strat_dir, filename)
         new_file_path = os.path.join(strat_dir, new_filename)
 
@@ -561,6 +564,7 @@ def create_strategy():
             return jsonify({"error": f"Strategy {filename} already exists"}), 400
 
         # Load template
+        template = os.path.basename(template)
         template_path = os.path.join(strat_dir, f"{template}.py")
         if not os.path.exists(template_path):
             template_path = os.path.join(strat_dir, "aether_scalper.py") # Fallback
@@ -601,7 +605,8 @@ def delete_strategy(strategy_id):
                 strategy.stop()
 
         # Find the file
-        filename = f"{strategy_id.replace('-', '_')}.py"
+        safe_id = os.path.basename(strategy_id.replace('-', '_'))
+        filename = f"{safe_id}.py"
         strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
         file_path = os.path.join(strat_dir, filename)
 
