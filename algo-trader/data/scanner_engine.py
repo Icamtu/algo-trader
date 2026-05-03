@@ -37,9 +37,9 @@ class ScannerEngine:
                 history = await self.order_manager.get_history(symbol, exchange, interval=interval)
                 if history and len(history) >= 20: # Minimum requirement for most indicators
                     return history
-                logger.warning(f"Scanner: Insufficient data for {symbol} on attempt {attempt+1} (interval={interval})")
-            except Exception as e:
-                logger.warning(f"Scanner: Attempt {attempt+1} failed for {symbol}: {e}")
+                logger.warning("Scanner: Insufficient data for %s on attempt %d (interval=%s)", symbol, attempt+1, interval)
+            except Exception:
+                logger.warning("Scanner: Attempt %d failed for %s", attempt+1, symbol, exc_info=True)
             
             if attempt < retries:
                 await asyncio.sleep(0.5) # Small backoff
@@ -85,8 +85,8 @@ class ScannerEngine:
             if op == "below": return target < val
             
             return False
-        except Exception as e:
-            logger.debug(f"Scanner: Condition eval error: {e}")
+        except Exception:
+            logger.debug("Scanner: Condition eval error", exc_info=True)
             return False
 
     def _evaluate_logic(self, df: pd.DataFrame, logic: Dict[str, Any]) -> bool:
@@ -106,7 +106,7 @@ class ScannerEngine:
             elif group_type == "OR":
                 return any(self._evaluate_logic(df, c) for c in sub_conditions)
             else:
-                logger.warning(f"Scanner: Unknown logic group type: {group_type}")
+                logger.warning("Scanner: Unknown logic group type: %s", group_type)
                 return False
         else:
             # Atomic condition
@@ -155,9 +155,9 @@ class ScannerEngine:
                 "interval": interval,
                 "ai_reasoning": f"Scanner detected {matched_count} matches on {interval} chart. Final confidence: {score}%."
             }
-        except Exception as e:
-            logger.error(f"Scanner: Error scanning {symbol}: {e}")
-            return {"symbol": symbol, "status": "error", "message": str(e)}
+        except Exception:
+            logger.error("Scanner: Error scanning %s", symbol, exc_info=True)
+            return {"symbol": symbol, "status": "error", "message": "Internal error"}
 
     async def run_scan(self, index_name: str = None, symbols: List[str] = None, interval: str = "1D", conditions: List[Dict] = None) -> List[Dict[str, Any]]:
         """Run batch scan for a predefined index OR a custom symbol list."""
@@ -165,10 +165,10 @@ class ScannerEngine:
             symbols = INDICES.get(index_name, [])
             
         if not symbols:
-            logger.warning(f"Scanner: No symbols found for scan (index={index_name})")
+            logger.warning("Scanner: No symbols found for scan (index=%s)", index_name)
             return []
             
-        logger.info(f"Scanner: Starting batch scan for {len(symbols)} symbols at {interval} interval")
+        logger.info("Scanner: Starting batch scan for %d symbols at %s interval", len(symbols), interval)
         
         # Max concurrency to prevent API rate limiting
         sem = asyncio.Semaphore(5) 
