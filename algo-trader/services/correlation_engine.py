@@ -55,8 +55,8 @@ class CorrelationEngine:
                 "data_points": len(returns_df)
             }
 
-        except Exception as e:
-            logger.error(f"Asset correlation calculation failed: {e}")
+        except Exception:
+            logger.error("Asset correlation calculation failed", exc_info=True)
             return {"status": "error", "message": "Internal service error"}
 
     def analyze_signal_convergence(self, multi_tf_signals: Dict[str, str]) -> Dict[str, Any]:
