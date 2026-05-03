@@ -165,8 +165,8 @@ class PortfolioAnalyticsService:
                 "simulations": sim_returns.tolist() if iterations <= 1000 else [] # Only return if small enough
             }
 
-        except Exception as e:
-            logger.error(f"Portfolio risk calculation failed: {e}", exc_info=True)
+        except Exception:
+            logger.error("Portfolio risk calculation failed", exc_info=True)
             return {"status": "error", "message": "Internal service error"}
 
 # Singleton
