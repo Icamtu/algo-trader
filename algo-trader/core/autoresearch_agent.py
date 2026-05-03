@@ -39,8 +39,8 @@ def call_ollama(prompt, model="qwen3.5-claude:latest"):
         response.raise_for_status()
         result = response.json()
         return result.get("response", "")
-    except Exception as e:
-        logger.error(f"Failed to call Ollama at {url}: {e}")
+    except Exception:
+        logger.error("Failed to call Ollama at %s", url, exc_info=True)
         return ""
 
 def extract_python_code(response_text):
@@ -115,8 +115,8 @@ async def run_iteration(file_path, directive, iteration, model="deepseek-coder:1
 
     try:
         results = await engine.run(days=7)
-    except Exception as e:
-        logger.error(f"Backtest engine failed during iteration {iteration}: {e}")
+    except Exception:
+        logger.error("Backtest engine failed during iteration %s", iteration, exc_info=True)
         return None
 
     perf = results.get("performance", {})
@@ -169,8 +169,8 @@ Based on the metrics and the directive, output an IMPROVED version of the above 
     # Validate basic syntax before saving
     try:
         ast.parse(new_script)
-    except SyntaxError as e:
-        logger.error(f"LLM generated invalid Python syntax: {e}")
+    except SyntaxError:
+        logger.error("LLM generated invalid Python syntax", exc_info=True)
         return None
 
     # Save the new iteration
@@ -236,8 +236,8 @@ async def run_iteration_api(code: str = None, strategy_name: str = None, symbol:
 
         try:
             results = await engine.run(days=days)
-        except Exception as e:
-            return {"error": f"Backtest failed at step {i}: {str(e)}"}
+        except Exception:
+            return {"error": f"Backtest failed at step {i}"}
 
         perf = results.get("performance", {})
         last_perf = perf
@@ -328,8 +328,8 @@ Based on the metrics and the directive, output an IMPROVED version of the above 
     if code and "temp_ar_" in file_path:
         try:
             os.remove(file_path)
-        except OSError as e:
-            logger.warning(f"Failed to cleanup temp file {file_path}: {e}")
+        except OSError:
+            logger.warning("Failed to cleanup temp file %s", file_path, exc_info=True)
 
     return {
         "metrics": last_perf,
