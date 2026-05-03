@@ -26,8 +26,8 @@ def get_action_center_data():
                 "statistics": stats
             }
         }), 200
-    except Exception as e:
-        logger.error(f"ActionCenter GET Error: {e}", exc_info=True)
+    except Exception:
+        logger.error("ActionCenter GET Error", exc_info=True)
         return jsonify({"status": "error", "message": "Internal error"}), 500
 
 @action_center_bp.route("/api/v1/actioncenter/approve", methods=["POST"])
@@ -55,8 +55,8 @@ async def approve_order(id=None):
             return jsonify({"status": "success", "message": "Signal approved and routed"}), 200
         else:
             return jsonify({"status": "error", "message": "Kernel approval fail or route error"}), 500
-    except Exception as e:
-        logger.error(f"ActionCenter Approval Error: {e}", exc_info=True)
+    except Exception:
+        logger.error("ActionCenter Approval Error", exc_info=True)
         return jsonify({"status": "error", "message": "Internal error"}), 500
 
 @action_center_bp.route("/api/v1/actioncenter/reject", methods=["POST"])
@@ -110,8 +110,8 @@ async def approve_all_orders():
     try:
         count = await action_manager.approve_all_pending()
         return jsonify({"status": "success", "message": f"Approved {count} orders"}), 200
-    except Exception as e:
-        logger.error(f"ActionCenter Batch Approval Error: {e}", exc_info=True)
+    except Exception:
+        logger.error("ActionCenter Batch Approval Error", exc_info=True)
         return jsonify({"status": "error", "message": "Internal error"}), 500
 
 @action_center_bp.route("/api/v1/actioncenter/retry", methods=["POST"])
@@ -134,8 +134,8 @@ def retry_order(id=None):
             }), 200
         else:
             return jsonify({"status": "error", "message": "Retry operation failed"}), 500
-    except Exception as e:
-        logger.error(f"ActionCenter Retry Error: {e}", exc_info=True)
+    except Exception:
+        logger.error("ActionCenter Retry Error", exc_info=True)
         return jsonify({"status": "error", "message": "Internal error"}), 500
 
 
@@ -158,8 +158,8 @@ async def cancel_all_action_orders():
     try:
         result = await action_manager.cancel_all_signals()
         return jsonify(result), 200
-    except Exception as e:
-        logger.error(f"ActionCenter Cancel All Error: {e}", exc_info=True)
+    except Exception:
+        logger.error("ActionCenter Cancel All Error", exc_info=True)
         return jsonify({"status": "error", "message": "Internal error"}), 500
 
 @action_center_bp.route("/api/v1/action/audit/lock", methods=["POST"])
