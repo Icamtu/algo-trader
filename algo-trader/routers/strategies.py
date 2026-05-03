@@ -89,8 +89,8 @@ async def list_strategy_files():
                     rel_path = os.path.relpath(os.path.join(root, f), strat_dir)
                     files.append(rel_path)
         return {"files": files}
-    except Exception as e:
-        logger.error(f"Error listing strategy files: {e}")
+    except Exception:
+        logger.error("Error listing strategy files", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/strategies/status")
@@ -100,8 +100,8 @@ async def get_all_strategies_status():
         raise HTTPException(status_code=503, detail="Strategy runner not initialized")
     try:
         return strategy_runner.get_strategy_matrix()
-    except Exception as e:
-        logger.error(f"Strategy Status Error: {e}")
+    except Exception:
+        logger.error("Strategy Status Error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/strategies/halt")
@@ -124,8 +124,8 @@ async def halt_strategy(request: Optional[StrategyHaltRequest] = Body(None), str
         success = await strategy_runner.halt_strategy(target_strategy)
         logger.info(f"HALT result for {target_strategy}: {success}")
         return {"status": "success" if success else "failed"}
-    except Exception as e:
-        logger.error(f"FATAL ERROR in halt_strategy: {e}", exc_info=True)
+    except Exception:
+        logger.error("FATAL ERROR in halt_strategy", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/strategies/unhalt")
@@ -148,8 +148,8 @@ async def unhalt_strategy(request: Optional[StrategyHaltRequest] = Body(None), s
         success = await strategy_runner.unhalt_strategy(target_strategy)
         logger.info(f"UNHALT result for {target_strategy}: {success}")
         return {"status": "success" if success else "failed"}
-    except Exception as e:
-        logger.error(f"FATAL ERROR in unhalt_strategy: {e}", exc_info=True)
+    except Exception:
+        logger.error("FATAL ERROR in unhalt_strategy", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/strategies")
@@ -187,8 +187,8 @@ async def list_strategies():
                 "pnl": pnl,
             })
         return {"strategies": strategies, "count": len(strategies)}
-    except Exception as e:
-        logger.error(f"Error listing strategies: {e}", exc_info=True)
+    except Exception:
+        logger.error("Error listing strategies", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/strategies/{strategy_id}/performance")
@@ -212,8 +212,8 @@ async def get_strategy_performance(strategy_id: str):
             "strategy": strategy_id,
             "metrics": metrics
         }
-    except Exception as e:
-        logger.error(f"Error fetching strategy performance for {strategy_id}: {e}")
+    except Exception:
+        logger.error("Error fetching strategy performance", exc_info=True)
         return {"status": "success", "strategy": strategy_id, "metrics": {"net_pnl": 0.0, "total_trades": 0}}
 
 @router.get("/strategies/{strategy_id}/orders")
@@ -234,8 +234,8 @@ async def get_strategy_orders(strategy_id: str, limit: int = Query(100)):
             "orders": [t.to_dict() for t in trades],
             "count": len(trades)
         }
-    except Exception as e:
-        logger.error(f"Error fetching strategy orders for {strategy_id}: {e}")
+    except Exception:
+        logger.error("Error fetching strategy orders", exc_info=True)
         return {"status": "success", "orders": [], "count": 0}
 
 @router.post("/strategies/liquidate")
@@ -252,8 +252,8 @@ async def liquidate_strategy(request: Optional[StrategyHaltRequest] = Body(None)
     try:
         result = await order_manager.liquidate_strategy(target_strategy)
         return result
-    except Exception as e:
-        logger.error(f"Liquidate strategy failure: {e}")
+    except Exception:
+        logger.error("Liquidate strategy failure", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/strategies/files/{filename}")
@@ -267,8 +267,8 @@ async def get_strategy_file(filename: str):
             content = f.read()
         return {"filename": os.path.basename(file_path), "content": content}
     except HTTPException: raise
-    except Exception as e:
-        logger.error(f"Error reading strategy file {filename}: {e}")
+    except Exception:
+        logger.error("Error reading strategy file", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.put("/strategies/files/{filename}")
@@ -282,13 +282,13 @@ async def save_strategy_file(filename: str, request: FileSaveRequest):
         try:
             strategy_id = os.path.basename(file_path).replace(".py", "")
             versioning_service.commit_strategy(strategy_id, request.message)
-        except Exception as e:
-            logger.warning(f"Git versioning failed for {filename}: {e}")
+        except Exception:
+            logger.warning("Git versioning failed", exc_info=True)
 
         return {"status": "success", "message": f"Strategy {filename} saved"}
     except HTTPException: raise
-    except Exception as e:
-        logger.error(f"Error saving strategy file {filename}: {e}")
+    except Exception:
+        logger.error("Error saving strategy file", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.delete("/strategies/files/{filename}")
@@ -300,8 +300,8 @@ async def delete_strategy_file(filename: str):
             return {"status": "success", "message": f"Strategy {filename} deleted"}
         raise HTTPException(status_code=404, detail="File not found")
     except HTTPException: raise
-    except Exception as e:
-        logger.error(f"Error deleting strategy file {filename}: {e}")
+    except Exception:
+        logger.error("Error deleting strategy file", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/strategies/history/{strategy_id}")
