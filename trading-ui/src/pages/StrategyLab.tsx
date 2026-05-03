@@ -13,7 +13,7 @@ import Editor from "@monaco-editor/react";
 import { BacktestCanvas } from "@/components/trading/BacktestCanvas";
 import { useToast } from "@/hooks/use-toast";
 import { IndustrialValue } from "@/components/trading/IndustrialValue";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { useAppModeStore } from "@/stores/appModeStore";
 import { StrategyExplorer } from "@/features/explorer/components/StrategyExplorer";
 import { useExplorerStore } from "@/features/explorer/stores/explorerStore";
@@ -60,8 +60,9 @@ export default function StrategyLab() {
     const fetchStrats = async () => {
       try {
         const res = await algoApi.getStrategies();
-        if (!res || !res.strategies) throw new Error("Invalid response format");
-        setDynamicStrategies(res.strategies);
+        const data = res?.data || res;
+        const strategies = Array.isArray(data?.strategies) ? data.strategies : [];
+        setDynamicStrategies(strategies);
       } catch (err) {
         console.error("Failed to fetch strategies", err);
         setDynamicStrategies([]);
@@ -375,7 +376,7 @@ export default function StrategyLab() {
               </div>
               {lastBacktestResult?.equityCurve?.length > 0 ? (
                 <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                     <AreaChart data={lastBacktestResult.equityCurve.map((v: number, i: number) => ({ day: i + 1, equity: v }))}>
                       <XAxis dataKey="day" stroke="rgba(255,255,255,0.05)" fontSize={7} />
                       <YAxis stroke="rgba(255,255,255,0.05)" fontSize={7} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}K`} />
