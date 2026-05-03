@@ -17,8 +17,8 @@ def read_env_file():
     try:
         with open(path, "r", encoding="utf-8") as f:
             return f.read(), None
-    except Exception as e:
-        return "", str(e)
+    except Exception:
+        return "", "Internal file error"
 
 def update_env_value(content, key, value):
     """Updates a specific key in the .env string or appends if missing."""
