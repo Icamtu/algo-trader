@@ -348,20 +348,13 @@ async def tick_dispatcher():
                 manager.tick_buffer.clear()
 
             if manager.active_connections and batch:
-                for tick in batch:
-                    # Prepare message aligned with MarketDataManager.ts expectations
-                    msg = json.dumps({
-                        "type": "market_data",
-                        "symbol": tick["symbol"],
-                        "exchange": tick.get("exchange", "NSE"),
-                        "data": {
-                            "ltp": tick["ltp"],
-                            "change_percent": tick.get("chg_pct", "0.00"),
-                            "timestamp": tick["timestamp"]
-                        },
-                        "timestamp": time.time()
-                    })
-                    await manager.broadcast(msg)
+                # Optimized: Broadcast the entire batch in a single message to reduce lock contention
+                msg = json.dumps({
+                    "type": "market_data_batch",
+                    "data": batch,
+                    "timestamp": time.time()
+                })
+                await manager.broadcast(msg)
         except asyncio.CancelledError:
             break
         except Exception:
