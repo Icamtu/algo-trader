@@ -9,7 +9,7 @@ from typing import Optional
 from database.trade_logger import get_trade_logger
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1/reports", tags=["Reports"])
+router = APIRouter(tags=["Reports"])
 
 _JWT_SECRET = os.environ.get("JWT_SECRET", "")
 

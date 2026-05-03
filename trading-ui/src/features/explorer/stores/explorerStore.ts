@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { algoApi } from '@/features/openalgo/api/client';
+import { algoApi } from '@/features/aetherdesk/api/client';
 import { toast } from 'sonner';
 
 export type FileNode = {

@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 from core.context import app_context
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1/webhooks", tags=["Webhooks"])
+router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
 
 # --- Models ---
 # Inbound alerts typically come as raw JSON from TradingView

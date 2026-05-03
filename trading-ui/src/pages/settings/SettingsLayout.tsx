@@ -3,8 +3,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ChevronLeft, User, Sliders, BarChart3, Key, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { GlobalHeader } from '@/components/trading/GlobalHeader';
-import { MarketNavbar } from '@/components/trading/MarketNavbar';
 
 interface SettingsTab {
   id: string;
@@ -29,12 +27,9 @@ export function SettingsLayout({ children }: { children: React.ReactNode }) {
   const currentTab = TABS.find(tab => tab.path === location.pathname)?.id || 'profile';
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background relative">
+    <div className="h-full w-full flex flex-col overflow-hidden bg-background relative">
       <div className="noise-overlay" />
       <div className="scanline opacity-10" />
-
-      <GlobalHeader />
-      <MarketNavbar />
 
       <div className="flex-1 overflow-hidden relative z-10">
         <div className="h-full flex flex-col lg:flex-row gap-0">

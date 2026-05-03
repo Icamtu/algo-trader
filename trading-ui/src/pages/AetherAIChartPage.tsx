@@ -1,19 +1,14 @@
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   TrendingUp, Brain, Sparkles, Send, Loader2,
   BarChart2, Telescope, Cpu, LayoutGrid, Maximize2,
   Settings2, Activity, Zap
 } from "lucide-react";
-import {
-  AreaChart, Area, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, CartesianGrid
-} from "recharts";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { IndustrialValue } from "@/components/trading/IndustrialValue";
 import { useTerminalSettings } from "@/contexts/TerminalSettingsContext";
-import { LightweightChart } from "@/components/trading/charts/LightweightChart";
-import { TradingViewWidget } from "@/components/trading/charts/TradingViewWidget";
+import { ChartRenderer } from "@/components/trading/charts/ChartRenderer";
 import { useAether } from "@/contexts/AetherContext";
 import { cn } from "@/lib/utils";
 
@@ -47,14 +42,23 @@ export default function AetherAIChartPage() {
         throw new Error("No data");
       }
     } catch (e) {
-      // Stunning mock data for visual excellence
-      const mockData = Array.from({ length: 100 }).map((_, i) => ({
-        date: new Date(Date.now() - (100 - i) * 86400000).toISOString(),
-        close: 22000 + Math.sin(i / 10) * 500 + Math.random() * 200,
-        open: 22000 + Math.sin(i / 10) * 500,
-        high: 22000 + Math.sin(i / 10) * 500 + 300,
-        low: 22000 + Math.sin(i / 10) * 500 - 100,
-      }));
+      // Generate realistic mock OHLCV data for visual excellence
+      let basePrice = 22000;
+      const mockData = Array.from({ length: 100 }).map((_, i) => {
+        const open = basePrice + Math.sin(i / 10) * 500;
+        const close = open + (Math.random() - 0.45) * 120;
+        const high = Math.max(open, close) + Math.random() * 60 + 20;
+        const low = Math.min(open, close) - Math.random() * 60 - 20;
+        basePrice = close;
+        return {
+          date: new Date(Date.now() - (100 - i) * 86400000).toISOString(),
+          open: +open.toFixed(2),
+          high: +high.toFixed(2),
+          low: +low.toFixed(2),
+          close: +close.toFixed(2),
+          volume: Math.floor(Math.random() * 800000 + 200000),
+        };
+      });
       setCandles(mockData);
     } finally {
       setIsLoadingChart(false);
@@ -63,68 +67,6 @@ export default function AetherAIChartPage() {
 
   const lastPrice = candles[candles.length - 1]?.close || 0;
   const { settings, updateSettings } = useTerminalSettings();
-
-  const renderChart = () => {
-    if (isLoadingChart) {
-      return (
-        <div className="h-full flex flex-col items-center justify-center gap-4 bg-background/50">
-           <Loader2 className="w-6 h-6 text-primary animate-spin" />
-           <span className="text-[9px] font-mono font-black uppercase tracking-[0.4em] text-primary/40">Synchronizing_Neural_Stream...</span>
-        </div>
-      );
-    }
-
-    if (settings.chartEngine === "tradingview") {
-      return <TradingViewWidget symbol={displaySymbol} />;
-    }
-
-    if (settings.chartEngine === "lightweight") {
-      return <LightweightChart data={candles} />;
-    }
-
-    return (
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={candles} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-          <defs>
-            <linearGradient id="colorClose" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#00F5FF" stopOpacity={0.1}/>
-              <stop offset="95%" stopColor="#00F5FF" stopOpacity={0}/>
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" vertical={false} />
-          <XAxis dataKey="date" hide />
-          <YAxis
-            domain={["auto", "auto"]}
-            orientation="right"
-            tick={{ fill: "rgba(255,255,255,0.15)", fontSize: 9, fontFamily: "IBM Plex Mono" }}
-            axisLine={false}
-            tickLine={false}
-          />
-          <Tooltip
-            contentStyle={{
-              background: "rgba(0, 0, 0, 0.95)",
-              border: "1px solid rgba(0, 245, 255, 0.2)",
-              borderRadius: "0",
-              padding: "12px",
-              backdropFilter: "blur(10px)"
-            }}
-            itemStyle={{ color: "#00F5FF", fontSize: "10px", fontWeight: "black", fontFamily: "IBM Plex Mono", textTransform: "uppercase" }}
-            labelStyle={{ display: "none" }}
-          />
-          <Area
-            type="monotone"
-            dataKey="close"
-            stroke="#00F5FF"
-            strokeWidth={2}
-            fillOpacity={1}
-            fill="url(#colorClose)"
-            isAnimationActive={true}
-            animationDuration={1000}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-    );
-  };
 
   return (
     <div className="space-y-8 pb-12">
@@ -219,7 +161,7 @@ export default function AetherAIChartPage() {
             </div>
 
             <div className="flex-1 mt-24">
-               {renderChart()}
+               <ChartRenderer symbol={displaySymbol} data={candles} timeframe={timeframe} isLoading={isLoadingChart} />
             </div>
 
             {/* Neural Chat Interface */}

@@ -9,7 +9,7 @@ import { useAether } from '@/contexts/AetherContext';
 import { useAppModeStore } from '@/stores/appModeStore';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { CONFIG } from '@/lib/config';
+import { algoApi } from '@/features/aetherdesk/api/client';
 
 interface MarketRegimeData {
   market_regime: string;
@@ -36,12 +36,7 @@ export default function MarketRegimePage() {
   const fetchRegimeData = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${CONFIG.API_BASE_URL}/api/v1/market_regime`, {
-        headers: {
-          'apikey': import.meta.env.VITE_OPENALGO_API_KEY
-        }
-      });
-      const result = await response.json();
+      const result = await algoApi.getMarketRegime();
       if (result.status === "success") {
         setData(result.data);
       }

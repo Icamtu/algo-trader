@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useAether } from "@/contexts/AetherContext";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { X, Plus, GripVertical, Clock, GitBranch, ChevronRight, ChevronDown, Layers, Play, Pause, Trash2, Copy, Tag, History, CheckCircle2, Circle, ArrowUpDown, Search, MoreHorizontal, Sparkles } from "lucide-react";
 
 // --- Types ---

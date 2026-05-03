@@ -72,7 +72,13 @@ class MarketDataStream:
         self._base_price = settings.get('simulation', {}).get('base_price', 100.0)
         self._price_step = settings.get('simulation', {}).get('price_step', 1.5)
         self._last_prices: Dict[str, float] = {}
-        
+
+        # Capture the event loop that initialized this stream
+        try:
+            self.loop = asyncio.get_event_loop()
+        except RuntimeError:
+            self.loop = None
+
         # AetherBridge: Native Data Source (Phase 6)
         self.native_broker = None
         self._native_subscribed_symbols = set()
@@ -93,8 +99,16 @@ class MarketDataStream:
             timestamp=tick_data.timestamp.timestamp() * 1000,
             raw={"source": "aetherbridge", "volume": tick_data.volume}
         )
-        # Dispatch to engine and UI
-        asyncio.create_task(self._dispatch_tick(tick))
+        # Dispatch to engine and UI using thread-safe bridging
+        if self.loop and self.loop.is_running():
+            asyncio.run_coroutine_threadsafe(self._dispatch_tick(tick), self.loop)
+        else:
+            # Fallback for synchronous/startup ticks
+            try:
+                asyncio.create_task(self._dispatch_tick(tick))
+            except RuntimeError:
+                # No loop in current thread either, just log it
+                logger.debug(f"Tick received but no active event loop for dispatch: {tick.symbol}")
 
     def subscribe(self, symbols: List[str], callback: Callable[[Tick], Awaitable[None]]):
         """
@@ -108,7 +122,7 @@ class MarketDataStream:
             if callback not in self.subscriptions[symbol]:
                 self.subscriptions[symbol].append(callback)
                 logger.info(f"Subscribed {callback.__name__} to {symbol}")
-        
+
         # If using native broker, subscribe there too
         if self.native_broker:
             asyncio.create_task(self.native_broker.subscribe_ticks(symbols))
@@ -123,14 +137,14 @@ class MarketDataStream:
         # Generic set of indices to detect correct exchange
         # Common indices that require NSE_INDEX exchange
         indices = {"NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "NIFTY 50", "NIFTY BANK", "BANK NIFTY", "SENSEX"}
-        
+
         # Normalize and split symbols
         # Phase 16: Translate UI symbols to broker-specific symbols before sending upstream
         translated_symbols = [UI_TO_BROKER_MAP.get(s, s) for s in symbols]
-        
+
         idx_list = [s for s in translated_symbols if s.upper() in indices]
         eq_list = [s for s in translated_symbols if s.upper() not in indices]
-        
+
         try:
             if eq_list:
                 # OpenAlgo expects symbols as a list of objects in newer versions
@@ -142,7 +156,7 @@ class MarketDataStream:
                     "symbols": symbol_payload
                 }))
                 logger.info(f"Subscribed to Equity: {eq_list}")
-                
+
             if idx_list:
                 symbol_payload = [{"symbol": s, "exchange": "NSE_INDEX"} for s in idx_list]
                 await websocket.send(json.dumps({
@@ -167,37 +181,19 @@ class MarketDataStream:
     async def _run(self):
         """
         The main connection and message handling loop.
-        Includes reconnection logic with a fixed delay.
+        In modern AetherDesk, we only support Native AetherBridge or local Simulation.
+        Legacy OpenAlgo WebSocket is decommissioned.
         """
         if self.native_broker:
             logger.info("MarketDataStream: Running in Native AetherBridge mode.")
-            # We assume native_broker manages its own connection task (e.g. Shoonya SDK)
-            # but we ensure existing subscriptions are active
             symbols = list(self.subscriptions.keys())
             if symbols:
                 await self.native_broker.subscribe_ticks(symbols)
             return
 
-        if self._use_simulation_mode():
-            logger.info("Running market data stream in simulation mode.")
-            await self._run_simulation()
-            return
-
-        logger.info(f"Connecting to Market Data Stream: {self.ws_url}")
-        while self._running:
-            try:
-                async with websockets.connect(self.ws_url) as websocket:
-                    self._active_ws = websocket
-                    logger.info("Successfully connected to WebSocket")
-                    await self._message_handler(websocket)
-            except (websockets.exceptions.ConnectionClosed, ConnectionRefusedError) as e:
-                logger.warning(f"WebSocket connection lost: {e}. Reconnecting in 5s...")
-                self._active_ws = None
-                await asyncio.sleep(5)
-            except Exception as e:
-                logger.error(f"An unexpected WebSocket error occurred: {e}", exc_info=True)
-                self._active_ws = None
-                await asyncio.sleep(5) # Avoid rapid-fire reconnection on persistent errors
+        # Default to simulation if no native broker is linked
+        logger.info("MarketDataStream: Running in simulation mode (Native source missing).")
+        await self._run_simulation()
 
     def _use_simulation_mode(self) -> bool:
         return self._simulation_enabled or not self.ws_url or websockets is None
@@ -238,7 +234,7 @@ class MarketDataStream:
             }
             await websocket.send(json.dumps(auth_payload))
             logger.info("Sent auth message to WebSocket.")
-            
+
             # 2. Immediately subscribe to all current symbols (Don't wait for auth response)
             # Some versions of OpenAlgo don't send auth confirmation
             symbols = list(self.subscriptions.keys())
@@ -249,31 +245,31 @@ class MarketDataStream:
             try:
                 message = await websocket.recv()
                 data = json.loads(message)
-                
+
                 # Debug logging for ALL incoming market data messages
                 logger.debug(f"Market Data WS RX: {data}")
-                
+
                  # In case it DOES send auth response later, just log it
                 if data.get('type') == 'auth' or (data.get('status') == 'success' and 'authenticated' in str(data.get('message', '')).lower()):
                     logger.info(f"Market Data Auth Response: {data}")
                     continue
-                
+
                 # Support both standard OpenAlgo format and flat tick format
                 symbol = data.get('symbol')
                 ltp = data.get('ltp')
-                
+
                 if not symbol or ltp is None:
                     # Try nested data
                     inner = data.get('data', {})
                     symbol = data.get('symbol') or inner.get('symbol')
                     ltp = inner.get('ltp')
-                
+
                 if symbol and ltp is not None:
                     # Normalize timestamp to milliseconds
                     ts = float(data.get('timestamp', time.time()))
                     if ts < 1e11: # Seconds
                         ts *= 1000
-                    
+
                     tick = Tick(
                         symbol=symbol,
                         ltp=float(ltp),
@@ -323,7 +319,7 @@ class MarketDataStream:
         async def _tracked_execute():
             async with await latency_tracker.measure_async("TickDispatch", metadata={"symbol": tick.symbol}):
                 await _execute_parallel(tick, callbacks)
-        
+
         asyncio.create_task(_tracked_execute())
 
 
@@ -336,7 +332,7 @@ class MarketDataStream:
             # Initialize TimescaleDB logger
             from data.timescale_logger import ts_logger
             asyncio.create_task(ts_logger.connect())
-            
+
             self._connection_task = asyncio.create_task(self._run())
             logger.info("Market data stream started.")
 
@@ -346,7 +342,7 @@ class MarketDataStream:
         """
         if self._running:
             self._running = False
-            
+
             # Stop TimescaleDB logger
             from data.timescale_logger import ts_logger
             await ts_logger.disconnect()
@@ -377,7 +373,7 @@ class DuckDBIngestor:
     async def handle_tick(self, tick: Tick):
         """Callback for MarketDataStream. Minimal overhead on hot path."""
         symbol = tick.symbol
-        
+
         # Prepare data row
         row = {
             "timestamp": int(tick.timestamp),
@@ -388,13 +384,13 @@ class DuckDBIngestor:
             "volume": tick.raw.get("v", tick.raw.get("volume", 0)),
             "oi": tick.raw.get("oi", 0)
         }
-        
+
         self.buffers[symbol].append(row)
-        
+
         # Check if we need to flush this specific symbol
         now = time.time()
         buffer_len = len(self.buffers[symbol])
-        
+
         if buffer_len >= self.batch_size or (now - self.last_flush_times[symbol]) >= self.flush_interval:
             # We use a non-blocking task for the actual DB write to keep the tick loop fast
             asyncio.create_task(self.flush(symbol))
@@ -417,12 +413,12 @@ class DuckDBIngestor:
         try:
             import pandas as pd
             from data.historify_db import upsert_market_data, get_duckdb_conn
-            
+
             async with await latency_tracker.measure_async("DuckDBIngest", metadata={"symbol": symbol, "batch": len(data_to_save)}):
                 df = pd.DataFrame(data_to_save)
                 # Phase 9 Optimization: Run synchronous DuckDB I/O in a separate thread to avoid blocking the event loop
                 count = await asyncio.to_thread(upsert_market_data, df, symbol, "NSE", "TICK")
-            
+
             if count:
                 logger.debug(f"Persisted {count} ticks for {symbol} to DuckDB")
 
@@ -446,12 +442,12 @@ if __name__ == "__main__":
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
-    
+
     async def strategy_one_callback(tick: Tick):
         """A simple callback simulating a trading strategy."""
         print(f"[Strategy 1] Received tick for {tick.symbol}: LTP=${tick.ltp:.2f}")
         # In a real scenario, you might do more complex async work here
-        await asyncio.sleep(0.1) 
+        await asyncio.sleep(0.1)
 
     async def notification_service_callback(tick: Tick):
         """A simple callback simulating a notification service."""
@@ -459,21 +455,21 @@ if __name__ == "__main__":
 
     async def main():
         stream = MarketDataStream()
-        
+
         # Subscribe strategies to symbols
         stream.subscribe(['NIFTYBEES', 'RELIANCE'], strategy_one_callback)
         stream.subscribe(['RELIANCE'], notification_service_callback)
-        
+
         stream.start()
-        
+
         # Let it run for 20 seconds
         print("Stream running for 20 seconds...")
         await asyncio.sleep(20)
-        
+
         # Unsubscribe strategy_one from RELIANCE
         print("\nUnsubscribing Strategy 1 from RELIANCE.\n")
         stream.unsubscribe(['RELIANCE'], strategy_one_callback)
-        
+
         await asyncio.sleep(10)
 
         # Stop the stream

@@ -324,6 +324,38 @@ class StrategyRunner:
                 })
             asyncio.create_task(self.telemetry_callback("matrix_update", {"strategies": matrix}))
 
+    async def halt_strategy(self, strategy_key: str) -> bool:
+        """Institutional Halt: Stops execution and blocks new orders via RiskManager."""
+        try:
+            # 1. Stop tick processing
+            await self.stop_strategies([strategy_key])
+
+            # 2. Halt in RiskManager (prevents any manual/stray order validation)
+            if hasattr(self.order_manager, 'risk_manager'):
+                self.order_manager.risk_manager.halt_strategy(strategy_key)
+
+            logger.warning(f"INSTITUTIONAL HALT >> {strategy_key} is now fully halted.")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to halt strategy {strategy_key}: {e}")
+            return False
+
+    async def unhalt_strategy(self, strategy_key: str) -> bool:
+        """Institutional Unhalt: Resumes risk status and restarts tick processing."""
+        try:
+            # 1. Resume in RiskManager
+            if hasattr(self.order_manager, 'risk_manager'):
+                self.order_manager.risk_manager.resume_strategy(strategy_key)
+
+            # 2. Restart execution
+            await self.start_strategies([strategy_key])
+
+            logger.info(f"INSTITUTIONAL RESUME >> {strategy_key} has been unhalted.")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to unhalt strategy {strategy_key}: {e}")
+            return False
+
     def get_telemetry(self) -> Dict[str, Any]:
         """Collect real-time telemetry from all active strategies."""
         regime_data = self.current_regime_data or {
@@ -502,13 +534,7 @@ class StrategyRunner:
                     sync_interval = f"{interval}m" if "m" not in str(interval) else interval
 
                     try:
-                        resp = self.order_manager.client.get_history(symbol, "NSE", sync_interval, start_date, end_date)
-                        if resp.get("status") == "success" and resp.get("data"):
-                            df = pd.DataFrame(resp["data"])
-                            upsert_market_data(df, symbol, "NSE", interval)
-                            candles = df.to_dict("records")
-                        else:
-                            logger.warning(f"Regime Agent: Failed to fetch history for {symbol} from OpenAlgo: {resp.get('message')}")
+                        logger.warning(f"Regime Agent: OpenAlgo decommissioned. Skipping sync for {symbol}.")
                     except Exception as sync_err:
                         logger.error(f"Regime Agent Sync Error: {sync_err}")
 
@@ -619,14 +645,7 @@ class StrategyRunner:
             if symbol.upper() in NSE_INDEX_SYMBOLS:
                 fetch_exchange = "NSE_INDEX"
 
-            logger.info(f"Sector Sync: Fetching {symbol} ({fetch_exchange}) {sync_interval} from OpenAlgo (Async)...")
-            # Using non-blocking async history fetch
-            resp = await self.order_manager.client.get_history_async(symbol, fetch_exchange, sync_interval, start_date, end_date)
-
-            if resp.get("status") == "success" and resp.get("data"):
-                df = pd.DataFrame(resp["data"])
-                upsert_market_data(df, symbol, fetch_exchange, interval)
-                return df.to_dict("records")
+            logger.warning(f"Sector Sync: OpenAlgo decommissioned. Skipping sync for {symbol}.")
 
         except Exception as e:
             logger.warning(f"Failed to fetch candles for {symbol}: {e}")

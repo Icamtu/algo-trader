@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
-import { usePositions, useFunds } from "@/features/openalgo/hooks/useTrading";
+import { usePositions, useFunds } from "@/features/aetherdesk/hooks/useTrading";
 import { motion, AnimatePresence } from "framer-motion";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import type { PnlResponse, Position } from "@/types/api";
 import {
   Briefcase, TrendingUp, PieChart, AlertTriangle,
@@ -37,23 +37,29 @@ export default function Portfolio() {
   }, []);
 
   const metrics = useMemo(() => {
-    const totalValue = positionsData?.total_value || 0;
-    const totalEstCharges = positionsData?.positions.reduce((acc: number, p: Position) => acc + (p.est_charges || 0), 0) || 0;
+    const rawPos = positionsData?.data?.positions || positionsData?.positions;
+    const positions = Array.isArray(rawPos) ? rawPos : [];
+    const totalValue = positionsData?.data?.total_value || positionsData?.total_value || 0;
+    const totalEstCharges = positions.reduce((acc: number, p: Position) => acc + (p.est_charges || 0), 0);
+
+    const pnl = pnlData?.data || pnlData;
     return {
       totalValue,
       totalEstCharges,
       netValue: totalValue - totalEstCharges,
-      dayPnL: pnlData?.total_pnl || 0,
-      unrealizedPnL: pnlData?.unrealized_pnl || 0,
-      realizedPnL: pnlData?.realized_pnl || 0,
-      pnlPct: pnlData?.pnl_percentage || 0,
+      dayPnL: pnl?.total_pnl || 0,
+      unrealizedPnL: pnl?.unrealized_pnl || 0,
+      realizedPnL: pnl?.realized_pnl || 0,
+      pnlPct: pnl?.pnl_percentage || 0,
     };
   }, [positionsData, pnlData]);
 
   const allocation = useMemo(() => {
-    if (!positionsData?.positions) return [];
+    const rawPos = positionsData?.data?.positions || positionsData?.positions;
+    if (!Array.isArray(rawPos)) return [];
+
     const grouped: Record<string, { value: number; symbols: string[] }> = {};
-    positionsData.positions.forEach((p: Position) => {
+    rawPos.forEach((p: Position) => {
       const strat = p.metadata?.strategy || "MANUAL";
       if (!grouped[strat]) grouped[strat] = { value: 0, symbols: [] };
       grouped[strat].value += p.current_value;
@@ -162,7 +168,7 @@ export default function Portfolio() {
                        />
                        <MetricBlock
                          label="AVAILABLE_MARGIN"
-                         value={fundsData?.cash || 0}
+                         value={(fundsData?.data?.cash ?? fundsData?.cash) || 0}
                          prefix="₹"
                          color="text-secondary"
                          description="REALTIME_LIQUIDITY_BUFFER"
@@ -204,7 +210,7 @@ export default function Portfolio() {
 
                       <div className="flex-1 w-full relative group">
                          <div className="absolute inset-x-0 top-1/2 h-[1px] bg-white/[0.03] z-0" />
-                         <ResponsiveContainer width="100%" height="100%">
+                         <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                             <BarChart data={[{ m: "H1", v: 100 }, { m: "H2", v: 110 }, { m: "H3", v: 105 }, { m: "H4", v: 130 }, { m: "H5", v: 125 }, {m: "H6", v: 140}, {m: "H7", v: 135}]}>
                                <XAxis dataKey="m" hide />
                                <YAxis hide domain={['auto', 'auto']} />
@@ -310,7 +316,7 @@ export default function Portfolio() {
                        </div>
 
                        <div className="h-72 relative mb-16 flex items-center justify-center">
-                          <ResponsiveContainer width="100%" height="100%">
+                          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                              <RePieChart>
                                 <Pie
                                   data={allocation}
@@ -390,7 +396,7 @@ export default function Portfolio() {
 
                              <div className="grid grid-cols-1 gap-4 relative z-10">
                                 {group.symbols.map(sym => {
-                                   const pos = positionsData?.positions.find(p => p.symbol === sym);
+                                   const pos = Array.isArray(positionsData?.positions) ? positionsData.positions.find(p => p.symbol === sym) : null;
                                    return (
                                      <div
                                        key={sym}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { OptionChainResponse } from '@/integrations/openalgo/types/option-chain'
+import type { OptionChainResponse } from '@/integrations/aetherdesk/types/option-chain'
 import { usePageVisibility } from './usePageVisibility'
-import { webClient } from '@/integrations/openalgo/services/client' // Fallback to client if direct adapter call isn't preferred
+import { webClient } from '@/integrations/aetherdesk/services/client' // Fallback to client if direct adapter call isn't preferred
 
 interface UseOptionChainPollingOptions {
   enabled: boolean
@@ -59,7 +59,7 @@ export function useOptionChainPolling(
       abortControllerRef.current = controller
 
       // Using webClient for consistent authentication and base URL
-      const response = await webClient.post<OptionChainResponse>('/api/v1/optionchain', {
+      const response = await webClient.post<OptionChainResponse>('api/v1/optionchain', {
         apikey: apiKey,
         underlying,
         exchange,
@@ -87,7 +87,7 @@ export function useOptionChainPolling(
       }
     } catch (error: any) {
       if (error.name === 'CanceledError') return
-      
+
       setState((prev) => ({
         ...prev,
         isLoading: false,

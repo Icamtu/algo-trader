@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Search, Settings2, Globe, RefreshCw, Radio
 } from "lucide-react";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { BrokerLogo } from "@/components/trading/BrokerLogo";
 import { IndustrialValue } from "@/components/trading/IndustrialValue";
 import { useToast } from "@/hooks/use-toast";
@@ -50,11 +50,16 @@ export default function BrokerRegistry() {
   useEffect(() => {
     const fetchBrokers = async () => {
       try {
-        const data = await algoApi.client("/api/v1/brokers");
-        // Enrich data with statuses from system health if available
-        const health = await algoApi.getSystemStatus();
+        const response = await algoApi.client("/api/v1/brokers");
+        const brokersList = Array.isArray(response?.data?.brokers)
+          ? response.data.brokers
+          : (Array.isArray(response?.brokers) ? response.brokers : (Array.isArray(response) ? response : []));
 
-        setBrokers(data.brokers.map((b: any) => ({
+        // Enrich data with statuses from system health if available
+        const healthRes = await algoApi.getSystemStatus();
+        const health = healthRes?.data || healthRes;
+
+        setBrokers(brokersList.map((b: any) => ({
           ...b,
           status: b.active ? "CONNECTED" : "DISCONNECTED",
           latency: b.active ? (health?.broker?.latency || 0) : 0
@@ -179,7 +184,7 @@ export default function BrokerRegistry() {
                       <SpecItem label="INTERFACE_VER" value={selectedBroker.version} />
                       <SpecItem label="HANDSHAKE" value="ENCRYPTED_AES" />
                       <SpecItem label="POOLING" value="WEBSOCKET_ENABLED" />
-                      <SpecItem label="BRIDGE" value="OPENALGO_REST" />
+                      <SpecItem label="BRIDGE" value="AETHERDESK_REST" />
                    </div>
                 </div>
 

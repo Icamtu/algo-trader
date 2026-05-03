@@ -1,18 +1,13 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTerminalSettings } from "@/contexts/TerminalSettingsContext";
-import { LightweightChart } from "@/components/trading/charts/LightweightChart";
-import { TradingViewWidget } from "@/components/trading/charts/TradingViewWidget";
-import {
-  AreaChart, Area, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, CartesianGrid
-} from "recharts";
+import { ChartRenderer } from "@/components/trading/charts/ChartRenderer";
 import {
   Activity, RefreshCw, Cpu, Layers, AlertCircle, Radio,
   TrendingUp, TrendingDown, Crosshair, BarChart3, Loader2,
   Maximize2, Settings2, LineChart
 } from "lucide-react";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { IndustrialValue } from "@/components/trading/IndustrialValue";
 import { useAether } from "@/contexts/AetherContext";
@@ -75,50 +70,43 @@ export default function ExpertTerminal() {
   const fetchChart = async () => {
     setIsLoadingChart(true);
     try {
-      const data = await algoApi.getHistory({
+      const response = await algoApi.getHistory({
         symbol: displaySymbol,
         exchange: "NSE",
         interval: "1"
       });
-      setCandles(data || []);
+      const candlesData = response?.data || (Array.isArray(response) ? response : []);
+      setCandles(candlesData);
     } catch (e) {
-      const mockData = Array.from({ length: 50 }).map((_, i) => ({
-        date: new Date(Date.now() - (50 - i) * 3600000).toISOString(),
-        close: 22000 + Math.sin(i / 5) * 200 + Math.random() * 50,
-      }));
+      // Generate realistic mock OHLCV data for fallback
+      let basePrice = 22000;
+      const mockData = Array.from({ length: 50 }).map((_, i) => {
+        const open = basePrice + Math.sin(i / 5) * 200;
+        const close = open + (Math.random() - 0.45) * 80;
+        const high = Math.max(open, close) + Math.random() * 40;
+        const low = Math.min(open, close) - Math.random() * 40;
+        basePrice = close;
+        return {
+          date: new Date(Date.now() - (50 - i) * 3600000).toISOString(),
+          open: +open.toFixed(2),
+          high: +high.toFixed(2),
+          low: +low.toFixed(2),
+          close: +close.toFixed(2),
+          volume: Math.floor(Math.random() * 500000 + 100000),
+        };
+      });
       setCandles(mockData);
     } finally {
       setIsLoadingChart(false);
     }
   };
 
+  const chartHeight = settings.chartEngine === "tradingview" ? "h-[480px]" : "h-80";
+
   const renderChart = () => {
-    if (isLoadingChart) {
-      return (
-        <div className="h-64 flex flex-col items-center justify-center gap-4 bg-background/20">
-           <Loader2 className="w-6 h-6 text-primary animate-spin" />
-        </div>
-      );
-    }
-
-    if (settings.chartEngine === "tradingview") {
-      return <div className="h-80"><TradingViewWidget symbol={displaySymbol} /></div>;
-    }
-
-    if (settings.chartEngine === "lightweight") {
-      return <div className="h-80"><LightweightChart data={candles} /></div>;
-    }
-
     return (
-      <div className="h-64">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={candles}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" vertical={false} />
-            <XAxis dataKey="date" hide />
-            <YAxis domain={["auto", "auto"]} orientation="right" tick={{ fill: "rgba(255,255,255,0.15)", fontSize: 8 }} axisLine={false} tickLine={false} />
-            <Area type="monotone" dataKey="close" stroke="#00F5FF" fill="rgba(0, 245, 255, 0.05)" />
-          </AreaChart>
-        </ResponsiveContainer>
+      <div className={chartHeight}>
+        <ChartRenderer symbol={displaySymbol} data={candles} isLoading={isLoadingChart} />
       </div>
     );
   };
@@ -143,9 +131,10 @@ export default function ExpertTerminal() {
     setIsLoading(true);
     try {
       // If selectedSymbol is a stock, we might need to adjust this call if API requires index
-      const data = await algoApi.getOptionChain(displaySymbol, "2024-03-28");
-      setOptionChain(data.matrix || []);
-      setUnderlyingPrice(data.underlying_price || 0);
+      const response = await algoApi.getOptionChain(displaySymbol, "2024-03-28");
+      const chainData = response?.data || response;
+      setOptionChain(Array.isArray(chainData?.matrix) ? chainData.matrix : []);
+      setUnderlyingPrice(chainData?.underlying_price || 0);
     } catch (e) {
       // Mock some data if it fails for the demo/stunning factor
       setOptionChain(Array.from({ length: 15 }).map((_, i) => ({

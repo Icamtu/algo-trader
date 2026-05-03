@@ -14,6 +14,8 @@ ingester:
   chunk_idle_period: 5m
   chunk_retain_period: 30s
   max_transfer_retries: 0
+  wal:
+    dir: /loki/wal
 
 schema_config:
   configs:
@@ -27,9 +29,9 @@ schema_config:
 
 storage_config:
   boltdb:
-    directory: /tmp/loki/index
+    directory: /loki/index
   filesystem:
-    directory: /tmp/loki/chunks
+    directory: /loki/chunks
 
 limits_config:
   enforce_metric_name: false

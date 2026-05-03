@@ -3,7 +3,7 @@ import { Search, Plus, Filter, TrendingUp, BarChart3, Brain, Layers, Activity, Z
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAppModeStore } from "@/stores/appModeStore";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { IndustrialValue } from "./IndustrialValue";
 import { useAether } from "@/contexts/AetherContext";
 import { useToast } from "@/hooks/use-toast";
@@ -108,20 +108,12 @@ export function StrategySidebar() {
     if (!newStratData.name) return;
     try {
       setIsCreating(true);
-      const res = await fetch(`${CONFIG.API_BASE_URL}/api/v1/strategies`, {
-        method: "POST",
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': CONFIG.API_KEY
-        },
-        body: JSON.stringify(newStratData)
+      await algoApi.createStrategy(newStratData);
+
+      toast({
+        title: "STRATEGY_DEployed",
+        description: `Initialized ${newStratData.name} from kernel.`,
       });
-      const data = await res.json();
-      if (res.ok) {
-        toast({
-          title: "STRATEGY_DEployed",
-          description: `Initialized ${newStratData.name} from kernel.`,
-        });
         setNewStrategyOpen(false);
         setNewStratData({ name: "", template: "aether_scalper" });
         // Refresh strategies
@@ -134,9 +126,6 @@ export function StrategySidebar() {
           status: s.is_active ? "live" : "backtest",
           pnl: s.is_active ? `${(Math.random() * 5).toFixed(1)}` : "-"
         })));
-      } else {
-        throw new Error(data.error);
-      }
     } catch (e: any) {
       toast({
         variant: "destructive",
@@ -322,22 +311,22 @@ export function StrategySidebar() {
         )}
       </div>
 
-      {/* OpenAlgo Modules Grouping */}
+      {/* AetherDesk Modules Grouping */}
       <div className="p-3 border-y border-border/10 aether-panel m-2 rounded-sm shadow-xl shrink-0 overflow-hidden">
         <h2 className="text-[10px] font-mono font-black uppercase tracking-[0.3em] mb-3 text-teal">Kernel_Modules</h2>
         <div className="space-y-1 max-h-[200px] overflow-y-auto custom-scrollbar pr-1">
           {[
-            { to: "/openalgo/orders", icon: ClipboardList, label: "Orders" },
-            { to: "/openalgo/trades", icon: Zap, label: "Trades" },
-            { to: "/openalgo/positions", icon: LayoutGrid, label: "Positions" },
-            { to: "/openalgo/holdings", icon: ShieldCheck, label: "Holdings" },
-            { to: "/openalgo/logs", icon: History, label: "Logs" },
-            { to: "/openalgo/connectivity", icon: Key, label: "Connectivity" },
-            { to: "/openalgo/broker", icon: Network, label: "Broker Bridge" },
-            { to: "/openalgo/master-contract", icon: Database, label: "Master Contract" },
-            { to: "/openalgo/sandbox", icon: Box, label: "Sandbox" },
-            { to: "/openalgo/analyzer", icon: Activity, label: "Analyzer" },
-            { to: "/openalgo/action-center", icon: PlayCircle, label: "Action Center" },
+            { to: "/aetherdesk/orders", icon: ClipboardList, label: "Orders" },
+            { to: "/aetherdesk/trades", icon: Zap, label: "Trades" },
+            { to: "/aetherdesk/positions", icon: LayoutGrid, label: "Positions" },
+            { to: "/aetherdesk/holdings", icon: ShieldCheck, label: "Holdings" },
+            { to: "/aetherdesk/logs", icon: History, label: "Logs" },
+            { to: "/aetherdesk/connectivity", icon: Key, label: "Connectivity" },
+            { to: "/aetherdesk/broker", icon: Network, label: "Broker Bridge" },
+            { to: "/aetherdesk/master-contract", icon: Database, label: "Master Contract" },
+            { to: "/aetherdesk/sandbox", icon: Box, label: "Sandbox" },
+            { to: "/aetherdesk/analyzer", icon: Activity, label: "Analyzer" },
+            { to: "/aetherdesk/action-center", icon: PlayCircle, label: "Action Center" },
           ].map((item) => (
             <Link
               key={item.to}

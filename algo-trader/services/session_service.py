@@ -63,7 +63,7 @@ class SessionService:
                         # Fall through to legacy or fail
 
             # 2. Check Legacy Client
-            if self.order_manager.client:
+            if hasattr(self.order_manager, 'client') and self.order_manager.client:
                 result = self.order_manager.client.get_funds()
 
                 if isinstance(result, dict):
@@ -120,7 +120,7 @@ class SessionService:
                 return False
 
             # 2. Finalize and Inject (Handshake + DB Update)
-            target_name = self.order_manager.client.openalgo_user_id if self.order_manager and self.order_manager.client else "kamaleswar"
+            target_name = "kamaleswar"
             result = await asyncio.to_thread(finalize_shoonya_session, auth_code, target_name=target_name)
 
             if result.get("status") == "success":
@@ -129,7 +129,7 @@ class SessionService:
                 self.consecutive_failures = 0
 
                 # 3. Refresh Client Credentials
-                if self.order_manager and self.order_manager.client:
+                if self.order_manager and hasattr(self.order_manager, 'client') and self.order_manager.client:
                     logger.info("Notifying OpenAlgoClient to reload credentials...")
                     self.order_manager.client._refresh_api_key_from_db()
 

@@ -47,7 +47,7 @@ export function ModeIndicator() {
     },
   };
 
-  const current = modeConfig[tradingMode || "sandbox"];
+  const current = modeConfig[tradingMode as keyof typeof modeConfig] || modeConfig.sandbox;
 
   const handleModeSwitch = (newMode: "sandbox" | "live") => {
     if (newMode === tradingMode) {
@@ -65,14 +65,14 @@ export function ModeIndicator() {
         <button
           className={cn(
             "flex items-center gap-2 px-3 py-1.5 border rounded-sm font-mono text-[9px] font-black uppercase tracking-widest transition-all",
-            current.bg,
-            current.border,
-            current.color,
+            current?.bg,
+            current?.border,
+            current?.color,
             "hover:opacity-80 cursor-pointer"
           )}
         >
-          <span>{current.icon}</span>
-          <span>{current.label}</span>
+          <span>{current?.icon}</span>
+          <span>{current?.label}</span>
           <Settings2 className="w-3 h-3 opacity-60" />
         </button>
       </DialogTrigger>

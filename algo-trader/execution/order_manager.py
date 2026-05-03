@@ -30,6 +30,7 @@ from services.charges_service import get_charges_service
 from utils.latency_tracker import latency_tracker
 from services.dlq_service import dlq_service
 from services.sor_service import SmartOrderRouter
+from brokers.models import OrderStatus
 
 logger = logging.getLogger(__name__)
 
@@ -39,21 +40,14 @@ class OrderManager:
     Handles order execution, risk gating, position tracking, and trade logging.
     """
 
-    @property
-    def openalgo_client(self):
-        """Compatibility property for API layer."""
-        return self.client
-
     def __init__(
         self,
-        client: Any,
         mode: str = "live",
         risk_manager: Optional[RiskManager] = None,
         position_manager: Optional[PositionManager] = None,
         telemetry_callback: Optional[Any] = None,
         action_manager: Optional[Any] = None,
     ):
-        self.client = client
         self.mode = mode.lower()
         self.trade_logger = get_trade_logger()
         self.risk_manager = risk_manager or RiskManager()
@@ -173,6 +167,7 @@ class OrderManager:
                     current_position=current_pos,
                     strategy_id=strategy_name,
                     product=product,
+                    mode=effective_mode,
                 )
                 if not risk_result.allowed:
                     logger.warning(
@@ -293,19 +288,8 @@ class OrderManager:
                                 raise ne
 
                         if not response:
-                            # LEGACY FALLBACK (Only if native broker is not configured or failed)
-                            logger.warning(f"Native execution did not provide response. Falling back to legacy OpenAlgo for {symbol}")
-                            response = await asyncio.to_thread(
-                                self.client.place_order,
-                                symbol=symbol,
-                                action=action,
-                                quantity=quantity,
-                                product=product,
-                                order_type=order_type,
-                                price=price,
-                                exchange=exchange,
-                                strategy=strategy_name,
-                            )
+                            logger.error(f"AetherBridge native execution failed to provide a response for {symbol}")
+                            raise Exception(f"Native execution failed for {symbol}")
 
                         if response:
                             broker_span.set_attribute("broker_status", response.get("status", "unknown"))
@@ -351,11 +335,21 @@ class OrderManager:
                 logger.info("[%s] << Response: %s", strategy_name, response)
 
                 # Determine execution outcome
-                resp_status = (response or {}).get("status", "filled") if response else "rejected"
-                execution_price = price
-                if response and isinstance(response, dict):
-                    execution_price = float(response.get("price", price) or price)
-                order_id = (response or {}).get("order_id") if response else None
+                if response and not isinstance(response, dict):
+                    # Handle Pydantic model (AetherBridge Native)
+                    resp_status = getattr(response, 'status', OrderStatus.COMPLETE)
+                    if hasattr(resp_status, 'value'):
+                        resp_status = resp_status.value
+                    resp_status = str(resp_status).lower()
+                    execution_price = float(getattr(response, 'price', price) or price)
+                    order_id = getattr(response, 'order_id', None)
+                else:
+                    # Handle dictionary (Legacy OpenAlgo)
+                    resp_status = (response or {}).get("status", "filled") if response else "rejected"
+                    execution_price = price
+                    if response and isinstance(response, dict):
+                        execution_price = float(response.get("price", price) or price)
+                    order_id = (response or {}).get("order_id") if response else None
 
                 is_filled = resp_status not in {"error", "rejected", "blocked"}
 
@@ -641,7 +635,7 @@ class OrderManager:
                 logger.error(f"Native get_positions failed: {e}")
                 if not self.shadow_mode: return []
 
-        return await asyncio.to_thread(self.client.get_positions)
+        return []
 
     async def get_open_positions_dict(self) -> Dict[str, int]:
         """
@@ -671,7 +665,7 @@ class OrderManager:
         return pos_dict
 
     async def get_holdings(self):
-        return await asyncio.to_thread(self.client.get_holdings)
+        return []
 
     async def get_orders(self):
         """Fetches order book from the broker."""
@@ -683,10 +677,10 @@ class OrderManager:
                 logger.error(f"Native get_orders failed: {e}")
                 if not self.shadow_mode: return []
 
-        return await asyncio.to_thread(self.client.get_orders)
+        return []
 
     async def get_trades(self):
-        return await asyncio.to_thread(self.client.get_trades)
+        return []
 
     async def get_funds(self):
         if self.native_broker:
@@ -697,7 +691,7 @@ class OrderManager:
                 logger.error(f"Native get_funds failed: {e}")
                 if not self.shadow_mode: return {"status": "error", "message": str(e)}
 
-        return await asyncio.to_thread(self.client.get_funds)
+        return {"status": "error", "message": "Funds retrieval not supported or broker unavailable"}
 
     async def get_history(
         self,
@@ -725,27 +719,45 @@ class OrderManager:
         n_start = _normalize_date(start_date)
         n_end = _normalize_date(end_date)
 
-        return await self.client.get_history_async(
-            symbol=symbol,
-            exchange=exchange,
-            interval=interval,
-            start_date=n_start,
-            end_date=n_end,
-        )
+        return {"status": "error", "message": "Legacy history fetching decommissioned"}
 
     async def toggle_analyzer(self, state: bool):
-        """Toggle the OpenAlgo analyzer mode."""
-        return await asyncio.to_thread(self.client.toggle_analyzer, state)
+        return {"status": "success", "message": "Analyzer decommissioned"}
 
     async def get_analyzer_status(self):
-        """Get the current status of the OpenAlgo analyzer."""
-        return await asyncio.to_thread(self.client.get_analyzer_status)
+        return {"status": "success", "analyzer_mode": False}
 
     async def get_quote(self, symbol: str, exchange: str = "NSE"):
-        return await asyncio.to_thread(self.client.get_quote, symbol, exchange)
+        """
+        Institutional Gateway for fetching a single real-time quote.
+        """
+        active_broker = self.native_broker if self.mode == "live" else self.paper_broker
+        if not active_broker:
+             return {"status": "error", "message": "No active broker for quote"}
+
+        try:
+            quote = await active_broker.get_quote(symbol, exchange)
+            return {"status": "success", "data": quote}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
 
     async def get_multi_quotes(self, symbols: list):
-        return await asyncio.to_thread(self.client.get_multi_quotes, symbols)
+        """
+        Institutional Gateway for fetching real-time quotes in bulk.
+        Delegates to the active broker based on current trading mode.
+        """
+        active_broker = self.native_broker if self.mode == "live" else self.paper_broker
+
+        if not active_broker:
+            return {"status": "error", "message": "No active broker for quotes"}
+
+        try:
+            # Delegate to the broker's native (or default concurrent) get_multi_quotes
+            results = await active_broker.get_multi_quotes(symbols)
+            return {"status": "success", "data": results}
+        except Exception as e:
+            logger.error(f"Bulk quote fetch failed: {e}")
+            return {"status": "error", "message": str(e)}
 
     # ------------------------------------------------------------------
     # Synchronization & Reconciliation

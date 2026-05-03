@@ -26,9 +26,9 @@ logger = logging.getLogger(__name__)
 # --- Rate Limit Configuration ---
 # Format: (max_requests, window_seconds)
 RATE_TIERS = {
-    "auth":    (10,  60),   # 10 requests per minute for login/auth
-    "trade":   (30,  60),   # 30 requests per minute for order execution
-    "general": (120, 60),   # 120 requests per minute for everything else
+    "auth":    (20,  60),   # 20 requests per minute for login/auth (increased from 10)
+    "trade":   (120, 60),   # 120 requests per minute for order execution (increased from 30)
+    "general": (600, 60),   # 600 requests per minute for everything else (increased from 120)
 }
 
 # Route prefix → tier mapping

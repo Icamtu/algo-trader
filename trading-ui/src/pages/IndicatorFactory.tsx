@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import Editor from "@monaco-editor/react";
 import { Play, Save, Trash2, Info, ChevronRight, BarChart2, Loader2, FlaskConical, Beaker } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area } from "recharts";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { useToast } from "@/hooks/use-toast";
 
 const DEFAULT_CODE = `import pandas as pd
@@ -38,7 +38,7 @@ export default function IndicatorFactory() {
 
   const fetchIndicators = async () => {
     try {
-      const res = await fetch("/api/v1/indicators/list").then(r => r.json());
+      const res = await algoApi.getIndicatorsList();
       if (res.status === "success") setIndicatorsList(res.indicators);
     } catch (err) {
       console.error("Failed to fetch indicators", err);
@@ -48,11 +48,7 @@ export default function IndicatorFactory() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const res = await fetch("/api/v1/indicators/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, code })
-      }).then(r => r.json());
+      const res = await algoApi.saveIndicator({ name, code });
 
       if (res.status === "success") {
         toast({ title: "INDICATOR_SAVED", description: `KERNEL_ASSET_${name.toUpperCase()}_PERSISTED` });
@@ -78,11 +74,7 @@ export default function IndicatorFactory() {
       setHistory(hist);
 
       // Step 3: Calculate
-      const res = await fetch("/api/v1/indicators/calculate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, candles: hist, params: { period: 14 } })
-      }).then(r => r.json());
+      const res = await algoApi.calculateIndicator({ name, candles: hist, params: { period: 14 } });
 
       if (res.status === "success") {
         const processed = hist.map((candle, idx) => ({
@@ -233,7 +225,7 @@ export default function IndicatorFactory() {
                     <Loader2 className="h-8 w-8 text-amber-500 animate-spin opacity-20" />
                   </div>
                 ) : testResult.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                     <AreaChart data={testResult}>
                       <defs>
                         <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">

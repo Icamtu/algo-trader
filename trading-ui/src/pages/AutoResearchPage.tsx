@@ -18,16 +18,7 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { CONFIG } from "@/lib/config";
-
-// SEC-11: No hardcoded token fallbacks — empty string if unauthenticated
-const getAuthToken = (): string =>
-  localStorage.getItem("aether_token") ||
-  localStorage.getItem("auth_token") ||
-  sessionStorage.getItem("aether_token") ||
-  "";
-
-const AUTH = (): string => `Bearer ${getAuthToken()}`;
+import { algoApi } from "@/features/aetherdesk/api/client";
 
 // SEC-05: Strip all HTML from LLM-generated content (defense-in-depth)
 const sanitizeCode = (code: string | undefined | null): string =>
@@ -100,11 +91,7 @@ export default function AutoResearchPage() {
   // Fetch base strategy code when strategy changes
   useEffect(() => {
     if (!baseStrategy) return;
-    if (!getAuthToken()) return; // unauthenticated; protected route will redirect
-    fetch(`${CONFIG.API_BASE_URL}/api/v1/autoresearch/base-code?name=${encodeURIComponent(baseStrategy)}`, {
-      headers: { "Authorization": AUTH() }
-    })
-      .then(r => r.json())
+    algoApi.getAutoResearchBaseCode(baseStrategy)
       .then(d => { if (d.code) { setBaseCode(d.code); if (!activeCode) setActiveView("base"); } })
       .catch(() => {});
   }, [baseStrategy]);
@@ -113,13 +100,9 @@ export default function AutoResearchPage() {
   useEffect(() => {
     const syncDays = async () => {
       if (!symbol || !timeframe) return;
-      if (!getAuthToken()) return; // unauthenticated; protected route will redirect
       setIsSyncingData(true);
       try {
-        const r = await fetch(`${CONFIG.API_BASE_URL}/api/v1/historify/catalog?interval=${timeframe}`, {
-          headers: { "Authorization": AUTH() }
-        });
-        const data = await r.json();
+        const data = await algoApi.getHistorifyCatalog(timeframe);
         if (data.status === 'success') {
           const entry = data.data.find((i: any) => i.symbol === symbol.toUpperCase() || i.symbol === symbol);
           if (entry && entry.first_ts && entry.last_ts) {
@@ -143,12 +126,7 @@ export default function AutoResearchPage() {
     try {
       const today = new Date().toISOString().split('T')[0];
       const fromDate = new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
-      const r = await fetch(`${CONFIG.API_BASE_URL}/api/v1/historify/download`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": AUTH() },
-        body: JSON.stringify({ symbols: [symbol], exchange: "NSE", interval: timeframe, from_date: fromDate, to_date: today })
-      });
-      const d = await r.json();
+      const d = await algoApi.downloadHistorifyData({ symbols: [symbol], exchange: "NSE", interval: timeframe, from_date: fromDate, to_date: today });
       if (d.status === "success") {
         toast.success(`Data download triggered for ${symbol}`);
         setDataStatus("available");
@@ -161,12 +139,7 @@ export default function AutoResearchPage() {
     if (!activeCode) return;
     setSaveVersionLoading(true);
     try {
-      const r = await fetch(`${CONFIG.API_BASE_URL}/api/v1/autoresearch/save-version`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": AUTH() },
-        body: JSON.stringify({ name: baseStrategy, code: activeCode, metrics: iterations[iterations.length-1]?.metrics, label: saveVersionLabel })
-      });
-      const d = await r.json();
+      const d = await algoApi.saveAutoResearchVersion({ name: baseStrategy, code: activeCode, metrics: iterations[iterations.length-1]?.metrics, label: saveVersionLabel });
       if (d.status === "success") {
         toast.success(`Saved as ${d.filename}`);
         setIsSaveVersionOpen(false);
@@ -177,10 +150,9 @@ export default function AutoResearchPage() {
   };
 
   const fetchHistory = async () => {
-    if (!getAuthToken()) return; // unauthenticated; protected route will redirect
     try {
-      const r = await fetch(`${CONFIG.API_BASE_URL}/api/v1/autoresearch/history`, { headers: { "Authorization": AUTH() } });
-      if (r.ok) { const d = await r.json(); setHistory(d.history || []); }
+      const d = await algoApi.getAutoResearchHistory();
+      setHistory(d.history || []);
     } catch {}
   };
 
@@ -189,14 +161,11 @@ export default function AutoResearchPage() {
   const loadHistoryItem = async (id: string) => {
     setHistoryLoading(true);
     try {
-      const r = await fetch(`${CONFIG.API_BASE_URL}/api/v1/autoresearch/history/${id}`, { headers: { "Authorization": AUTH() } });
-      if (r.ok) {
-        const d = await r.json();
-        setActiveCode(d.code);
-        if (d.metrics) setIterations([{ id: -1, code: d.code, metrics: d.metrics, timestamp: d.metadata?.timestamp || "" }]);
-        setIsViewingHistory(true);
-        setActiveView("evolved");
-      }
+      const d = await algoApi.getAutoResearchHistoryItem(id);
+      setActiveCode(d.code);
+      if (d.metrics) setIterations([{ id: -1, code: d.code, metrics: d.metrics, timestamp: d.metadata?.timestamp || "" }]);
+      setIsViewingHistory(true);
+      setActiveView("evolved");
     } catch { toast.error("Failed to load historical iteration"); }
     finally { setHistoryLoading(false); }
   };
@@ -211,12 +180,7 @@ export default function AutoResearchPage() {
     if (!activeCode) return;
     setDeployLoading(true);
     try {
-      const r = await fetch(`${CONFIG.API_BASE_URL}/api/v1/autoresearch/deploy`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": AUTH() },
-        body: JSON.stringify({ name: deployName, code: activeCode, metrics: iterations[iterations.length-1]?.metrics })
-      });
-      if (!r.ok) throw new Error("Deployment failed");
+      await algoApi.deployAutoResearch({ name: deployName, code: activeCode, metrics: iterations[iterations.length-1]?.metrics });
       toast.success(`Strategy ${deployName} queued for approval.`);
       setIsDeploying(false);
     } catch { toast.error("Deployment failed."); }
@@ -235,13 +199,7 @@ export default function AutoResearchPage() {
       while (!targetsMet) {
         if (!isRunning && currentIteration > 1) { toast.info("AutoResearch stopped."); break; }
         toast.loading(`Running Iteration ${currentIteration}...`, { id: 'autoresearch' });
-        const r = await fetch(`${CONFIG.API_BASE_URL}/api/v1/autoresearch/iteration`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": AUTH() },
-          body: JSON.stringify({ strategy_name: currentCode ? undefined : baseStrategy, code: currentCode, symbol, timeframe, days, targets, benchmark: benchmark || undefined })
-        });
-        if (!r.ok) throw new Error("Failed to start iteration");
-        const initData = await r.json();
+        const initData = await algoApi.startAutoResearchIteration({ strategy_name: currentCode ? undefined : baseStrategy, code: currentCode, symbol, timeframe, days, targets, benchmark: benchmark || undefined });
         if (initData.error) throw new Error(initData.error);
 
         const taskId = initData.task_id;
@@ -251,12 +209,7 @@ export default function AutoResearchPage() {
         while (true) {
           await new Promise(resolve => setTimeout(resolve, 5000));
 
-          const pollRes = await fetch(`${CONFIG.API_BASE_URL}/api/v1/autoresearch/status/${taskId}`, {
-            headers: { "Authorization": AUTH() }
-          });
-          if (!pollRes.ok) continue;
-
-          const pollData = await pollRes.json();
+          const pollData = await algoApi.getAutoResearchStatus(taskId);
           if (pollData.status === "completed") {
             data = pollData.result;
             if (data && data.error) {
@@ -538,13 +491,13 @@ export default function AutoResearchPage() {
                         </div>
                         <div className="flex items-center justify-between gap-1">
                           <span className="opacity-40 uppercase">Win%</span>
-                          <span className={`${(item.metrics?.win_rate_pct || 0) >= (item.targets?.win_rate || targets.win_rate) ? 'text-emerald-400' : 'text-red-400'} font-mono`}>
+                          <span className={`${(item.metrics?.win_rate_pct || 0) >= (item.targets?.winRate || targets.winRate) ? 'text-emerald-400' : 'text-red-400'} font-mono`}>
                             {item.metrics?.win_rate_pct?.toFixed(1) || '0.0'}%
                           </span>
                         </div>
                         <div className="flex items-center justify-between gap-1">
                           <span className="opacity-40 uppercase">MaxDD</span>
-                          <span className={`${(item.metrics?.max_drawdown_pct || 100) <= (item.targets?.max_dd || targets.max_dd) ? 'text-emerald-400' : 'text-red-400'} font-mono`}>
+                          <span className={`${(item.metrics?.max_drawdown_pct || 100) <= (item.targets?.maxDD || targets.maxDD) ? 'text-emerald-400' : 'text-red-400'} font-mono`}>
                             {item.metrics?.max_drawdown_pct?.toFixed(1) || '0.0'}%
                           </span>
                         </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 
 export default function Risk() {
   const [riskData, setRiskData] = useState<any>(null);

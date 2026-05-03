@@ -9,15 +9,16 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Type
 from core.context import app_context
+from database.trade_logger import get_trade_logger
 from services.versioning_service import versioning_service
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1", tags=["Strategies"])
+router = APIRouter(tags=["Strategies"])
 
 # --- Models ---
 class StrategyHaltRequest(BaseModel):
-    strategy: str
+    strategy: Optional[str] = None
 
 class StrategyCreateRequest(BaseModel):
     name: str
@@ -80,20 +81,52 @@ async def get_all_strategies_status():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/strategies/halt")
-async def halt_strategy(request: StrategyHaltRequest):
-    strategy_runner = app_context.get("strategy_runner")
-    if not strategy_runner:
-        raise HTTPException(status_code=503, detail="Strategy runner not initialized")
-    success = strategy_runner.halt_strategy(request.strategy)
-    return {"status": "success" if success else "failed"}
+@router.post("/strategies/{strategy_id}/halt")
+@router.post("/strategies/{strategy_id}/stop")
+async def halt_strategy(request: Optional[StrategyHaltRequest] = Body(None), strategy_id: Optional[str] = None):
+    try:
+        logger.info(f"API CALL >> halt_strategy | ID: {strategy_id} | Body: {request}")
+        strategy_runner = app_context.get("strategy_runner")
+        if not strategy_runner:
+            logger.error("halt_strategy: Strategy runner not initialized")
+            raise HTTPException(status_code=503, detail="Strategy runner not initialized")
+
+        target_strategy = strategy_id or (request.strategy if request else None)
+        if not target_strategy:
+            logger.error("halt_strategy: Strategy ID missing")
+            raise HTTPException(status_code=400, detail="Strategy ID required")
+
+        logger.info(f"HALTING strategy: {target_strategy}")
+        success = await strategy_runner.halt_strategy(target_strategy)
+        logger.info(f"HALT result for {target_strategy}: {success}")
+        return {"status": "success" if success else "failed"}
+    except Exception as e:
+        logger.error(f"FATAL ERROR in halt_strategy: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/strategies/unhalt")
-async def unhalt_strategy(request: StrategyHaltRequest):
-    strategy_runner = app_context.get("strategy_runner")
-    if not strategy_runner:
-        raise HTTPException(status_code=503, detail="Strategy runner not initialized")
-    success = strategy_runner.unhalt_strategy(request.strategy)
-    return {"status": "success" if success else "failed"}
+@router.post("/strategies/{strategy_id}/unhalt")
+@router.post("/strategies/{strategy_id}/start")
+async def unhalt_strategy(request: Optional[StrategyHaltRequest] = Body(None), strategy_id: Optional[str] = None):
+    try:
+        logger.info(f"API CALL >> unhalt_strategy | ID: {strategy_id} | Body: {request}")
+        strategy_runner = app_context.get("strategy_runner")
+        if not strategy_runner:
+            logger.error("unhalt_strategy: Strategy runner not initialized")
+            raise HTTPException(status_code=503, detail="Strategy runner not initialized")
+
+        target_strategy = strategy_id or (request.strategy if request else None)
+        if not target_strategy:
+            logger.error("unhalt_strategy: Strategy ID missing")
+            raise HTTPException(status_code=400, detail="Strategy ID required")
+
+        logger.info(f"UNHALTING strategy: {target_strategy}")
+        success = await strategy_runner.unhalt_strategy(target_strategy)
+        logger.info(f"UNHALT result for {target_strategy}: {success}")
+        return {"status": "success" if success else "failed"}
+    except Exception as e:
+        logger.error(f"FATAL ERROR in unhalt_strategy: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/strategies")
 async def list_strategies():
@@ -134,13 +167,66 @@ async def list_strategies():
         logger.error(f"Error listing strategies: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/strategies/{strategy_id}/performance")
+async def get_strategy_performance(strategy_id: str):
+    """GET /api/v1/strategies/{id}/performance - Returns granular PnL and trade metrics."""
+    try:
+        trade_logger = get_trade_logger()
+        # Strategy ID might be normalized (snake_case) or display name
+        metrics = await trade_logger.get_strategy_metrics_async(strategy_id)
+
+        # If no metrics found for snake_case, try class_name if possible
+        if metrics.get("total_trades", 0) == 0:
+            # Simple heuristic for class name conversion
+            class_name = "".join(x.capitalize() for x in strategy_id.replace("-", "_").split("_"))
+            alt_metrics = await trade_logger.get_strategy_metrics_async(class_name)
+            if alt_metrics.get("total_trades", 0) > 0:
+                metrics = alt_metrics
+
+        return {
+            "status": "success",
+            "strategy": strategy_id,
+            "metrics": metrics
+        }
+    except Exception as e:
+        logger.error(f"Error fetching strategy performance for {strategy_id}: {e}")
+        return {"status": "success", "strategy": strategy_id, "metrics": {"net_pnl": 0.0, "total_trades": 0}}
+
+@router.get("/strategies/{strategy_id}/orders")
+async def get_strategy_orders(strategy_id: str, limit: int = Query(100)):
+    """GET /api/v1/strategies/{id}/orders - Returns recent order history for a strategy."""
+    try:
+        trade_logger = get_trade_logger()
+        trades = await asyncio.to_thread(trade_logger.get_trades_by_strategy, strategy_id, limit)
+
+        # If no trades found for snake_case, try class_name
+        if not trades:
+            class_name = "".join(x.capitalize() for x in strategy_id.replace("-", "_").split("_"))
+            trades = await asyncio.to_thread(trade_logger.get_trades_by_strategy, class_name, limit)
+
+        return {
+            "status": "success",
+            "strategy": strategy_id,
+            "orders": [t.to_dict() for t in trades],
+            "count": len(trades)
+        }
+    except Exception as e:
+        logger.error(f"Error fetching strategy orders for {strategy_id}: {e}")
+        return {"status": "success", "orders": [], "count": 0}
+
 @router.post("/strategies/liquidate")
-async def liquidate_strategy(request: StrategyHaltRequest):
+@router.post("/strategies/{strategy_id}/liquidate")
+async def liquidate_strategy(request: Optional[StrategyHaltRequest] = Body(None), strategy_id: Optional[str] = None):
     order_manager = app_context.get("order_manager")
     if not order_manager:
         raise HTTPException(status_code=503, detail="Order manager not initialized")
+
+    target_strategy = strategy_id or (request.strategy if request else None)
+    if not target_strategy:
+        raise HTTPException(status_code=400, detail="Strategy ID required")
+
     try:
-        result = await order_manager.liquidate_strategy(request.strategy)
+        result = await order_manager.liquidate_strategy(target_strategy)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

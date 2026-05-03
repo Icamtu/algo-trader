@@ -948,11 +948,11 @@ class TradeLogger:
             logger.error(f"Error fetching API logs: {e}")
             return []
 
-    async def get_pnl_summary(self, unrealized_pnl: float = 0.0) -> Dict[str, Any]:
+    async def get_pnl_summary(self, unrealized_pnl: float = 0.0, mode: str = None) -> Dict[str, Any]:
         """Calculates institutional-grade PnL summaries across timeframes."""
-        return await asyncio.to_thread(self._get_pnl_summary_sync, unrealized_pnl)
+        return await asyncio.to_thread(self._get_pnl_summary_sync, unrealized_pnl, mode)
 
-    def _get_pnl_summary_sync(self, unrealized_pnl: float = 0.0) -> Dict[str, Any]:
+    def _get_pnl_summary_sync(self, unrealized_pnl: float = 0.0, mode: str = None) -> Dict[str, Any]:
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
@@ -960,12 +960,18 @@ class TradeLogger:
             # Helper for time-based PnL
             def _get_period_pnl(days: int):
                 # ISO8601 comparison
-                cursor.execute("""
+                query = """
                     SELECT SUM(pnl), SUM(charges)
                     FROM trades
                     WHERE status = 'filled' AND pnl IS NOT NULL
                     AND timestamp >= datetime('now', ?)
-                """, (f'-{days} days',))
+                """
+                params = [f'-{days} days']
+                if mode:
+                    query += " AND mode = ?"
+                    params.append(mode)
+
+                cursor.execute(query, params)
                 row = cursor.fetchone()
                 return round(float(row[0] or 0.0), 2), round(float(row[1] or 0.0), 2)
 
@@ -975,12 +981,19 @@ class TradeLogger:
             daily_pnl, daily_charges = _get_period_pnl(1)
 
             # Cumulative PnL curve for charts
-            cursor.execute("""
+            curve_query = """
                 SELECT timestamp, SUM(pnl - COALESCE(charges, 0)) OVER (ORDER BY timestamp) as cumulative_pnl
                 FROM trades
                 WHERE status = 'filled' AND pnl IS NOT NULL
-                ORDER BY timestamp ASC
-            """)
+            """
+            curve_params = []
+            if mode:
+                curve_query += " AND mode = ?"
+                curve_params.append(mode)
+
+            curve_query += " ORDER BY timestamp ASC"
+
+            cursor.execute(curve_query, curve_params)
             curve = [{"time": r[0], "value": round(r[1], 2)} for r in cursor.fetchall()]
 
             conn.close()

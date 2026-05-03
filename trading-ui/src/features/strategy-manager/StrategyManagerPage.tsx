@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { StrategyLibrary } from "./components/StrategyLibrary";
 import { StrategyControlBoard } from "./components/StrategyControlBoard";
 import { StrategyPerformance } from "./components/StrategyPerformance";
@@ -19,7 +19,10 @@ const StrategyManagerPage: React.FC = () => {
     refetchInterval: 5000,
   });
 
-  const selectedStrategy = strategiesData?.strategies?.find((s: any) => s.id === selectedId);
+  const strategies = Array.isArray(strategiesData?.data?.strategies)
+    ? strategiesData.data.strategies
+    : (Array.isArray(strategiesData?.strategies) ? strategiesData.strategies : []);
+  const selectedStrategy = strategies.find((s: any) => s.id === selectedId);
 
   return (
     <div className="h-full flex flex-col bg-background overflow-hidden relative selection:bg-primary/30">

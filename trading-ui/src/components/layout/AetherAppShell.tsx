@@ -1,5 +1,6 @@
 import { useState, memo, useEffect } from "react";
 import { Outlet, Link, useLocation } from "react-router-dom";
+import type { LucideIcon } from "lucide-react";
 import { GlobalHeader } from "../trading/GlobalHeader";
 import { MarketNavbar } from "../trading/MarketNavbar";
 import { StatusFooter } from "./StatusFooter";
@@ -19,11 +20,37 @@ import {
   BarChart3,
   Cpu,
   Fingerprint,
-  Beaker
+  Beaker,
+  Bell,
+  BookOpen,
+  ClipboardList,
+  GitBranch,
+  Globe,
+  LayoutGrid,
+  Search,
+  Server,
+  Shield,
+  ShieldCheck,
+  Terminal,
+  TrendingUp,
+  Gauge,
+  Wallet,
+  Zap
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface SidebarItemProps {
-  icon: any;
+  icon: LucideIcon;
   label: string;
   to: string;
   collapsed: boolean;
@@ -31,7 +58,7 @@ interface SidebarItemProps {
 
 const SidebarItem = ({ icon: Icon, label, to, collapsed }: SidebarItemProps) => {
   const location = useLocation();
-  const isActive = location.pathname === to;
+  const isActive = location.pathname === to || (to !== "/" && location.pathname.startsWith(`${to}/`));
 
   return (
     <Link
@@ -63,11 +90,86 @@ const SidebarItem = ({ icon: Icon, label, to, collapsed }: SidebarItemProps) => 
   );
 };
 
-const SidebarDivider = ({ label, collapsed }: { label: string; collapsed: boolean }) => (
+interface SidebarNavItem {
+  icon: LucideIcon;
+  label: string;
+  to: string;
+}
+
+interface SidebarNavSection {
+  label: string;
+  items: SidebarNavItem[];
+}
+
+const sidebarSections: SidebarNavSection[] = [
+  {
+    label: "Command",
+    items: [
+      { icon: LayoutDashboard, label: "Dashboard", to: "/" },
+      { icon: Terminal, label: "Action_Center", to: "/aetherdesk/action-center" },
+      { icon: TrendingUp, label: "Charting", to: "/charting" },
+      { icon: Cpu, label: "Expert_Terminal", to: "/terminal" },
+    ],
+  },
+  {
+    label: "Execution",
+    items: [
+      { icon: Cpu, label: "Command_Center", to: "/execution/command-center" },
+      { icon: Activity, label: "Strategy_Monitor", to: "/execution/registry" },
+      { icon: GitBranch, label: "Strategy_Lab", to: "/strategy-lab" },
+      { icon: Database, label: "Strategy_Registry", to: "/aetherdesk/strategy-registry" },
+    ],
+  },
+  {
+    label: "Market Intel",
+    items: [
+      { icon: Beaker, label: "Intelligence_Hub", to: "/intelligence" },
+      { icon: Search, label: "Scanner", to: "/scanner" },
+      { icon: Activity, label: "Regime", to: "/intelligence/regime" },
+      { icon: BarChart3, label: "GEX_Analytics", to: "/intelligence/gex" },
+      { icon: Database, label: "Historify", to: "/intelligence/historify" },
+      { icon: Beaker, label: "Indicator_Factory", to: "/intelligence/indicator-factory" },
+    ],
+  },
+  {
+    label: "Portfolio",
+    items: [
+      { icon: LayoutGrid, label: "Positions", to: "/aetherdesk/positions" },
+      { icon: ShieldCheck, label: "Holdings", to: "/aetherdesk/holdings" },
+      { icon: ClipboardList, label: "Orders", to: "/aetherdesk/orders" },
+      { icon: Zap, label: "Trades", to: "/aetherdesk/trades" },
+      { icon: BarChart3, label: "PnL_Tracker", to: "/pnl-tracker" },
+      { icon: BookOpen, label: "Trade_Journal", to: "/journal" },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { icon: Shield, label: "Risk_Manager", to: "/risk" },
+      { icon: Bell, label: "Alerts", to: "/alerts" },
+      { icon: Server, label: "Governance", to: "/governance" },
+      { icon: Activity, label: "Audit_Center", to: "/aetherdesk/audit" },
+      { icon: Search, label: "Protocol_Analyzer", to: "/aetherdesk/analyzer" },
+      { icon: Fingerprint, label: "Health_Monitor", to: "/aetherdesk/health" },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { icon: Globe, label: "Brokers", to: "/brokers" },
+      { icon: Database, label: "Contracts", to: "/aetherdesk/master-contract" },
+      { icon: ShieldAlert, label: "Roles", to: "/roles" },
+      { icon: Settings, label: "System_Prefs", to: "/profile" },
+    ],
+  },
+];
+
+const SidebarDivider = ({ label, count, collapsed }: { label: string; count: number; collapsed: boolean }) => (
   <div className="px-4 py-3 mt-2 mb-1 flex items-center gap-3">
     {!collapsed && (
       <span className="text-[7px] font-black uppercase tracking-[0.3em] text-white/40">{label}</span>
     )}
+    {!collapsed && <span className="text-[7px] font-mono text-white/20">{count}</span>}
     <div className="flex-1 h-px bg-white/5" />
   </div>
 );
@@ -84,6 +186,9 @@ export const AetherAppShell = memo(function AetherAppShell() {
   const totalCapital = fundsData?.margin_available ?? telemetry.equity ?? 0;
   const exposure = fundsData?.margin_used ?? 0;
   const exposurePercent = totalCapital > 0 ? ((exposure / totalCapital) * 100).toFixed(1) : "0.0";
+  const exposureUsage = Number(exposurePercent);
+  const exposureUsageWidth =
+    exposureUsage >= 75 ? "w-full" : exposureUsage >= 50 ? "w-3/4" : exposureUsage >= 25 ? "w-1/2" : exposureUsage > 0 ? "w-1/4" : "w-0";
 
   // Persist sidebar collapsed state
   useEffect(() => {
@@ -122,22 +227,20 @@ export const AetherAppShell = memo(function AetherAppShell() {
           </div>
 
           <div className="flex-1 flex flex-col p-0 overflow-y-auto custom-scrollbar bg-black/40">
-            <SidebarItem icon={LayoutDashboard} label="Dashboard" to="/" collapsed={sidebarCollapsed} />
-            <SidebarDivider label="Execution" collapsed={sidebarCollapsed} />
-            <SidebarItem icon={Cpu} label="Command_Center" to="/execution/command-center" collapsed={sidebarCollapsed} />
-            <SidebarDivider label="Intelligence" collapsed={sidebarCollapsed} />
-            <SidebarItem icon={Beaker} label="Indicator_Factory" to="/intelligence/indicator-factory" collapsed={sidebarCollapsed} />
-            <SidebarDivider label="Operations" collapsed={sidebarCollapsed} />
-            <SidebarItem icon={Database} label="Infrastructure" to="/governance" collapsed={sidebarCollapsed} />
-            <SidebarItem icon={ShieldAlert} label="Risk_Manager" to="/risk" collapsed={sidebarCollapsed} />
-            <SidebarItem icon={BarChart3} label="PnL_Tracker" to="/pnl-tracker" collapsed={sidebarCollapsed} />
-            <SidebarItem icon={Activity} label="Audit_Center" to="/audit" collapsed={sidebarCollapsed} />
-
-            <div className="my-4 h-px bg-white/5" />
-
-            <SidebarItem icon={BarChart3} label="Trade_Journal" to="/journal" collapsed={sidebarCollapsed} />
-            <SidebarItem icon={Fingerprint} label="Security_Ops" to="/aetherdesk/health" collapsed={sidebarCollapsed} />
-            <SidebarItem icon={Settings} label="System_Prefs" to="/profile" collapsed={sidebarCollapsed} />
+            {sidebarSections.map((section) => (
+              <div key={section.label}>
+                <SidebarDivider label={section.label} count={section.items.length} collapsed={sidebarCollapsed} />
+                {section.items.map((item) => (
+                  <SidebarItem
+                    key={item.to}
+                    icon={item.icon}
+                    label={item.label}
+                    to={item.to}
+                    collapsed={sidebarCollapsed}
+                  />
+                ))}
+              </div>
+            ))}
           </div>
 
           <div className="p-5 border-t border-white/5 bg-black/60">
@@ -183,94 +286,137 @@ export const AetherAppShell = memo(function AetherAppShell() {
               {rightSidebarOpen && (
                 <motion.aside
                   initial={{ width: 0, opacity: 0 }}
-                  animate={{ width: 280, opacity: 1 }}
+                  animate={{ width: 296, opacity: 1 }}
                   exit={{ width: 0, opacity: 0 }}
-                  className="bg-[#050505] border-l border-white/5 flex flex-col shadow-2xl relative z-30"
+                  className="bg-[#050505] border-l border-white/10 flex flex-col shadow-2xl relative z-30"
                 >
-                  <div className="p-4 border-b border-white/5 flex items-center justify-between bg-black/60 h-12">
-                    <div className="flex items-center gap-3">
-                      <div className="w-1 h-3 bg-secondary/40 relative overflow-hidden">
-                        <div className="absolute inset-x-0 bottom-0 bg-secondary animate-pulse" style={{ height: '60%' }} />
+                  <div className="h-14 px-4 border-b border-white/10 flex items-center justify-between bg-black/70">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="flex size-8 items-center justify-center rounded-md border border-secondary/25 bg-secondary/10 text-secondary">
+                        <Activity className="size-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-semibold text-white">Live Telemetry</h3>
+                        <p className="text-xs text-white/40">Account, risk, and strategy pulse</p>
                       </div>
-                      <span className="text-[10px] font-black text-white tracking-[0.3em] uppercase font-mono">Live_Telemetry</span>
                     </div>
                     <button
                       onClick={() => setRightSidebarOpen(false)}
                       aria-label="Close telemetry panel"
-                      className="w-8 h-8 flex items-center justify-center text-slate-600 hover:text-white hover:bg-white/5 transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60"
+                      className="size-8 flex items-center justify-center rounded-md border border-white/10 text-white/45 hover:text-white hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/60"
                     >
-                      <ChevronRight className="w-4 h-4" />
+                      <ChevronRight className="size-4" />
                     </button>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
-                    {/* Real-time Account Summary */}
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                        <h4 className="text-[8px] font-black text-primary uppercase tracking-[0.4em] font-mono">Account_Alpha</h4>
-                        <span className="text-[7px] font-mono font-black text-muted-foreground/70">ID: AX-992</span>
-                      </div>
-                      <div className="grid grid-cols-1 gap-1 bg-white/5">
-                        <div className="p-4 bg-[#080808] hover:bg-[#0c0c0c] transition-colors group/c1 relative">
-                          <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-primary/20 group-hover/c1:bg-primary transition-colors" />
-                          <span className="text-[7px] text-white/80 font-black uppercase block mb-1.5 tracking-[0.2em] font-mono">Total_Capital</span>
-                          <IndustrialValue value={totalCapital} prefix="₹" className="text-base font-mono font-black text-white" />
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+                    <section className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+                      <div className="mb-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-white/70">
+                          <Wallet className="size-4 text-primary" />
+                          <h4 className="text-xs font-semibold">Account</h4>
                         </div>
-                        <div className="p-4 bg-[#080808] hover:bg-[#0c0c0c] transition-colors group/c2 relative">
-                          <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-secondary/20 group-hover/c2:bg-secondary transition-colors" />
-                          <span className="text-[7px] text-white/80 font-black uppercase block mb-1.5 tracking-[0.2em] font-mono">Exposure_Usage</span>
-                          <div className="flex items-end justify-between">
-                            <IndustrialValue value={exposure} prefix="₹" className="text-base font-mono font-black text-secondary" />
-                            <span className="text-[10px] font-mono font-black text-white/80">{exposurePercent}%</span>
+                        <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">AX-992</span>
+                      </div>
+                      <div className="space-y-3">
+                        <div className="flex items-end justify-between gap-3">
+                          <span className="text-xs text-white/45">Total capital</span>
+                          <IndustrialValue value={totalCapital} prefix="₹" className="text-sm font-semibold text-white" />
+                        </div>
+                        <div className="flex items-end justify-between gap-3">
+                          <span className="text-xs text-white/45">Exposure used</span>
+                          <div className="text-right">
+                            <IndustrialValue value={exposure} prefix="₹" className="text-sm font-semibold text-secondary" />
+                            <span className="font-mono text-xs tabular-nums text-white/40">{exposurePercent}%</span>
                           </div>
                         </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-white/10" aria-hidden="true">
+                          <div className={cn("h-full rounded-full bg-secondary", exposureUsageWidth)} />
+                        </div>
                       </div>
-                    </div>
+                    </section>
 
-                    {/* Active Strategy Matrix */}
-                    <div className="space-y-4 pt-4 border-t border-white/5">
-                      <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                        <h4 className="text-[8px] font-black text-primary uppercase tracking-[0.4em] font-mono">Active_Kernels</h4>
-                        <span className="text-[7px] font-mono font-black text-secondary">{strategyMatrix?.length || 0} RUNNING</span>
+                    <section className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+                      <div className="mb-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-white/70">
+                          <Cpu className="size-4 text-secondary" />
+                          <h4 className="text-xs font-semibold">Strategies</h4>
+                        </div>
+                        <span className="font-mono text-xs tabular-nums text-secondary">{strategyMatrix?.length || 0} live</span>
                       </div>
-                      <div className="space-y-1 bg-white/5">
+                      <div className="space-y-2">
                         {strategyMatrix && strategyMatrix.length > 0 ? (
                           strategyMatrix.slice(0, 5).map((s, i) => (
-                            <div key={i} className="flex items-center justify-between p-3 bg-[#080808] hover:bg-white/[0.03] transition-colors relative group/strat">
-                              <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-white/5 group-hover/strat:bg-secondary transition-colors" />
-                              <div className="flex items-center gap-3">
-                                <div className={cn("w-1.5 h-1.5", s.status === 'active' || s.status === 'RUN' ? "bg-secondary animate-pulse shadow-[0_0_8px_rgba(0,245,255,0.6)]" : "bg-white/10")} />
-                                <span className="text-[10px] font-black uppercase tracking-tight truncate max-w-[120px] font-mono">{s.name}</span>
+                            <div key={i} className="flex items-center justify-between gap-3 rounded border border-white/5 bg-black/30 px-3 py-2">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span className={cn("size-2 rounded-full", s.status === 'active' || s.status === 'RUN' ? "bg-secondary" : "bg-white/20")} />
+                                <span className="truncate text-xs font-medium text-white/80">{s.name}</span>
                               </div>
                               <IndustrialValue
                                 value={s.pnl || 0}
-                                className={cn("text-[11px] font-mono font-black", (s.pnl || 0) >= 0 ? "text-secondary" : "text-destructive")}
+                                className={cn("text-xs font-semibold", (s.pnl || 0) >= 0 ? "text-secondary" : "text-destructive")}
                                 showPlus={true}
                               />
                             </div>
                           ))
                         ) : (
-                          <div className="text-[8px] font-mono text-muted-foreground/20 text-center py-8 tracking-[0.4em] bg-[#080808]">ZERO_ACTIVE_KERNELS</div>
+                          <div className="rounded border border-dashed border-white/10 px-3 py-6 text-center text-xs text-white/40">No active strategies</div>
                         )}
                       </div>
-                    </div>
+                    </section>
 
-                    {/* Global Risk Dial */}
-                    <div className="space-y-4 pt-4 border-t border-white/5">
-                      <div className="p-4 bg-primary/5 border border-primary/10 flex flex-col items-center text-center">
-                        <div className="text-xs font-black text-primary mb-1 tracking-widest">NOMINAL</div>
-                        <div className="text-[7px] text-muted-foreground/80 uppercase tracking-widest leading-relaxed">
-                          Overall system risk is within defined parameters. Drawdown lock is inactive.
+                    <section className="rounded-md border border-primary/15 bg-primary/5 p-3">
+                      <div className="mb-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-primary">
+                          <Shield className="size-4" />
+                          <h4 className="text-xs font-semibold">Risk state</h4>
+                        </div>
+                        <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Nominal</span>
+                      </div>
+                      <p className="text-xs leading-5 text-white/55">
+                        Drawdown lock is inactive. Exposure is inside configured limits.
+                      </p>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <div className="rounded border border-white/5 bg-black/25 p-2">
+                          <div className="flex items-center gap-1.5 text-white/45">
+                            <Gauge className="size-3.5" />
+                            <span className="text-xs">Usage</span>
+                          </div>
+                          <span className="mt-1 block font-mono text-xs tabular-nums text-white/80">{exposurePercent}%</span>
+                        </div>
+                        <div className="rounded border border-white/5 bg-black/25 p-2">
+                          <div className="flex items-center gap-1.5 text-white/45">
+                            <Activity className="size-3.5" />
+                            <span className="text-xs">Pulse</span>
+                          </div>
+                          <span className="mt-1 block text-xs font-medium text-secondary">Stable</span>
                         </div>
                       </div>
-                    </div>
+                    </section>
                   </div>
 
-                  <div className="p-4 border-t border-white/5 bg-black/60">
-                    <button className="w-full py-3 bg-destructive/5 border border-destructive/20 text-destructive text-[10px] font-black uppercase tracking-[0.4em] hover:bg-destructive hover:text-white transition-all font-mono relative overflow-hidden group/panic">
-                      <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover/panic:translate-x-[100%] transition-transform duration-1000" />
-                      PANIC_LIQUIDATE
-                    </button>
+                  <div className="p-4 border-t border-white/10 bg-black/70">
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <button className="w-full rounded-md border border-destructive/30 bg-destructive/10 px-3 py-3 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/15 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-destructive/70">
+                          Panic liquidate
+                        </button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent className="border-white/10 bg-[#0A0A0A] text-white">
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Confirm panic liquidation</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This is a destructive desk action. Confirm only when you intend to flatten exposure immediately.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel className="border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.06]">Cancel</AlertDialogCancel>
+                          <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                            Confirm
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 </motion.aside>
               )}

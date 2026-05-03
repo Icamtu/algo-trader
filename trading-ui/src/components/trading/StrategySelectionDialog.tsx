@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FileCode, Search, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { algoApi } from '@/features/openalgo/api/client';
+import { algoApi } from '@/features/aetherdesk/api/client';
 
 interface StrategySelectionDialogProps {
   onSelect: (strategyName: string) => void;

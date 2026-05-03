@@ -330,7 +330,7 @@ export function BacktestAnalyticsView({ result, onClose }: Props) {
                 </div>
               </div>
               <div className="h-[400px]">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <AreaChart data={processedEquity}>
                     <defs>
                       <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
@@ -360,7 +360,7 @@ export function BacktestAnalyticsView({ result, onClose }: Props) {
                  <TrendingDown className="w-3 h-3" /> Drawdown_Array
                </h4>
                <div className="h-[150px]">
-                 <ResponsiveContainer width="100%" height="100%">
+                 <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                    <AreaChart data={processedEquity}>
                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                      <XAxis dataKey="index" hide />
@@ -522,7 +522,7 @@ export function BacktestAnalyticsView({ result, onClose }: Props) {
             <div className="bg-background border border-border p-6 shadow-2xl">
               <h3 className="text-[11px] font-mono font-black uppercase tracking-[0.3em] text-foreground mb-8 border-b border-border/50 pb-2">Entropy_Distribution (P&L %)</h3>
               <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <BarChart data={pnlBuckets}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                     <XAxis dataKey="range" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)', fontFamily: 'IBM Plex Mono' }} axisLine={false} tickLine={false} />
@@ -541,7 +541,7 @@ export function BacktestAnalyticsView({ result, onClose }: Props) {
             <div className="bg-background border border-border p-6 shadow-2xl">
               <h3 className="text-[11px] font-mono font-black uppercase tracking-[0.3em] text-foreground mb-8 border-b border-border/50 pb-2">Vector_Excursion_Matrix (MAE vs MFE)</h3>
               <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <ScatterChart>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                     <XAxis type="number" dataKey="mae" name="MAE" tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.3)' }} axisLine={false} tickLine={false} label={{ value: "ADVERSE (%)", fontSize: 8, fill: 'rgba(255,255,255,0.2)', position: "bottom" }} />

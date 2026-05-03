@@ -168,7 +168,7 @@ export function UnifiedSettings({ isOpen, onClose }: { isOpen: boolean; onClose:
                     <div className="flex items-center justify-between p-4 bg-card/20 border border-white/5">
                       <div className="space-y-1">
                         <Label className="text-[9px] font-black uppercase tracking-widest">Global_Watermark</Label>
-                        <p className="text-[7px] text-muted-foreground uppercase">Show "OPENALGO" on charts</p>
+                        <p className="text-[7px] text-muted-foreground uppercase">Show "AETHERDESK" on charts</p>
                       </div>
                       <Switch checked={settings.showWatermark} onCheckedChange={(val) => updateSettings({ showWatermark: val })} />
                     </div>

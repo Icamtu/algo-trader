@@ -1,7 +1,7 @@
 import { TrendingUp, TrendingDown, BarChart3, Shield, Zap, Loader2, Activity } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { IndustrialValue } from "./IndustrialValue";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";

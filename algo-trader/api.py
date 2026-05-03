@@ -27,6 +27,7 @@ from blueprints.risk_bp import risk_bp
 from blueprints.system_bp import system_bp
 from blueprints.orders_bp import orders_bp
 from blueprints.portfolio_bp import portfolio_bp
+from blueprints.scanner_bp import scanner_bp
 
 # Services
 from execution.action_manager import get_action_manager
@@ -47,6 +48,7 @@ def set_api_context(strategy_runner, order_manager, position_manager, portfolio_
     # Initialize Blueprint-specific service requirements
     init_analytics(order_manager)
     get_action_manager().set_order_manager(order_manager)
+    historify_service.set_order_manager(order_manager)
 
     logger.info("API context and domain services initialized.")
 
@@ -73,6 +75,7 @@ def create_app():
     app.register_blueprint(system_bp)
     app.register_blueprint(orders_bp)
     app.register_blueprint(portfolio_bp)
+    app.register_blueprint(scanner_bp)
 
     # Initialize Background Services
     historify_service.reconcile_jobs()

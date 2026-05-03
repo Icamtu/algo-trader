@@ -7,7 +7,7 @@ import {
   Lock, Unlock, Zap, ShieldAlert, Cpu, Globe,
   ShieldCheck, Crosshair, ZapOff
 } from "lucide-react";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { type RiskStatus, type StrategyMetrics } from "@/types/api";
 import { IndustrialValue } from "./IndustrialValue";
@@ -300,7 +300,7 @@ export function RiskDashboard() {
 
               <div className="h-80 relative mb-16 flex items-center justify-center">
                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,245,255,0.03),transparent)] animate-pulse" />
-                 <ResponsiveContainer width="100%" height="100%">
+                 <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                    <PieChart>
                       <Pie data={sectorData} cx="50%" cy="50%" innerRadius={100} outerRadius={140} paddingAngle={4} dataKey="value" strokeWidth={0} animationDuration={2500} animationBegin={500}>
                          {sectorData.map((e, i) => <Cell key={i} fill={e.color} className="hover:opacity-80 transition-opacity cursor-crosshair" />)}

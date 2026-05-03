@@ -12,6 +12,14 @@ class Position:
     last_price: float = 0.0  # Phase 16: Track last known price for MTM
     metadata: Dict[str, Any] = None
 
+    @property
+    def avg_price(self):
+        return self.average_price
+
+    @avg_price.setter
+    def avg_price(self, value):
+        self.average_price = value
+
 
 class PositionManager:
     """

@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger("sync_symbols")
 
 # Database setup using environment variables from algo-trader
-DATABASE_PATH = os.getenv("OPENALGO_DB_PATH", "/app/storage/openalgo.db")
+DATABASE_PATH = os.getenv("OPENALGO_DB_PATH", "/app/storage/symbols.db")
 
 shoonya_urls = {
     "NSE": "https://api.shoonya.com/NSE_symbols.txt.zip",

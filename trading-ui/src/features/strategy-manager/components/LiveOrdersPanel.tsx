@@ -1,6 +1,6 @@
 import React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { toast } from "sonner";
 import {
   Table,
@@ -42,7 +42,7 @@ export const LiveOrdersPanel: React.FC<LiveOrdersPanelProps> = ({ strategyId }) 
 
   // Normalize broker + DB trade fields to a unified schema
   const trades = React.useMemo(() => {
-    const raw = rawOrders?.trades || rawOrders?.data || [];
+    const raw = Array.isArray(rawOrders?.trades) ? rawOrders.trades : (Array.isArray(rawOrders?.data) ? rawOrders.data : []);
     return raw.map((t: any) => ({
       ...t,
       orderid: t.orderid || t.order_id || t.id || "",

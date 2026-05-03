@@ -45,6 +45,12 @@ const BrokerSelect = lazy(() => import("./integrations/aetherdesk/pages/BrokerSe
 const MasterContract = lazy(() => import("./integrations/aetherdesk/pages/MasterContractPage").then(module => ({ default: module.MasterContractPage })));
 const SandboxConfig = lazy(() => import("./integrations/aetherdesk/pages/SandboxConfigPage").then(module => ({ default: module.SandboxConfigPage })));
 const SandboxPnL = lazy(() => import("./integrations/aetherdesk/pages/SandboxPnLPage").then(module => ({ default: module.SandboxPnLPage })));
+const SandboxHub = lazy(() => import("./integrations/aetherdesk/pages/SandboxHubPage"));
+const SandboxTradebook = lazy(() => import("./integrations/aetherdesk/pages/SandboxTradebook"));
+const SandboxOrderBook = lazy(() => import("./integrations/aetherdesk/pages/SandboxOrderBook"));
+const SandboxPositions = lazy(() => import("./integrations/aetherdesk/pages/SandboxPositions"));
+const SandboxLogs = lazy(() => import("./integrations/aetherdesk/pages/SandboxLogs"));
+const SandboxSummary = lazy(() => import("./integrations/aetherdesk/pages/SandboxSummary"));
 const Analyzer = lazy(() => import("./integrations/aetherdesk/pages/AnalyzerPage").then(module => ({ default: module.AnalyzerPage })));
 const ActionCenter = lazy(() => import("./integrations/aetherdesk/pages/ActionCenterPage").then(module => ({ default: module.ActionCenterPage })));
 const OptionChainPage = lazy(() => import("./integrations/aetherdesk/pages/OptionChainPage"));
@@ -177,6 +183,12 @@ const App = () => (
                         <Route path="master-contract" element={<MasterContract />} />
                         <Route path="simulation" element={<SandboxConfig />} />
                         <Route path="simulation/pnl" element={<SandboxPnL />} />
+                        <Route path="sandbox" element={<SandboxHub />} />
+                        <Route path="sandbox/trades" element={<SandboxTradebook />} />
+                        <Route path="sandbox/orderbook" element={<SandboxOrderBook />} />
+                        <Route path="sandbox/positions" element={<SandboxPositions />} />
+                        <Route path="sandbox/logs" element={<SandboxLogs />} />
+                        <Route path="sandbox/summary" element={<SandboxSummary />} />
                         <Route path="analyzer" element={<Analyzer />} />
                         <Route path="action-center" element={<ActionCenter />} />
                         <Route path="option-chain" element={<Navigate to="/intelligence/option-chain" replace />} />
@@ -202,6 +214,7 @@ const App = () => (
                       <Route path="/holdings" element={<Navigate to="/aetherdesk/holdings" replace />} />
                       <Route path="/logs" element={<Navigate to="/aetherdesk/logs" replace />} />
                       <Route path="/audit" element={<Navigate to="/aetherdesk/audit" replace />} />
+                      <Route path="/analyzer" element={<Navigate to="/aetherdesk/analyzer" replace />} />
                     </Route>
 
                     <Route path="*" element={<NotFound />} />

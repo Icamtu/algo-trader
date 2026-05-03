@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { useAether } from "@/contexts/AetherContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -185,6 +186,9 @@ export const StrategyControlBoard: React.FC<StrategyControlBoardProps> = ({ stra
                         <SheetTitle className="text-sm font-black uppercase tracking-[0.2em] text-white">
                             Runtime Parameters
                         </SheetTitle>
+                        <SheetDescription className="sr-only">
+                            Configure operational parameters and trading hours for the selected strategy.
+                        </SheetDescription>
                         <p className="text-[9px] text-slate-500 font-mono tracking-widest uppercase mt-1">
                             {strategy?.id} // CONFIG_LAYER_01
                         </p>
@@ -455,7 +459,7 @@ export const StrategyControlBoard: React.FC<StrategyControlBoardProps> = ({ stra
             <span className="text-[9px] text-secondary font-bold animate-pulse">WS_CONNECTED</span>
           </div>
           <div className="space-y-1 h-32 overflow-y-auto custom-scrollbar pr-2">
-            {logs.length > 0 ? (
+            {Array.isArray(logs) && logs.length > 0 ? (
               logs.map((log, i) => (
                 <div key={i} className="flex gap-2 whitespace-nowrap">
                   <span className="text-slate-600">[{log.time.split('T')[1].split('.')[0]}]</span>

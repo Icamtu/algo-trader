@@ -1,6 +1,6 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, Activity, Percent, Target, Zap, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -49,8 +49,9 @@ export const StrategyPerformance: React.FC<StrategyPerformanceProps> = ({ strate
     </div>
   );
 
-  const metrics = performance?.metrics || {};
-  const equityCurve: { t: string; v: number }[] = performance?.equity_curve || [];
+  const perf = performance?.data || performance;
+  const metrics = perf?.metrics || {};
+  const equityCurve: { t: string; v: number }[] = Array.isArray(perf?.equity_curve) ? perf.equity_curve : [];
 
   // Normalise equity curve to SVG viewBox 400×100
   const svgPath = (() => {

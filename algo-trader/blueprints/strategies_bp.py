@@ -165,7 +165,7 @@ def get_all_strategies_status():
 
 @strategies_bp.route("/api/v1/strategies/halt", methods=["POST"])
 @require_auth
-def halt_strategy():
+async def halt_strategy():
     try:
         data = request.json or {}
         strategy_name = data.get("strategy")
@@ -173,14 +173,14 @@ def halt_strategy():
             return jsonify({"error": "Missing strategy name"}), 400
 
         strategy_runner = app_context.get("strategy_runner")
-        success = strategy_runner.halt_strategy(strategy_name)
+        success = await strategy_runner.halt_strategy(strategy_name)
         return jsonify({"status": "success" if success else "failed"}), 200 if success else 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @strategies_bp.route("/api/v1/strategies/unhalt", methods=["POST"])
 @require_auth
-def unhalt_strategy():
+async def unhalt_strategy():
     try:
         data = request.json or {}
         strategy_name = data.get("strategy")
@@ -188,7 +188,7 @@ def unhalt_strategy():
             return jsonify({"error": "Missing strategy name"}), 400
 
         strategy_runner = app_context.get("strategy_runner")
-        success = strategy_runner.unhalt_strategy(strategy_name)
+        success = await strategy_runner.unhalt_strategy(strategy_name)
         return jsonify({"status": "success" if success else "failed"}), 200 if success else 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -342,6 +342,40 @@ def list_strategies():
     except Exception as e:
         logger.error(f"Error listing strategies: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
+
+@strategies_bp.route("/api/v1/strategies/<strategy_id>/performance", methods=["GET"])
+def get_strategy_performance_bp(strategy_id):
+    """GET /api/v1/strategies/<id>/performance - Returns granular metrics."""
+    try:
+        from database.trade_logger import get_trade_logger
+        trade_logger = get_trade_logger()
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        metrics = loop.run_until_complete(trade_logger.get_strategy_metrics_async(strategy_id))
+        loop.close()
+        return jsonify({"status": "success", "strategy": strategy_id, "metrics": metrics})
+    except Exception as e:
+        logger.error(f"Blueprint error fetching performance for {strategy_id}: {e}")
+        return jsonify({"status": "success", "strategy": strategy_id, "metrics": {"net_pnl": 0.0, "total_trades": 0}})
+
+@strategies_bp.route("/api/v1/strategies/<strategy_id>/orders", methods=["GET"])
+def get_strategy_orders_bp(strategy_id):
+    """GET /api/v1/strategies/<id>/orders - Returns order history."""
+    try:
+        from database.trade_logger import get_trade_logger
+        trade_logger = get_trade_logger()
+        limit = request.args.get('limit', 100, type=int)
+        trades = trade_logger.get_trades_by_strategy(strategy_id, limit)
+        return jsonify({
+            "status": "success",
+            "strategy": strategy_id,
+            "orders": [t.to_dict() for t in trades],
+            "count": len(trades)
+        })
+    except Exception as e:
+        logger.error(f"Blueprint error fetching orders for {strategy_id}: {e}")
+        return jsonify({"status": "success", "orders": [], "count": 0})
 
 @strategies_bp.route("/api/v1/strategies/<strategy_id>", methods=["GET"])
 @require_auth

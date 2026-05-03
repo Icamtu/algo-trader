@@ -101,14 +101,6 @@ def _load_env_overrides() -> Dict[str, Any]:
     """Allow basic runtime overrides from environment variables."""
     overrides: Dict[str, Any] = {}
 
-    if os.getenv("OPENALGO_BASE_URL") or os.getenv("OPENALGO_WS_URL") or os.getenv("OPENALGO_API_KEY"):
-        overrides["openalgo"] = {}
-        if os.getenv("OPENALGO_BASE_URL"):
-            overrides["openalgo"]["base_url"] = os.getenv("OPENALGO_BASE_URL")
-        if os.getenv("OPENALGO_WS_URL"):
-            overrides["openalgo"]["ws_url"] = os.getenv("OPENALGO_WS_URL")
-        if os.getenv("OPENALGO_API_KEY"):
-            overrides["openalgo"]["api_key"] = os.getenv("OPENALGO_API_KEY")
 
     if os.getenv("TRADING_MODE"):
         overrides["trading"] = {"mode": os.getenv("TRADING_MODE")}

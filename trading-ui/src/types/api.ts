@@ -174,7 +174,7 @@ export interface ServiceStatus {
 export interface SystemHealth {
   algo_engine: ServiceStatus;
   broker: ServiceStatus;
-  openalgo: ServiceStatus;
+  aetherdesk: ServiceStatus;
   ollama_local: ServiceStatus;
   openclaw_agent: ServiceStatus;
   database: ServiceStatus;

@@ -1,14 +1,14 @@
-from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi import APIRouter, Request, HTTPException, Depends, Query
 import logging
 import os
 import jwt
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from core.context import app_context
 from database.trade_logger import get_trade_logger
 from services.portfolio_analytics import portfolio_analytics
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1", tags=["Portfolio"])
+router = APIRouter(tags=["Portfolio"])
 
 _JWT_SECRET = os.environ.get("JWT_SECRET", "")
 
@@ -32,8 +32,13 @@ def _require_admin(request: Request):
         raise HTTPException(status_code=403, detail="ADMIN_ROLE_REQUIRED")
 
 @router.get("/engine/positions")
-async def get_engine_positions():
-    """FastAPI port of /api/v1/engine/positions."""
+@router.post("/engine/positions")
+@router.get("/positionbook")
+@router.post("/positionbook")
+@router.get("/holdings")
+@router.post("/holdings")
+async def get_engine_positions(request: Request = None):
+    """FastAPI port of /api/v1/engine/positions & /api/v1/positionbook."""
     order_manager = app_context.get("order_manager")
     if not order_manager:
         raise HTTPException(status_code=503, detail="Order manager not initialized")
@@ -45,18 +50,81 @@ async def get_engine_positions():
             pos_list.append({
                 "symbol": symbol,
                 "quantity": pos.quantity,
-                "avg_price": pos.avg_price,
+                "avg_price": pos.average_price,
                 "pnl": pos.pnl if hasattr(pos, "pnl") else 0.0,
                 "metadata": getattr(pos, "metadata", {})
             })
 
         return {
             "status": "success",
-            "positions": pos_list,
-            "count": len(pos_list)
+            "data": {
+                "holdings": pos_list,
+                "count": len(pos_list)
+            }
         }
     except Exception as e:
         logger.error(f"Error fetching engine positions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/tradebook/open")
+async def get_open_position(symbol: Optional[str] = Query(None)):
+    """
+    GET /api/v1/tradebook/open
+    Returns detailed state for open positions.
+    If symbol is provided, returns only that specific position.
+    """
+    order_manager = app_context.get("order_manager")
+    if not order_manager:
+        raise HTTPException(status_code=503, detail="Order manager not initialized")
+
+    try:
+        positions = order_manager.position_manager.all_positions()
+
+        if symbol:
+            pos = positions.get(symbol)
+            if not pos or pos.quantity == 0:
+                return {
+                    "status": "success",
+                    "data": {
+                        "positions": [],
+                        "message": f"No open position for {symbol}"
+                    }
+                }
+
+            return {
+                "status": "success",
+                "data": {
+                    "positions": [{
+                        "symbol": symbol,
+                        "quantity": pos.quantity,
+                        "avg_price": pos.average_price,
+                        "pnl": pos.pnl if hasattr(pos, "pnl") else 0.0,
+                        "metadata": getattr(pos, "metadata", {})
+                    }]
+                }
+            }
+
+        # Return all open positions
+        open_list = [
+            {
+                "symbol": s,
+                "quantity": p.quantity,
+                "avg_price": p.average_price,
+                "pnl": p.pnl if hasattr(p, "pnl") else 0.0
+            }
+            for s, p in positions.items()
+            if p.quantity != 0
+        ]
+
+        return {
+            "status": "success",
+            "data": {
+                "positions": open_list,
+                "count": len(open_list)
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error fetching open positions: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/broker/positions")
@@ -96,7 +164,9 @@ async def system_reconcile(request: Request):
         return {
             "status": "success",
             "message": "Reconciliation triggered",
-            "positions": broker_pos
+            "data": {
+                "positions": broker_pos
+            }
         }
     except Exception as e:
         logger.error(f"Reconcile failure: {e}", exc_info=True)

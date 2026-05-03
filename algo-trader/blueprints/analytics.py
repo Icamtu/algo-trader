@@ -5,6 +5,7 @@ from data.historify_db import get_watchlist, add_to_watchlist, upsert_market_dat
 from utils.auth import require_auth
 import logging
 from datetime import datetime
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -18,69 +19,78 @@ def init_analytics(order_manager):
     global _data_service
     _data_service = MarketDataService(order_manager)
 
-# --- GEX Endpoints ---
+def _estimate_history_limit(interval: str, days: int) -> int:
+    from services.historify_service import historify_service
+    bars_per_day = {
+        "1m": 400,
+        "3m": 150,
+        "5m": 100,
+        "10m": 50,
+        "15m": 35,
+        "30m": 20,
+        "1h": 10,
+        "D": 1,
+    }
+    normalized = historify_service._normalize_interval(interval)
+    return max(50, bars_per_day.get(normalized, 100) * max(days, 1))
 
-@analytics_bp.route("/gex/api/gex-data", methods=["POST"])
+def _get_history_rows(symbol: str, exchange: str, interval: str, days: int):
+    from services.historify_service import historify_service
+    normalized = historify_service._normalize_interval(interval)
+    limit = _estimate_history_limit(normalized, days)
+    return historify_service.get_records(symbol, exchange, normalized, limit) or []
+
+# --- Standardized Market Data Endpoints ---
+
+@analytics_bp.route("/api/v1/history", methods=["GET"])
 @require_auth
-async def get_gex_data():
-    try:
-        data = request.json or {}
-        underlying = data.get("underlying")
-        exchange = data.get("exchange", "NSE")
-        expiry = data.get("expiry_date") # Expected DDMMMYY
+def get_historical_data():
+    """Proxy for Historify DuckDB records."""
+    symbol = request.args.get("symbol")
+    exchange = request.args.get("exchange", "NSE")
+    interval = request.args.get("interval", "1m")
+    limit = int(request.args.get("limit", 1000))
 
-        if not underlying or not expiry:
-            return jsonify({"status": "error", "message": "Missing symbol or expiry"}), 400
+    if not symbol:
+        return jsonify({"status": "error", "message": "Missing symbol"}), 400
 
-        chain = await _data_service.get_option_chain(underlying, exchange, expiry)
-        if chain.get("status") == "error":
-            return jsonify(chain), 500
+    from services.historify_service import historify_service
+    # Map '1' to '1m' etc if needed
+    if interval == "1": interval = "1m"
+    if interval == "5": interval = "5m"
 
-        results = _analytics_engine.calculate_gex(chain)
-        return jsonify(results), 200
-    except Exception as e:
-        logger.error(f"GEX API Error: {e}", exc_info=True)
-        return jsonify({"status": "error", "message": str(e)}), 500
+    data = historify_service.get_records(symbol, exchange, interval, limit)
+    return jsonify(data)
 
-# --- IV Smile Endpoints ---
-
-@analytics_bp.route("/iv-smile/api/smile-data", methods=["POST"])
+@analytics_bp.route("/api/v1/options/chain", methods=["GET"])
 @require_auth
-async def get_iv_smile():
-    try:
-        data = request.json or {}
-        underlying = data.get("underlying")
-        exchange = data.get("exchange", "NSE")
-        expiry = data.get("expiry_date")
+async def get_option_chain_data():
+    """Fetch option chain for a symbol and expiry."""
+    symbol = request.args.get("symbol")
+    exchange = request.args.get("exchange", "NSE")
+    expiry = request.args.get("expiry")
 
-        chain = await _data_service.get_option_chain(underlying, exchange, expiry)
-        results = _analytics_engine.calculate_iv_smile(chain)
-        return jsonify(results), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+    if not symbol or not expiry:
+        return jsonify({"status": "error", "message": "Missing symbol or expiry"}), 400
 
-# --- Max Pain Endpoints ---
+    chain = await _data_service.get_option_chain(symbol, exchange, expiry)
+    return jsonify(chain)
 
-@analytics_bp.route("/maxpain/api/data", methods=["GET"])
+@analytics_bp.route("/api/v1/options/expiry", methods=["GET"])
+@analytics_bp.route("/search/api/expiries", methods=["GET"])
 @require_auth
-async def get_max_pain():
-    try:
-        # For GET requests, params are in request.args
-        underlying = request.args.get("underlying")
-        exchange = request.args.get("exchange", "NSE")
-        expiry = request.args.get("expiry_date")
+async def get_options_expiries():
+    """Fetch available expiries for an underlying."""
+    symbol = request.args.get("symbol") or request.args.get("underlying")
+    exchange = request.args.get("exchange", "NSE")
 
-        if not underlying or not expiry:
-            return jsonify({"status": "error", "message": "Missing underlying or expiry"}), 400
+    if not symbol:
+        return jsonify({"status": "error", "message": "Missing symbol"}), 400
 
-        chain = await _data_service.get_option_chain(underlying, exchange, expiry)
-        if chain.get("status") == "error":
-            return jsonify(chain), 500
+    expiries = await _data_service.get_available_expiries(symbol, exchange)
+    return jsonify({"status": "success", "expiries": expiries})
 
-        results = _analytics_engine.calculate_max_pain(chain)
-        return jsonify(results), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+# Search and discovery routes migrated to FastAPI layer.
 
 # --- Historify Endpoints ---
 
@@ -276,3 +286,57 @@ def purge_historify():
     days = request.json.get("days", 30) if request.is_json else 30
     res = historify_service.purge_old_data(days=days)
     return jsonify(res)
+
+# --- Volatility & Straddle Endpoints ---
+
+@analytics_bp.route("/vol-surface/api/surface-data", methods=["POST"])
+@require_auth
+async def get_vol_surface_data():
+    payload = request.get_json(silent=True) or {}
+    underlying = payload.get("underlying")
+    exchange = payload.get("exchange", "NSE")
+    expiry_dates = payload.get("expiry_dates", [])
+    strike_count = int(payload.get("strike_count", 30))
+    surfaces = []
+    for expiry_date in expiry_dates:
+        chain = await _data_service.get_option_chain(underlying, exchange, expiry_date, strike_count=strike_count)
+        if chain.get("status") != "success":
+            continue
+        smile = _analytics_engine.calculate_iv_smile(chain)
+        surfaces.append({
+            "expiry_date": expiry_date,
+            "spot_price": smile.get("spot_price", chain.get("spot_price", 0)),
+            "atm_strike": smile.get("atm_strike", chain.get("atm_strike", 0)),
+            "chain": smile.get("chain", []),
+        })
+    return jsonify(_analytics_engine.calculate_vol_surface(surfaces)), 200
+
+@analytics_bp.route("/straddle-chart/api/data", methods=["GET", "POST"])
+@require_auth
+def get_straddle_chart_data():
+    payload = request.get_json(silent=True) or request.args
+    underlying = payload.get("underlying")
+    exchange = payload.get("exchange", "NSE")
+    expiry_date = payload.get("expiry_date")
+    interval = payload.get("interval", "5m")
+    days = int(payload.get("days", 1))
+    chain = asyncio.run(_data_service.get_option_chain(underlying, exchange, expiry_date))
+    if chain.get("status") != "success":
+        return jsonify({"status": "error", "message": chain.get("message", "Failed to load option chain"), "data": []}), 200
+    history_rows = _get_history_rows(underlying, exchange, interval, days)
+    return jsonify(_analytics_engine.calculate_straddle_chart(chain, history_rows)), 200
+
+@analytics_bp.route("/iv-chart/api/chart-data", methods=["GET", "POST"])
+@require_auth
+def get_iv_chart_data():
+    payload = request.get_json(silent=True) or request.args
+    underlying = payload.get("underlying")
+    exchange = payload.get("exchange", "NSE")
+    expiry_date = payload.get("expiry_date")
+    interval = payload.get("interval", "5m")
+    days = int(payload.get("days", 1))
+    chain = asyncio.run(_data_service.get_option_chain(underlying, exchange, expiry_date))
+    if chain.get("status") != "success":
+        return jsonify({"status": "error", "message": chain.get("message", "Failed to load option chain"), "data": []}), 200
+    history_rows = _get_history_rows(underlying, exchange, interval, days)
+    return jsonify(_analytics_engine.calculate_iv_chart(chain, history_rows)), 200

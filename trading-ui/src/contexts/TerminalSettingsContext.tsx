@@ -1,14 +1,27 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 
+interface IndicatorPreset {
+  name: string;
+  indicators: string[];
+}
+
 interface TerminalSettings {
   gridOpacity: number;
   noiseOpacity: number;
   scanlineIntensity: number;
   accentColor: "amber" | "teal" | "crimson";
   enableGlint: boolean;
-  chartEngine: "recharts" | "lightweight" | "tradingview";
+  chartEngine: "recharts" | "lightweight" | "tradingview" | "echarts" | "plotly";
+  chartStyle: 'candle' | 'heikin-ashi' | 'area' | 'bar' | 'renko';
+  defaultTimeframe: '1m' | '5m' | '15m' | '1h' | '1d';
+  showVolume: boolean;
+  gridVisible: boolean;
+  scaleType: 'linear' | 'logarithmic';
+  crosshairMagnet: boolean;
   perfProfile: "low" | "balanced" | "ultra";
   showWatermark: boolean;
+  defaultIndicators: string[];
+  indicatorPresets: IndicatorPreset[];
 }
 
 interface TerminalSettingsContextValue {
@@ -27,15 +40,35 @@ const defaultSettings: TerminalSettings = {
   accentColor: "amber",
   enableGlint: true,
   chartEngine: "lightweight",
+  chartStyle: "candle",
+  defaultTimeframe: "15m",
+  showVolume: true,
+  gridVisible: true,
+  scaleType: "linear",
+  crosshairMagnet: true,
   perfProfile: "balanced",
   showWatermark: true,
+  defaultIndicators: ['sma', 'rsi'],
+  indicatorPresets: [
+    { name: 'Trend-Follower', indicators: ['ema', 'bb'] },
+    { name: 'Momentum-Scalp', indicators: ['rsi', 'macd'] }
+  ],
 };
 
 export function TerminalSettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<TerminalSettings>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem(STORAGE_KEY);
-      return saved ? JSON.parse(saved) : defaultSettings;
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          return { ...defaultSettings, ...parsed };
+        } catch (e) {
+          console.error("Failed to parse settings", e);
+          return defaultSettings;
+        }
+      }
+      return defaultSettings;
     }
     return defaultSettings;
   });

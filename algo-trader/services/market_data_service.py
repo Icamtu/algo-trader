@@ -19,9 +19,9 @@ class MarketDataService:
     async def get_underlying_ltp(self, symbol: str, exchange: str = "NSE") -> float:
         """Fetch LTP for an underlying symbol."""
         try:
-            # Check if order_manager is initialized and logged in
-            if not self.order_manager or not getattr(self.order_manager, "client", None):
-                logger.warning("Order manager or client not initialized.")
+            om = self.order_manager
+            if not om:
+                logger.warning("Order manager not initialized.")
                 return 0.0
 
             # Map exchange for index quotes
@@ -29,14 +29,42 @@ class MarketDataService:
             if symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"]:
                 quote_exchange = "NSE_INDEX"
 
-            # Use order_manager's integrated data fetch (async)
-            quote = await self.order_manager.get_quote(symbol, quote_exchange)
+            # Try native broker first (AetherBridge architecture)
+            if getattr(om, "native_broker", None):
+                try:
+                    quote = await om.native_broker.get_quote(symbol, quote_exchange)
+                    if quote and isinstance(quote, dict):
+                        ltp = float(quote.get("lp", quote.get("ltp", 0)))
+                        if ltp > 0:
+                            return ltp
+                except Exception as ne:
+                    logger.debug(f"Native broker quote failed for {symbol}: {ne}")
 
-            # handle 'data' wrapper if present
-            data = quote.get("data", quote)
+            # Try paper broker (sandbox mode)
+            if getattr(om, "paper_broker", None):
+                try:
+                    quote = await om.paper_broker.get_quote(symbol, quote_exchange)
+                    if quote and isinstance(quote, dict):
+                        ltp = float(quote.get("lp", quote.get("ltp", 0)))
+                        if ltp > 0:
+                            return ltp
+                except Exception as pe:
+                    logger.debug(f"Paper broker quote failed for {symbol}: {pe}")
 
-            # support both Shoonya 'lp' and OpenAlgo 'ltp' normalized fields
-            return float(data.get("lp", data.get("ltp", 0)))
+            # Fallback: use WebSocket tick buffer's last known prices
+            try:
+                from core.context import app_context
+                from fastapi_app import manager as ws_manager
+                tick = ws_manager.last_known_ticks.get(symbol, {})
+                ltp = float(tick.get("ltp", 0))
+                if ltp > 0:
+                    logger.info(f"Using WS fallback LTP for {symbol}: {ltp}")
+                    return ltp
+            except Exception:
+                pass
+
+            logger.warning(f"Could not fetch LTP for {symbol} from any source.")
+            return 0.0
         except Exception as e:
             logger.error(f"Error fetching LTP for {symbol}: {e}")
             return 0.0
@@ -52,8 +80,33 @@ class MarketDataService:
         Fetch real-time option chain from broker.
         """
         try:
-            # 1. Get spot price
-            spot_price = await self.get_underlying_ltp(underlying, exchange)
+            # 1. Get spot price & prev close
+            om = self.order_manager
+            quote_exchange = exchange
+            if underlying in ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"]:
+                quote_exchange = "NSE_INDEX"
+
+            spot_price = 0
+            prev_close = 0
+            try:
+                # Use multi-source quote fetch
+                resp = await om.get_quote(underlying, quote_exchange)
+                if resp and resp.get("status") == "success":
+                    quote = resp.get("data", {})
+                    if quote:
+                        spot_price = float(quote.get("lp", quote.get("ltp", 0)))
+                        prev_close = float(quote.get("pc", quote.get("prev_close", spot_price)))
+            except Exception as qe:
+                logger.debug(f"Quote fetch failed for {underlying}: {qe}")
+
+            if spot_price <= 0:
+                 spot_price = await self.get_underlying_ltp(underlying, exchange)
+                 prev_close = spot_price
+
+            # Final safeguard for prev_close to avoid division by zero in UI
+            if prev_close <= 0 and spot_price > 0:
+                prev_close = spot_price
+
             if spot_price <= 0:
                  return {"status": "error", "message": "Could not fetch spot price"}
 
@@ -64,6 +117,9 @@ class MarketDataService:
             # Map NFO/BFO
             opt_exchange = "NFO" if exchange in ["NSE", "NSE_INDEX", "NFO"] else "BFO"
 
+            # Normalize expiry: ensure format DDMMMYY (strip hyphens) for consistent internal handling
+            expiry_date = expiry_date.replace("-", "").upper()
+
             # Use Shoonya's get_option_chain if available, or simulate centers
             # Note: The native openalgo-upstream code queries the db for SymToken.
             # We will use the same database for symbol discovery.
@@ -71,10 +127,10 @@ class MarketDataService:
             import sqlite3
             # Use the stabilized native database path
             # Use the stabilized native database path in Docker
-            db_path = "/app/storage/openalgo.db"
+            db_path = "/app/storage/symbols.db"
             if not os.path.exists(db_path):
                 # Fallback to local workspace paths
-                db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "database", "openalgo.db")
+                db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "database", "symbols.db")
 
             conn = sqlite3.connect(db_path)
             cur = conn.cursor()
@@ -89,7 +145,7 @@ class MarketDataService:
                 ORDER BY strike ASC
             """, (underlying.split("-")[0], expiry_db_fmt, opt_exchange))
 
-            available_strikes = [row[0] for row in cur.fetchall()]
+            available_strikes = [row[0] for row in cur.fetchall() if row[0] > 0]
             conn.close()
 
             if not available_strikes:
@@ -106,8 +162,11 @@ class MarketDataService:
             # 4. Fetch Quotes for all selected strikes
             symbols_to_fetch = []
             for s in selected_strikes:
-                ce_sym = f"{underlying}{expiry_date}C{int(s)}"
-                pe_sym = f"{underlying}{expiry_date}P{int(s)}"
+                # Format strike: Remove .0 if it's a whole number, otherwise keep decimal
+                strike_str = str(int(s)) if s == int(s) else str(s)
+
+                ce_sym = f"{underlying}{expiry_date}{strike_str}CE"
+                pe_sym = f"{underlying}{expiry_date}{strike_str}PE"
                 symbols_to_fetch.append({"symbol": ce_sym, "exchange": opt_exchange})
                 symbols_to_fetch.append({"symbol": pe_sym, "exchange": opt_exchange})
 
@@ -118,8 +177,12 @@ class MarketDataService:
 
             chain = []
             for s in selected_strikes:
-                ce_sym = f"{underlying}{expiry_date}C{int(s)}"
-                pe_sym = f"{underlying}{expiry_date}P{int(s)}"
+                # Format strike: Remove .0 if it's a whole number, otherwise keep decimal
+                strike_str = str(int(s)) if s == int(s) else str(s)
+
+                ce_sym = f"{underlying}{expiry_date}{strike_str}CE"
+                pe_sym = f"{underlying}{expiry_date}{strike_str}PE"
+
 
                 ce_q = quotes.get(ce_sym, {})
                 pe_q = quotes.get(pe_sym, {})
@@ -130,12 +193,30 @@ class MarketDataService:
                         "symbol": ce_sym,
                         "ltp": float(ce_q.get("lp", ce_q.get("ltp", 0))),
                         "oi": int(ce_q.get("oi", 0)),
+                        "volume": int(ce_q.get("v", 0)),
+                        "bid": float(ce_q.get("bp", 0)),
+                        "ask": float(ce_q.get("sp", 0)),
+                        "bid_qty": int(ce_q.get("bq", 0)),
+                        "ask_qty": int(ce_q.get("sq", 0)),
+                        "open": float(ce_q.get("o", 0)),
+                        "high": float(ce_q.get("h", 0)),
+                        "low": float(ce_q.get("l", 0)),
+                        "prev_close": float(ce_q.get("pc", 0)),
                         "lotsize": int(ce_q.get("ls", 1))
                     },
                     "pe": {
                         "symbol": pe_sym,
                         "ltp": float(pe_q.get("lp", pe_q.get("ltp", 0))),
                         "oi": int(pe_q.get("oi", 0)),
+                        "volume": int(pe_q.get("v", 0)),
+                        "bid": float(pe_q.get("bp", 0)),
+                        "ask": float(pe_q.get("sp", 0)),
+                        "bid_qty": int(pe_q.get("bq", 0)),
+                        "ask_qty": int(pe_q.get("sq", 0)),
+                        "open": float(pe_q.get("o", 0)),
+                        "high": float(pe_q.get("h", 0)),
+                        "low": float(pe_q.get("l", 0)),
+                        "prev_close": float(pe_q.get("pc", 0)),
                         "lotsize": int(pe_q.get("ls", 1))
                     }
                 })
@@ -144,6 +225,8 @@ class MarketDataService:
                 "status": "success",
                 "underlying": underlying,
                 "spot_price": spot_price,
+                "underlying_ltp": spot_price,
+                "underlying_prev_close": prev_close,
                 "expiry_date": expiry_date,
                 "atm_strike": atm_strike,
                 "chain": chain
@@ -157,10 +240,10 @@ class MarketDataService:
         """Fetch available unique expiry dates for an underlying."""
         try:
             # Use the stabilized native database path in Docker
-            db_path = "/app/storage/openalgo.db"
+            db_path = "/app/storage/symbols.db"
             if not os.path.exists(db_path):
                 # Fallback to local workspace paths
-                db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "database", "openalgo.db")
+                db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "database", "symbols.db")
 
             conn = sqlite3.connect(db_path)
             cur = conn.cursor()
@@ -190,4 +273,30 @@ class MarketDataService:
             return sorted(list(set(formatted)))
         except Exception as e:
             logger.error(f"Error fetching expiries for {underlying}: {e}")
+            return []
+
+    async def get_available_underlyings(self, exchange: str = "NSE") -> List[str]:
+        """Fetch all unique underlying names for an exchange."""
+        try:
+            db_path = "/app/storage/symbols.db"
+            if not os.path.exists(db_path):
+                db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "database", "symbols.db")
+
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+
+            opt_exchange = "NFO" if exchange in ["NSE", "NSE_INDEX", "NFO"] else "BFO"
+
+            cur.execute("""
+                SELECT DISTINCT name FROM symtoken
+                WHERE exchange = ?
+                ORDER BY name ASC
+            """, (opt_exchange,))
+
+            underlyings = [row[0] for row in cur.fetchall()]
+            conn.close()
+
+            return underlyings
+        except Exception as e:
+            logger.error(f"Error fetching underlyings for {exchange}: {e}")
             return []

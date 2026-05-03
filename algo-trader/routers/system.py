@@ -16,6 +16,7 @@ from utils.latency_tracker import latency_tracker
 from services.alert_service import alert_service
 
 router = APIRouter(tags=["System"])
+router_no_prefix = APIRouter(tags=["System"])
 logger = logging.getLogger(__name__)
 
 _terminal_rate: dict = {}
@@ -34,10 +35,11 @@ class TestAlertRequest(BaseModel):
 
 @router.get("/health")
 @router.get("/system/health")
+@router.get("/health/api/current")
 async def get_system_health():
     """GET /api/v1/health & /api/v1/system/health - Unified health check."""
     health = {
-        "status": "healthy",
+        "status": _heartbeat_data.get("status", "healthy"),
         "timestamp": datetime.now().isoformat(),
         "engine": "AetherDesk Prime v2",
         "checks": {
@@ -45,10 +47,12 @@ async def get_system_health():
             "drift": "synced"
         }
     }
-    latest_health = app_context.get("latest_health", {})
-    if latest_health:
-        health["checks"].update(latest_health.get("checks", {}))
-        health["status"] = latest_health.get("status", "healthy")
+
+    # Merge heartbeat data checks
+    heartbeat_checks = _heartbeat_data.get("checks", {})
+    if heartbeat_checks:
+        health["checks"].update(heartbeat_checks)
+
     return health
 
 @router.get("/system/heartbeat")
@@ -184,6 +188,7 @@ async def get_telemetry():
         logger.error(f"Telemetry API Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/pnl")
 @router.get("/telemetry/pnl")
 async def get_telemetry_pnl():
     """Returns global PnL summary for the dashboard."""
@@ -323,3 +328,90 @@ async def get_mode_status():
     except Exception as e:
         logger.error(f"Error getting mode status: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/settings")
+async def get_settings():
+    """GET /api/v1/settings - Fetch system-level configuration."""
+    try:
+        db_logger = get_trade_logger()
+        settings = db_logger.get_system_settings()
+        # Ensure we return at least the expected keys for the frontend
+        return {
+            "status": "success",
+            "decision_mode": settings.get("decision_mode", "human"),
+            "llm_model": settings.get("llm_model", "qwen3.5-claude:latest"),
+            "provider": settings.get("provider", "ollama"),
+            "agent_enabled": settings.get("agent_enabled", "true").lower() == "true",
+            "agent_error_reason": settings.get("agent_error_reason", "")
+        }
+    except Exception as e:
+        logger.error(f"Error fetching settings: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "decision_mode": "human",
+            "llm_model": "qwen3.5-claude:latest",
+            "provider": "ollama",
+            "agent_enabled": True,
+            "agent_error_reason": ""
+        }
+
+@router.put("/settings")
+async def update_settings(data: Dict[str, Any] = Body(...)):
+    """PUT /api/v1/settings - Update system-level configuration."""
+    try:
+        db_logger = get_trade_logger()
+        success = True
+        for key, value in data.items():
+            if not db_logger.update_system_setting(key, str(value)):
+                success = False
+
+        # After update, we might need to notify the decision agent
+        # (This would be handled by the agent itself on next poll or via signal)
+
+        return {"status": "success" if success else "partial_success"}
+    except Exception as e:
+        logger.error(f"Error updating settings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/apikey")
+@router_no_prefix.get("/apikey")
+async def get_system_apikey():
+    """GET /apikey - Returns the engine's unified API key."""
+    return {"api_key": os.getenv("API_KEY", "AetherDesk_Unified_Key_2026")}
+
+@router.get("/brokers")
+async def get_brokers_registry():
+    """GET /api/v1/brokers - Returns supported native broker adapters."""
+    active_broker = os.getenv("AETHERBRIDGE_ACTIVE_BROKER", "shoonya").lower()
+
+    brokers = [
+        {
+            "id": "shoonya",
+            "name": "Shoonya (Finvasia)",
+            "version": "Native_v1.0",
+            "supported_exchanges": ["NSE", "BSE", "NFO", "MCX"],
+            "type": "IN_STOCK",
+            "description": "Zero-latency native adapter for Shoonya.",
+            "active": active_broker == "shoonya"
+        },
+        {
+            "id": "zerodha",
+            "name": "Zerodha KiteConnect",
+            "version": "Native_v5.1",
+            "supported_exchanges": ["NSE", "BSE", "NFO", "MCX"],
+            "type": "IN_STOCK",
+            "description": "Direct connectivity via KiteConnect SDK.",
+            "active": active_broker == "zerodha"
+        },
+        {
+            "id": "paper",
+            "name": "AetherBridge Paper",
+            "version": "v1.0",
+            "supported_exchanges": ["VIRTUAL"],
+            "type": "SIMULATION",
+            "description": "Risk-free virtual trading node.",
+            "active": active_broker == "paper"
+        }
+    ]
+    return {"brokers": brokers, "count": len(brokers)}

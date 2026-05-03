@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppModeStore } from "@/stores/appModeStore";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,7 +61,8 @@ export default function AssetVault() {
     setLoading(true);
     try {
       const res = await algoApi.listVaultAssets(selectedType || undefined);
-      setAssets(res.assets || []);
+      const data = res?.data || res;
+      setAssets(Array.isArray(data?.assets) ? data.assets : []);
     } catch (err) {
       toast({ title: "VAULT_FETCH_ERR", description: String(err), variant: "destructive" });
     } finally {
@@ -81,7 +82,8 @@ export default function AssetVault() {
     setLoading(true);
     try {
       const res = await algoApi.searchVaultAssets(searchTerm);
-      setAssets(res.assets || []);
+      const data = res?.data || res;
+      setAssets(Array.isArray(data?.assets) ? data.assets : []);
     } catch (err) {
       toast({ title: "SEARCH_ERR", description: String(err), variant: "destructive" });
     } finally {
@@ -223,12 +225,12 @@ export default function AssetVault() {
                     </p>
 
                     <div className="flex flex-wrap gap-1 mt-auto">
-                      {asset.tags?.slice(0, 3).map(tag => (
+                      {Array.isArray(asset.tags) && asset.tags.slice(0, 3).map(tag => (
                         <span key={tag} className="text-[7px] font-mono font-black text-muted-foreground/30 border border-border/20 px-1.5 py-0.5 bg-card/40 uppercase">
                           {tag}
                         </span>
                       ))}
-                      {asset.tags?.length > 3 && (
+                      {Array.isArray(asset.tags) && asset.tags.length > 3 && (
                         <span className="text-[7px] font-mono font-black text-muted-foreground/20 px-1.5 py-0.5 uppercase">
                           +{asset.tags.length - 3}
                         </span>
@@ -296,7 +298,7 @@ export default function AssetVault() {
                     <div className="p-3 bg-card/5 border border-border/20">
                        <span className="text-[8px] font-mono font-black text-muted-foreground/40 uppercase block mb-2">Alpha_Tags</span>
                        <div className="flex flex-wrap gap-2">
-                         {selectedAsset.tags?.map(tag => (
+                         {Array.isArray(selectedAsset.tags) && selectedAsset.tags.map(tag => (
                            <Badge key={tag} className="bg-primary/5 text-primary border-primary/20 text-[8px] uppercase">{tag}</Badge>
                          ))}
                        </div>

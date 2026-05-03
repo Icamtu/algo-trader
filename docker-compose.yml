@@ -43,7 +43,7 @@ services:
       retries: 5
 
   browser:
-    image: ghcr.io/browserless/chromium:1.61-puppeteer-21.4.1
+    image: ghcr.io/browserless/chromium:latest
     container_name: browserless
     restart: always
     ports:
@@ -87,10 +87,9 @@ services:
         condition: service_healthy
     volumes:
       - ./algo-trader:/app
-      - ./openalgo/db:/app/storage
+      - ./database/db:/app/storage
       - ./openalgo-upstream:/app/openalgo-upstream:ro
     environment:
-      - OPENALGO_BASE_URL=http://openalgo-web:5000
       - PORT=18788
       - TRADES_DB_PATH=/app/storage/trades.db
       - HISTORIFY_DB_PATH=/app/storage/historify.duckdb
@@ -99,13 +98,10 @@ services:
       - TS_DB_USER=postgres
       - TS_DB_NAME=postgres
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - OPENALGO_DB_PATH=/app/storage/openalgo.db
       - RISK_MAX_DAILY_LOSS=${RISK_MAX_DAILY_LOSS:-50000}
       - RISK_MAX_DAILY_TRADES=${RISK_MAX_DAILY_TRADES:-200}
       - TAILSCALE_AUTH_KEY=${TAILSCALE_AUTH_KEY}
       - SIMULATION_ENABLED=${SIMULATION_ENABLED:-false}
-      - OPENALGO_WS_URL=ws://openalgo-web:5000/ws
-      - OPENALGO_API_KEY=${API_KEY}
       - DEBUG_AUTH=${DEBUG_AUTH:-false}
       # AetherBridge native broker wiring
       - AETHERBRIDGE_ACTIVE_BROKER=${AETHERBRIDGE_ACTIVE_BROKER:-paper}
@@ -298,7 +294,7 @@ services:
 
   # --- INSTITUTIONAL DATA STORE ---
   timescaledb:
-    image: timescale/timescaledb:2.11.0-pg15
+    image: timescale/timescaledb:2.26.3-pg15
     container_name: timescaledb
     restart: always
     environment:
@@ -339,7 +335,6 @@ services:
       - VITE_SUPABASE_ANON_KEY=${ANON_KEY}
       - VITE_API_HOST=${TAILSCALE_IP}
       - TAILSCALE_IP=${TAILSCALE_IP}
-      - VITE_OPENALGO_API_KEY=${API_KEY}
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:80/ || exit 1"]
       interval: 30s
@@ -363,7 +358,7 @@ services:
       - no-new-privileges:true
 
   ui-builder:
-    image: oven/bun:1.1.0
+    image: oven/bun:latest
     container_name: ui-builder
     user: "0:0"
     working_dir: /app
@@ -373,7 +368,6 @@ services:
       - VITE_SUPABASE_ANON_KEY=${ANON_KEY}
       - VITE_API_HOST=${TAILSCALE_IP}
       - TAILSCALE_IP=${TAILSCALE_IP}
-      - VITE_OPENALGO_API_KEY=${API_KEY}
     volumes:
       - ./trading-ui:/app
     command: ["sh", "-c", "bun install && bun x vite build && bun x vite build --watch"]
@@ -427,7 +421,6 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - OPENCLAW_GATEWAY_CONTROL_UI_DANGEROUSLY_DISABLE_SECURE_CONTEXT_CHECK=true
-      - OPENALGO_API_URL=http://algo_engine:18788
       - DB_PATH=/app/db/trades.db
       - OLLAMA_BASE_URL=http://local_ollama:11434
       - LOCAL_LLM_MODEL=qwen3.5-claude:latest
@@ -441,7 +434,7 @@ services:
       - 8.8.8.8
       - 1.1.1.1
     volumes:
-      - ./algo-trader/storage:/app/db:ro
+      - ./database/db:/app/db:ro
       - openalgo_log:/app/log:ro
       - openalgo_strategies:/app/strategies:ro
       - ./openclaw:/home/node/.openclaw:rw
@@ -480,7 +473,7 @@ services:
       - no-new-privileges:true
 
   grafana:
-    image: grafana/grafana:10.0.0
+    image: grafana/grafana:11.0.0
     container_name: grafana
     restart: always
     ports:
@@ -503,6 +496,7 @@ services:
     ports:
       - "3100:3100"
     volumes:
+      - ./observability/loki/data:/loki
       - ./observability/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
     command: -config.file=/etc/loki/local-config.yaml
     networks:
@@ -541,6 +535,7 @@ services:
 
 networks:
   trading_net:
+    name: trading_net
     driver: bridge
 
 volumes:

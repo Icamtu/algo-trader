@@ -48,6 +48,11 @@ class BaseBroker(abc.ABC):
         pass
 
     @abc.abstractmethod
+    async def get_orders(self) -> List[NormalizedOrder]:
+        """Retrieves current order book."""
+        pass
+
+    @abc.abstractmethod
     async def get_positions(self) -> List[NormalizedPosition]:
         """Retrieves currently open positions."""
         pass
@@ -61,6 +66,41 @@ class BaseBroker(abc.ABC):
     async def subscribe_ticks(self, symbols: List[str]):
         """Subscribes to real-time market data ticks."""
         pass
+
+    @abc.abstractmethod
+    async def get_quote(self, symbol: str, exchange: str = "NSE") -> Dict[str, Any]:
+        """Fetches a real-time quote for a single symbol."""
+        pass
+
+    async def get_multi_quotes(self, symbols: List[Dict[str, str]]) -> Dict[str, Any]:
+        """
+        Fetches real-time quotes for multiple symbols.
+        Default implementation uses concurrent get_quote calls.
+        """
+        import asyncio
+        tasks = []
+        for item in symbols:
+            if isinstance(item, dict):
+                sym = item.get("symbol")
+                exch = item.get("exchange", "NSE")
+            else:
+                sym = item
+                exch = "NSE"
+
+            if sym:
+                tasks.append(self.get_quote(sym, exch))
+
+        if not tasks:
+            return {}
+
+        quotes = await asyncio.gather(*tasks, return_exceptions=True)
+        results = {}
+        for i, q in enumerate(quotes):
+            if isinstance(q, dict) and q:
+                symbol = symbols[i].get("symbol")
+                if symbol:
+                    results[symbol] = q
+        return results
 
     def register_tick_callback(self, callback: Any):
         """Registers a callback for incoming market data ticks."""

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { OptionChainResponse, OptionStrike } from '@/integrations/openalgo/types/option-chain'
+import type { OptionChainResponse, OptionStrike } from '@/integrations/aetherdesk/types/option-chain'
 import { useOptionChainPolling } from './useOptionChainPolling'
 import { useMarketData } from './useMarketData'
 
@@ -65,7 +65,7 @@ export function useOptionChainLive(
   const wsSymbols = useMemo(() => {
     const symbols: Array<{ symbol: string; exchange: string }> = []
     const underlyingExch = getUnderlyingExchange(underlying, optionExchange)
-    
+
     if (underlyingExch === 'CRYPTO') {
       symbols.push({ symbol: `${underlying}USDFUT`, exchange: underlyingExch })
     } else {
@@ -107,7 +107,7 @@ export function useOptionChainLive(
 
     const mergedChain: OptionStrike[] = polledData.chain.map((strike) => {
       const newStrike = { ...strike }
-      
+
       const updateLeg = (leg: 'ce' | 'pe') => {
         const item = strike[leg]
         if (item?.symbol) {

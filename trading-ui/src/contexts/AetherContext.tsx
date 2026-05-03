@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "./AuthContext";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 
 // Helper to avoid repetitive JSON.stringify
 function json_stringify(obj: any) {
@@ -32,6 +32,7 @@ interface AetherContextType {
     risk_mult: number;
     active_trades_count: number;
     last_update: number;
+    equity?: number;
   };
   latency: number;
   connectionStatus: "connected" | "disconnected" | "connecting" | "error";
@@ -54,7 +55,8 @@ export function AetherProvider({ children }: { children: ReactNode }) {
     pos_mult: 1.0,
     risk_mult: 1.0,
     active_trades_count: 0,
-    last_update: Date.now() / 1000
+    last_update: Date.now() / 1000,
+    equity: 0
   });
   const [latency, setLatency] = useState(0);
   const [riskStatus, setRiskStatus] = useState<any>(null);
@@ -117,17 +119,23 @@ export function AetherProvider({ children }: { children: ReactNode }) {
             } else if (data.type === "tick_batch") {
               setTicks((prev) => {
                 const next = { ...prev };
-                data.payload.forEach((tick: Tick) => {
-                  next[tick.symbol] = tick;
-                });
+                if (Array.isArray(data.payload)) {
+                  data.payload.forEach((tick: Tick) => {
+                    if (tick && tick.symbol) {
+                      next[tick.symbol] = tick;
+                    }
+                  });
+                }
                 return next;
               });
             } else if (data.type === "risk_update") {
               setRiskStatus(data.payload);
             } else if (data.type === "matrix_update") {
-              setStrategyMatrix(data.payload.strategies);
+              setStrategyMatrix(Array.isArray(data.payload?.strategies) ? data.payload.strategies : []);
             } else if (data.type === "logs") {
-              setLogs(data.data);
+              if (Array.isArray(data.data)) {
+                setLogs(data.data);
+              }
             }
           } catch (e) {
             console.warn("Fragmented JSON chunk skipped:", msg.substring(0, 50));
@@ -155,7 +163,7 @@ export function AetherProvider({ children }: { children: ReactNode }) {
     const fetchConfig = async () => {
       try {
         const config = await algoApi.getTickerConfig();
-        if (config?.ticker_symbols) {
+        if (config?.ticker_symbols && Array.isArray(config.ticker_symbols)) {
           const symbols = config.ticker_symbols.map((t: any) => t.symbol);
           setTickerSymbols(symbols);
 

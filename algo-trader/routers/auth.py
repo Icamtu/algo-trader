@@ -49,7 +49,7 @@ async def get_broker_config():
         logger.error(f"Broker config error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/api/v1/brokers/shoonya/auth")
+@router.post("/brokers/shoonya/auth")
 async def shoonya_auth_init(request: Request):
     """FastAPI port of /api/v1/brokers/shoonya/auth."""
     # Require admin role for broker credential writes
@@ -66,23 +66,23 @@ async def shoonya_auth_init(request: Request):
         logger.error(f"Shoonya Auth Init Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/api/auth/callback/shoonya")
+@router.get("/auth/callback/shoonya")
 async def shoonya_callback(code: str = Query(None)):
     """FastAPI port of /api/auth/callback/shoonya."""
     if not code:
-        return RedirectResponse(url=f"{UI_BASE_URL}/openalgo/broker?status=error&message=missing_code")
+        return RedirectResponse(url=f"{UI_BASE_URL}/aetherdesk/broker?status=error&message=missing_code")
 
     try:
         success = finalize_shoonya_session(code)
         if success:
-            return RedirectResponse(url=f"{UI_BASE_URL}/openalgo/broker?status=success&message=shoonya_linked")
+            return RedirectResponse(url=f"{UI_BASE_URL}/aetherdesk/broker?status=success&message=shoonya_linked")
         else:
-            return RedirectResponse(url=f"{UI_BASE_URL}/openalgo/broker?status=error&message=auth_failed")
+            return RedirectResponse(url=f"{UI_BASE_URL}/aetherdesk/broker?status=error&message=auth_failed")
     except Exception as e:
         logger.error(f"Critical failure in Shoonya callback: {e}")
-        return RedirectResponse(url=f"{UI_BASE_URL}/openalgo/broker?status=error&message=internal_error")
+        return RedirectResponse(url=f"{UI_BASE_URL}/aetherdesk/broker?status=error&message=internal_error")
 
-@router.post("/api/v1/brokers/zerodha/auth")
+@router.post("/brokers/zerodha/auth")
 async def zerodha_auth_init(request: Request):
     """
     Generate Zerodha (KiteConnect) login URL.
@@ -109,21 +109,21 @@ async def zerodha_auth_init(request: Request):
         logger.error(f"Zerodha Auth Init Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/api/auth/callback/zerodha")
+@router.get("/auth/callback/zerodha")
 async def zerodha_callback(request: Request, request_token: str = Query(None)):
     """
     Callback for Zerodha KiteConnect OAuth.
     """
     if not request_token:
-        return RedirectResponse(url=f"{UI_BASE_URL}/openalgo/broker?status=error&message=missing_token")
+        return RedirectResponse(url=f"{UI_BASE_URL}/aetherdesk/broker?status=error&message=missing_token")
 
     try:
         from utils.finalize_zerodha_auth import finalize_zerodha_session
         success = await finalize_zerodha_session(request_token)
         if success:
-             return RedirectResponse(url=f"{UI_BASE_URL}/openalgo/broker?status=success&message=zerodha_linked")
+             return RedirectResponse(url=f"{UI_BASE_URL}/aetherdesk/broker?status=success&message=zerodha_linked")
         else:
-             return RedirectResponse(url=f"{UI_BASE_URL}/openalgo/broker?status=error&message=auth_failed")
+             return RedirectResponse(url=f"{UI_BASE_URL}/aetherdesk/broker?status=error&message=auth_failed")
     except Exception as e:
         logger.error(f"Critical failure in Zerodha callback: {e}")
-        return RedirectResponse(url=f"{UI_BASE_URL}/openalgo/broker?status=error&message=internal_error")
+        return RedirectResponse(url=f"{UI_BASE_URL}/aetherdesk/broker?status=error&message=internal_error")

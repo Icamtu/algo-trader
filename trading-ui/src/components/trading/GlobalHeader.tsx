@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, memo } from "react";
 import { Link } from "react-router-dom";
-import { ChevronDown, LogOut, Radio, Power, PowerOff, Brain, Cpu, ShieldAlert, Zap, Skull, Settings, Bell, Wifi, WifiOff, Palette, Clock } from "lucide-react";
+import { Activity, Bot, ChevronDown, Command, Gauge, Landmark, LogOut, Radio, Power, PowerOff, Brain, Cpu, ShieldAlert, Zap, Skull, Settings, Bell, Wifi, WifiOff, Palette, Clock, Search, UserRound, Wallet } from "lucide-react";
 import { algoApi } from "@/features/aetherdesk/api/client";
 import { BrokerManagementPanel } from "./BrokerManagementPanel";
 import { UnifiedSettings } from "./UnifiedSettings";
@@ -19,6 +19,25 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useAether } from "@/contexts/AetherContext";
 
+interface HeaderMarket {
+  name: string;
+  value: number;
+  change: number;
+  status?: string;
+}
+
+interface HeaderAlert {
+  id?: string | number;
+  title?: string;
+  type?: string;
+  message?: string;
+  description?: string;
+}
+
+interface ServiceHealth {
+  status?: string;
+}
+
 export const GlobalHeader = memo(function GlobalHeader() {
   const { toast } = useToast();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -36,8 +55,8 @@ export const GlobalHeader = memo(function GlobalHeader() {
     last_update: Date.now() / 1000
   });
   const tradingMode = useTradingMode();
-  const [marketData, setMarketData] = useState<any[]>([]);
-  const [alerts, setAlerts] = useState<any[]>([]);
+  const [marketData, setMarketData] = useState<HeaderMarket[]>([]);
+  const [alerts, setAlerts] = useState<HeaderAlert[]>([]);
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const { user, signOut } = useAuth();
   const initials = user?.user_metadata?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() || user?.email?.slice(0, 2).toUpperCase() || "?";
@@ -138,6 +157,25 @@ export const GlobalHeader = memo(function GlobalHeader() {
       variant: engineLive ? "destructive" : "default",
     });
   };
+
+  const healthyServices = systemHealth
+    ? Object.values(systemHealth).filter((service: ServiceHealth) => service?.status === "HEALTHY").length
+    : 0;
+  const serviceTotal = systemHealth ? Object.keys(systemHealth).length : 0;
+  const healthLabel = serviceTotal > 0 ? `${healthyServices}/${serviceTotal}` : isConnected ? "LIVE" : "OFFLINE";
+  const headerMarkets =
+    tickerSymbols.length > 0
+      ? tickerSymbols.slice(0, 3).map((sym) => {
+          const tick = ticks[sym];
+          return {
+            name: sym,
+            value: tick?.ltp || 0,
+            change: tick?.chg_pct ? parseFloat(tick.chg_pct) : 0,
+          };
+        })
+      : marketData.slice(0, 3);
+  const iconButtonClass =
+    "size-9 inline-flex items-center justify-center rounded-md border border-white/10 bg-white/[0.03] text-white/60 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/70";
 
   return (
     <>

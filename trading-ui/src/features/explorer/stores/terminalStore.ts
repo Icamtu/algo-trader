@@ -44,7 +44,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     addLog('EXEC', `> ${command}`);
 
     try {
-      const { algoApi } = await import('@/features/openalgo/api/client');
+      const { algoApi } = await import('@/features/aetherdesk/api/client');
       const response = await algoApi.sendTerminalCommand(command);
 
       if (response.status === 'EXEC_SUCCESS') {

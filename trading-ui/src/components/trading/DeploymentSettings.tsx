@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StrategySelectionDialog } from './StrategySelectionDialog';
-import { algoApi } from '@/features/openalgo/api/client';
+import { algoApi } from '@/features/aetherdesk/api/client';
 import { toast } from 'sonner';
 
 export function DeploymentSettings() {

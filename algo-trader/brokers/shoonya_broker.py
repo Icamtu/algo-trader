@@ -149,6 +149,77 @@ class ShoonyaBroker(BaseBroker):
             error_msg = res.get('emsg', 'Unknown Execution Error')
             raise Exception(f"Shoonya Order Placement Failed: {error_msg}")
 
+    async def cancel_order(self, broker_order_id: str) -> bool:
+        """
+        Cancels an existing order in Shoonya.
+        """
+        await self._limiter.wait()
+        res = await asyncio.to_thread(
+            self.api.cancel_order,
+            orderno=broker_order_id
+        )
+        if res and res.get('stat') == 'Ok':
+            logger.info(f"Shoonya Order Cancelled: {broker_order_id}")
+            return True
+        else:
+            logger.error(f"Shoonya Order Cancellation Failed: {res.get('emsg')}")
+            return False
+
+    async def get_orders(self) -> List[NormalizedOrder]:
+        """
+        Retrieves the Shoonya order book and normalizes it.
+        """
+        await self._limiter.wait()
+        res = await asyncio.to_thread(self.api.get_order_book)
+        orders = []
+        if isinstance(res, list):
+            for o in res:
+                # Map action
+                action = OrderAction.BUY if o.get('trantype') == 'B' else OrderAction.SELL
+
+                # Map status
+                shoonya_status = o.get('status', '').lower()
+                status = OrderStatus.PENDING
+                if shoonya_status == 'complete':
+                    status = OrderStatus.COMPLETE
+                elif shoonya_status == 'rejected':
+                    status = OrderStatus.REJECTED
+                elif shoonya_status == 'cancelled':
+                    status = OrderStatus.CANCELLED
+
+                # Map product
+                rev_prd_map = {'I': ProductType.MIS, 'M': ProductType.NRML, 'C': ProductType.CNC}
+
+                orders.append(NormalizedOrder(
+                    order_id=o.get('norenordno'),
+                    broker_order_id=o.get('norenordno'),
+                    symbol=o.get('tsym'),
+                    action=action,
+                    quantity=int(o.get('qty', 0)),
+                    order_type=OrderType.MARKET if o.get('prctyp') == 'MKT' else OrderType.LIMIT,
+                    price=float(o.get('prc', 0.0)),
+                    product=rev_prd_map.get(o.get('prd'), ProductType.MIS),
+                    status=status,
+                    strategy=o.get('remarks', 'General'),
+                    timestamp=datetime.strptime(o.get('norentm'), '%H:%M:%S %d-%m-%Y') if o.get('norentm') else datetime.now(),
+                    raw_response=o
+                ))
+        return orders
+
+    async def get_quote(self, symbol: str, exchange: str = "NSE") -> Dict[str, Any]:
+        """
+        Fetches a real-time quote for a symbol.
+        """
+        await self._limiter.wait()
+        res = await asyncio.to_thread(
+            self.api.get_quotes,
+            exch=exchange,
+            tsym=symbol
+        )
+        if res and res.get('stat') == 'Ok':
+            return res
+        return {}
+
     async def get_positions(self) -> List[NormalizedPosition]:
         await self._limiter.wait()
         res = await asyncio.to_thread(self.api.get_positions)
@@ -178,6 +249,69 @@ class ShoonyaBroker(BaseBroker):
                 "total": float(res.get('cash', 0.0)) + float(res.get('marginused', 0.0))
             }
         return {"available": 0.0, "used": 0.0, "total": 0.0}
+
+    async def get_historical_candles(
+        self,
+        symbol: str,
+        exchange: str,
+        interval: str,
+        start_time: datetime,
+        end_time: datetime
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch historical OHLCV data from Shoonya.
+        Intervals: 1, 3, 5, 10, 15, 30, 60, 120, 240, D
+        """
+        await self._limiter.wait()
+
+        # Map interval
+        # Normalized: 1m, 5m, 1h, D
+        int_map = {
+            "1m": "1",
+            "3m": "3",
+            "5m": "5",
+            "10m": "10",
+            "15m": "15",
+            "30m": "30",
+            "60m": "60",
+            "1h": "60",
+            "D": "D"
+        }
+        shoonya_interval = int_map.get(interval, "5")
+
+        # Shoonya expects epoch as string
+        start_ts = str(int(start_time.timestamp()))
+        end_ts = str(int(end_time.timestamp()))
+
+        logger.info(f"Shoonya: Fetching history for {symbol} | {interval} | {start_time} -> {end_time}")
+
+        res = await asyncio.to_thread(
+            self.api.get_time_price_series,
+            exch=exchange,
+            tsym=symbol,
+            starttime=start_ts,
+            endtime=end_ts,
+            interval=shoonya_interval
+        )
+
+        candles = []
+        if isinstance(res, list):
+            for r in res:
+                if 'ssboe' in r:
+                    candles.append({
+                        "timestamp": int(r['ssboe']),
+                        "open": float(r['into']),
+                        "high": float(r['inth']),
+                        "low": float(r['intl']),
+                        "close": float(r['intc']),
+                        "volume": int(r.get('intv', 0)),
+                        "oi": int(r.get('intoi', 0))
+                    })
+            # Shoonya returns data in descending order usually, or it might vary.
+            # We sort by timestamp ascending for consistency.
+            candles.sort(key=lambda x: x['timestamp'])
+
+        return candles
 
     async def subscribe_ticks(self, symbols: List[str]):
         if not self._ws_connected:

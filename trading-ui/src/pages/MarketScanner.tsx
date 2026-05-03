@@ -4,7 +4,7 @@ import {
   Search, RefreshCw, Brain, PlayCircle, Settings2,
   Terminal, Fingerprint, Radar, Target, Cpu, Activity
 } from "lucide-react";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { IndustrialValue } from "@/components/trading/IndustrialValue";
 import { useAether } from "@/contexts/AetherContext";
@@ -45,7 +45,10 @@ export default function MarketScanner() {
     setShowAll(false);
     try {
       const allResults = await Promise.all(
-        selectedIndices.map(idx => algoApi.runScanner(idx).then(res => res.results || []))
+        selectedIndices.map(idx => algoApi.runScanner(idx).then(res => {
+          const data = res?.data || res;
+          return Array.isArray(data?.results) ? data.results : [];
+        }))
       );
       setResults(allResults.flat());
       toast({ title: "SCAN_COMPLETE", description: "RADAR_MATCH_STORED" });

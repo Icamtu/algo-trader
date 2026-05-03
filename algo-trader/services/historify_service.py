@@ -8,7 +8,6 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from execution.openalgo_client import client as openalgo
 import data.historify_db as hdb
 from data.history_manager import HistoryManager
 
@@ -24,18 +23,23 @@ class HistorifyService:
     def __init__(self):
         self.broadcast_callback = None
         self.history_manager = HistoryManager()
+        self.order_manager = None
         self.start_time = time.time()
 
     def set_broadcast_callback(self, callback):
         """Injects a callback for real-time progress broadcasting."""
         self.broadcast_callback = callback
 
+    def set_order_manager(self, order_manager):
+        """Injects the order manager for native broker access."""
+        self.order_manager = order_manager
+
     def _get_openalgo_db_path(self) -> Optional[str]:
         candidates = [
             os.getenv("OPENALGO_DB_PATH"),
-            "/app/storage/openalgo.db",
-            "/app/db/openalgo.db",
-            "/home/ubuntu/trading-workspace/openalgo/db/openalgo.db",
+            "/app/storage/symbols.db",
+            "/app/db/symbols.db",
+            "/home/ubuntu/trading-workspace/openalgo/db/symbols.db",
         ]
         for path in candidates:
             if path and os.path.exists(path):
@@ -78,14 +82,10 @@ class HistorifyService:
             except Exception as e:
                 logger.warning(f"Historify symbol validation via master contract failed: {e}")
 
-        quote = openalgo.get_quote(normalized_symbol, normalized_exchange)
-        if quote.get("status") == "success":
-            return {"status": "success", "symbol": normalized_symbol, "exchange": normalized_exchange}
-
-        return {
-            "status": "error",
-            "message": f"Symbol {normalized_symbol} failed validation for {normalized_exchange}. Refresh master contracts and try again."
-        }
+        # Phase 6: OpenAlgo quote validation is decommissioned.
+        # We rely on local contract master or just attempt the fetch.
+        logger.warning(f"Historify: Skipping legacy quote validation for {normalized_symbol}")
+        return {"status": "success", "symbol": normalized_symbol, "exchange": normalized_exchange}
 
     def _normalize_interval(self, interval: str) -> str:
         """Standardizes interval names to OpenAlgo/DuckDB storage format (1m, 5m, 1h, D)."""
@@ -229,35 +229,51 @@ class HistorifyService:
 
                     logger.info(f"Historify Request: {current_symbol} | {api_interval} | {api_start} -> {api_end}")
 
-                    # Fetch from OpenAlgo standard history API
-                    res = openalgo.get_history(
-                        symbol=current_symbol,
-                        exchange=current_exchange,
-                        interval=api_interval,
-                        start_date=api_start,
-                        end_date=api_end
-                    )
-
+                    # Phase 6: AetherBridge Native First, then yfinance fallback.
                     data_list = []
-                    if res.get("status") == "success" and "data" in res:
-                        data_list = res["data"]
-                        logger.info(f"Historify Data Received: {current_symbol} | Records: {len(data_list)}")
-                    else:
-                        logger.warning(f"Historify OpenAlgo Failure: {current_symbol} | Status: {res.get('status')} | Message: {res.get('message')}")
+                    provider = "NONE"
 
-                        # Fallback to yfinance if Daily or OpenAlgo failed
-                        if interval.lower() in ['d', 'daily', '1d'] or res.get("status") != "success":
-                            logger.info(f"Historify Fallback Triggered (yfinance) for {current_symbol}")
-                            data_list = self.history_manager._fetch_from_yfinance(
-                                current_symbol,
+                    # 1. Native Broker (Shoonya)
+                    if self.order_manager and self.order_manager.native_broker:
+                        try:
+                            logger.info(f"Historify Triggered (Native: {self.order_manager.native_broker.broker_id}) for {current_symbol}")
+                            # Need to handle async call from thread
+                            from datetime import datetime as dt_class
+                            start_dt = dt_class.strptime(api_start, "%Y-%m-%d")
+                            end_dt = dt_class.strptime(api_end, "%Y-%m-%d")
+
+                            # Bridging async to sync in thread
+                            import asyncio
+                            native_candles = asyncio.run(self.order_manager.native_broker.get_historical_candles(
+                                symbol=current_symbol,
+                                exchange=current_exchange,
                                 interval=interval,
-                                start=api_start,
-                                end=api_end
-                            )
-                            if data_list:
-                                logger.info(f"Historify Fallback SUCCESS: {current_symbol} | Records: {len(data_list)}")
-                            else:
-                                logger.error(f"Historify Fallback FAILED for {current_symbol}")
+                                start_time=start_dt,
+                                end_time=end_dt
+                            ))
+
+                            if native_candles:
+                                data_list = native_candles
+                                provider = f"Native:{self.order_manager.native_broker.broker_id}"
+                                logger.info(f"Historify Native SUCCESS: {current_symbol} | Records: {len(data_list)}")
+                        except Exception as ne:
+                            logger.error(f"Historify Native FAILED for {current_symbol}: {ne}")
+
+                    # 2. yfinance Fallback
+                    if not data_list:
+                        logger.info(f"Historify Triggered (yfinance) for {current_symbol}")
+                        data_list = self.history_manager._fetch_from_yfinance(
+                            current_symbol,
+                            interval=interval,
+                            start=api_start,
+                            end=api_end
+                        )
+                        if data_list:
+                            logger.info(f"Historify Fallback SUCCESS: {current_symbol} | Records: {len(data_list)}")
+                            provider = "YahooFinance"
+                        else:
+                            logger.error(f"Historify Fallback FAILED for {current_symbol}")
+                            provider = "FAILED"
 
                     if data_list:
                         # Convert to DataFrame
@@ -279,7 +295,6 @@ class HistorifyService:
                     else:
                         logger.warning(f"Historify: No data available for {current_symbol} after all providers attempted.")
 
-                    provider = "OpenAlgo" if res.get("status") == "success" else "YahooFinance"
                     completed += 1
                     # Update progress in DB
                     hdb.upsert_job(job_id, "RUNNING", total_symbols=total, completed_symbols=completed, last_symbol=current_symbol, last_provider=provider, operator=operator, interval=interval, start_date=from_date, end_date=to_date)

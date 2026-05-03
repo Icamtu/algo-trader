@@ -14,7 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import { CONFIG } from "@/lib/config";
 import { toast } from "sonner";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 
 interface TelemetryData {
   engine: string;
@@ -80,16 +80,13 @@ export default function AuditCenter() {
   // Fetch pending signals for HITL
   const { data: pendingSignals, isLoading: signalsLoading } = useQuery<{ data: PendingSignal[] }>({
     queryKey: ["hitl-signals"],
-    queryFn: () => algoApi.client("/api/v1/hitl/signals"),
+    queryFn: () => algoApi.getHitlSignals(),
     refetchInterval: 3000
   });
 
   // Approval Mutation
   const approveMutation = useMutation({
-    mutationFn: (id: number) => algoApi.client("/api/v1/hitl/approve", {
-      method: "POST",
-      body: JSON.stringify({ id })
-    }),
+    mutationFn: (id: number) => algoApi.hitlApprove(id),
     onSuccess: () => {
       toast.success("Signal Verified and Executed");
       queryClient.invalidateQueries({ queryKey: ["hitl-signals"] });
@@ -99,10 +96,7 @@ export default function AuditCenter() {
 
   // Rejection Mutation
   const rejectMutation = useMutation({
-    mutationFn: ({ id, reason }: { id: number; reason: string }) => algoApi.client("/api/v1/hitl/reject", {
-      method: "POST",
-      body: JSON.stringify({ id, reason })
-    }),
+    mutationFn: ({ id, reason }: { id: number; reason: string }) => algoApi.hitlReject(id, reason),
     onSuccess: () => {
       toast.info("Signal Rejected // Risk Containment Active");
       queryClient.invalidateQueries({ queryKey: ["hitl-signals"] });
@@ -111,7 +105,10 @@ export default function AuditCenter() {
   });
 
   // Real Equity Data from Telemetry
-  const equityData = pnlTelemetry?.equity_curve?.map((point: any) => ({
+  const pnlData = pnlTelemetry?.data || pnlTelemetry;
+  const equityCurve = Array.isArray(pnlData?.equity_curve) ? pnlData.equity_curve : [];
+
+  const equityData = equityCurve.map((point: any) => ({
     time: point.time.includes('T') ? point.time.split('T')[1].split(':')[0] : point.time,
     equity: point.value
   })) || [
@@ -214,28 +211,28 @@ export default function AuditCenter() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <KpiCard
             label="Portfolio_Net"
-            value={`₹${(pnlTelemetry?.all_time?.net || 0).toLocaleString()}`}
+            value={`₹${(pnlData?.all_time?.net || 0).toLocaleString()}`}
             icon={Activity}
             color="text-secondary"
             desc="Total Account Equity"
           />
           <KpiCard
             label="Profit_Factor"
-            value={telemetry?.pnl?.profit_factor?.toFixed(2) || "0.00"}
+            value={(telemetry?.data?.pnl?.profit_factor || telemetry?.pnl?.profit_factor || 0).toFixed(2)}
             icon={Zap}
             color="text-primary"
             desc="Efficiency Index"
           />
           <KpiCard
             label="Realized_Daily"
-            value={`₹${(pnlTelemetry?.daily?.net || 0).toLocaleString()}`}
+            value={`₹${(pnlData?.daily?.net || 0).toLocaleString()}`}
             icon={ShieldCheck}
-            color={(pnlTelemetry?.daily?.net || 0) >= 0 ? "text-primary" : "text-destructive"}
+            color={(pnlData?.daily?.net || 0) >= 0 ? "text-primary" : "text-destructive"}
             desc="Today's Performance"
           />
           <KpiCard
             label="Daily_Goal"
-            value={`${((pnlTelemetry?.daily?.net || 0) / (pnlTelemetry?.all_time?.net || 1000000) * 100).toFixed(2)}%`}
+            value={`${((pnlData?.daily?.net || 0) / (pnlData?.all_time?.net || 1000000) * 100).toFixed(2)}%`}
             icon={TrendingUp}
             color="text-blue-400"
             desc="Target: 2.0%"
@@ -260,38 +257,40 @@ export default function AuditCenter() {
                </div>
 
                <div className="h-[400px] w-full">
-                 <ResponsiveContainer width="100%" height="100%">
-                   <AreaChart data={equityData}>
-                     <defs>
-                       <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
-                         <stop offset="5%" stopColor="#FFB000" stopOpacity={0.1}/>
-                         <stop offset="95%" stopColor="#FFB000" stopOpacity={0}/>
-                       </linearGradient>
-                     </defs>
-                     <XAxis
-                       dataKey="time"
-                       axisLine={false}
-                       tickLine={false}
-                       tick={{ fill: '#ffffff10', fontSize: 10, fontWeight: 900, fontFamily: 'monospace' }}
-                     />
-                     <YAxis
-                       hide
-                       domain={['dataMin - 1000', 'dataMax + 1000']}
-                     />
-                     <Tooltip
-                       contentStyle={{ background: '#000', border: '1px solid #ffffff10', fontSize: 10, fontWeight: 900, fontFamily: 'monospace' }}
-                       cursor={{ stroke: '#FFB000', strokeWidth: 1, strokeDasharray: '4 4' }}
-                     />
-                     <Area
-                       type="monotone"
-                       dataKey="equity"
-                       stroke="#FFB000"
-                       strokeWidth={2}
-                       fill="url(#equityGrad)"
-                       animationDuration={2000}
-                     />
-                   </AreaChart>
-                 </ResponsiveContainer>
+                 {equityData.length > 0 && (
+                   <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                     <AreaChart data={equityData}>
+                       <defs>
+                         <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
+                           <stop offset="5%" stopColor="#FFB000" stopOpacity={0.1}/>
+                           <stop offset="95%" stopColor="#FFB000" stopOpacity={0}/>
+                         </linearGradient>
+                       </defs>
+                       <XAxis
+                         dataKey="time"
+                         axisLine={false}
+                         tickLine={false}
+                         tick={{ fill: '#ffffff10', fontSize: 10, fontWeight: 900, fontFamily: 'monospace' }}
+                       />
+                       <YAxis
+                         hide
+                         domain={['dataMin - 1000', 'dataMax + 1000']}
+                       />
+                       <Tooltip
+                         contentStyle={{ background: '#000', border: '1px solid #ffffff10', fontSize: 10, fontWeight: 900, fontFamily: 'monospace' }}
+                         cursor={{ stroke: '#FFB000', strokeWidth: 1, strokeDasharray: '4 4' }}
+                       />
+                       <Area
+                         type="monotone"
+                         dataKey="equity"
+                         stroke="#FFB000"
+                         strokeWidth={2}
+                         fill="url(#equityGrad)"
+                         animationDuration={2000}
+                       />
+                     </AreaChart>
+                   </ResponsiveContainer>
+                 )}
                </div>
             </div>
 
@@ -304,7 +303,7 @@ export default function AuditCenter() {
 
                 <div className="space-y-4">
                    <AnimatePresence mode="popLayout">
-                    {pendingSignals?.data.map(signal => (
+                    {(Array.isArray(pendingSignals?.data) ? pendingSignals.data : (Array.isArray(pendingSignals) ? pendingSignals : [])).map(signal => (
                       <motion.div
                         key={signal.id}
                         initial={{ opacity: 0, x: -20 }}

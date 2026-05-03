@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { ShieldAlert, Shield, Lock, CheckCircle2, XCircle, RefreshCw } from "lucide-react";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { cn } from "@/lib/utils";
 
 const PERMISSION_LABELS: Record<string, string> = {

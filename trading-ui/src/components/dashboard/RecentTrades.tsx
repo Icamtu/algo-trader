@@ -1,7 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { History, ArrowUpRight, ArrowDownRight, Filter } from "lucide-react";
-import { useTradebook } from "@/features/openalgo/hooks/useTrading";
+import { useTradebook } from "@/features/aetherdesk/hooks/useTrading";
 import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 
@@ -9,7 +9,15 @@ export function RecentTrades() {
   const { data: tradebook, isLoading } = useTradebook({ limit: "15" });
 
   // Handle various API response formats
-  const trades = Array.isArray(tradebook) ? tradebook : (tradebook as any)?.data || [];
+  let trades: any[] = [];
+  if (Array.isArray(tradebook)) {
+    trades = tradebook;
+  } else if (tradebook && typeof tradebook === 'object') {
+    const potentialData = (tradebook as any).data || (tradebook as any).trades;
+    if (Array.isArray(potentialData)) {
+      trades = potentialData;
+    }
+  }
 
   return (
     <div className="flex flex-col h-full bg-card/5 border border-border/50 overflow-hidden">

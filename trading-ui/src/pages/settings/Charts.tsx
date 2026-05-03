@@ -1,21 +1,17 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronDown, BarChart3, TrendingUp } from 'lucide-react';
+import { ChevronDown, BarChart3, TrendingUp, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useTerminalSettings } from '@/contexts/TerminalSettingsContext';
 
-interface ChartsState {
-  chartStyle: 'candle' | 'heikin-ashi' | 'area' | 'bar' | 'renko';
-  defaultTimeframe: '1m' | '5m' | '15m' | '1h' | '1d';
-  defaultIndicators: string[];
-  indicatorPresetName: string;
-  gridVisible: boolean;
-  scaleType: 'linear' | 'logarithmic';
-  crosshairMagnet: boolean;
-  showVolume: boolean;
-  showSessionLabels: boolean;
-  extendToEdge: boolean;
-}
+const CHART_ENGINES = [
+  { id: 'lightweight', label: 'LightweightCharts', description: 'Zero-latency · TradingView OSS · Live tick updates', color: '#00F5FF', badge: 'OSS' },
+  { id: 'tradingview', label: 'TradingView', description: 'Institutional embed · Full drawing tools · ~2s load', color: '#A020F0', badge: 'Free' },
+  { id: 'echarts', label: 'Apache ECharts', description: 'Advanced K-line · DataZoom · Open source', color: '#10B981', badge: 'OSS' },
+  { id: 'recharts', label: 'Recharts', description: 'Simple area/line · React-native · Lightweight', color: '#F59E0B', badge: 'MIT' },
+  { id: 'plotly', label: 'Plotly', description: 'Scientific charts · Best for backtest analytics', color: '#EF4444', badge: 'MIT' },
+];
 
 const CHART_STYLES = [
   { id: 'candle', label: 'Candle', color: '#00F5FF', description: 'OHLC candles' },
@@ -39,58 +35,42 @@ const AVAILABLE_INDICATORS = [
 ];
 
 export default function Charts() {
-  const [charts, setCharts] = useState<ChartsState>({
-    chartStyle: 'candle',
-    defaultTimeframe: '15m',
-    defaultIndicators: ['sma', 'ema'],
-    indicatorPresetName: '',
-    gridVisible: true,
-    scaleType: 'linear',
-    crosshairMagnet: true,
-    showVolume: true,
-    showSessionLabels: false,
-    extendToEdge: true,
-  });
-
+  const { settings, updateSettings } = useTerminalSettings();
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     indicators: true,
     advanced: false,
   });
 
   const [presetNameInput, setPresetNameInput] = useState('');
-  const [savedPresets, setSavedPresets] = useState<Array<{ name: string; indicators: string[] }>>([]);
-
-  const handleChange = (key: keyof ChartsState, value: any) => {
-    setCharts(prev => ({ ...prev, [key]: value }));
+  const handleSettingChange = (key: string, value: any) => {
+    updateSettings({ [key]: value } as any);
   };
 
   const toggleIndicator = (id: string) => {
-    setCharts(prev => ({
-      ...prev,
-      defaultIndicators: prev.defaultIndicators.includes(id)
-        ? prev.defaultIndicators.filter(i => i !== id)
-        : [...prev.defaultIndicators, id],
-    }));
+    const current = settings.defaultIndicators || [];
+    const updated = current.includes(id)
+      ? current.filter(i => i !== id)
+      : [...current, id];
+    handleSettingChange('defaultIndicators', updated);
   };
 
   const savePreset = () => {
     if (!presetNameInput.trim()) return;
-    setSavedPresets([
-      ...savedPresets,
-      { name: presetNameInput, indicators: charts.defaultIndicators },
-    ]);
+    const newPresets = [
+      ...(settings.indicatorPresets || []),
+      { name: presetNameInput, indicators: [...(settings.defaultIndicators || [])] },
+    ];
+    handleSettingChange('indicatorPresets', newPresets);
     setPresetNameInput('');
   };
 
-  const loadPreset = (preset: any) => {
-    setCharts(prev => ({
-      ...prev,
-      defaultIndicators: preset.indicators,
-    }));
+  const loadPreset = (preset: { name: string; indicators: string[] }) => {
+    handleSettingChange('defaultIndicators', preset.indicators);
   };
 
   const deletePreset = (name: string) => {
-    setSavedPresets(savedPresets.filter(p => p.name !== name));
+    const updated = (settings.indicatorPresets || []).filter(p => p.name !== name);
+    handleSettingChange('indicatorPresets', updated);
   };
 
   return (
@@ -102,10 +82,56 @@ export default function Charts() {
             Charts Configuration
           </h1>
           <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-[0.3em] mt-2">
-            Default chart styles, indicators, and visualization settings
+            Chart engine, styles, indicators, and visualization settings
           </p>
         </div>
       </div>
+
+      {/* Chart Engine Selection */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0 }}
+        className="space-y-4 p-6 border border-border/20 bg-slate-950/40 backdrop-blur-sm rounded-lg"
+      >
+        <div>
+          <label className="text-[11px] font-black text-foreground uppercase tracking-wider flex items-center gap-2">
+            <Zap className="w-4 h-4" />
+            Chart Engine
+          </label>
+          <p className="text-[9px] text-muted-foreground/60 mt-1">
+            Select the charting library for OHLC rendering
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          {CHART_ENGINES.map((engine) => (
+            <button
+              key={engine.id}
+              onClick={() => handleSettingChange('chartEngine', engine.id)}
+              className={cn(
+                'p-4 border rounded-lg transition-all text-left',
+                settings.chartEngine === engine.id
+                  ? 'border-primary bg-primary/10'
+                  : 'border-border/40 bg-white/5 hover:border-primary/40'
+              )}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div
+                  className="w-6 h-6 rounded"
+                  style={{ background: `linear-gradient(135deg, ${engine.color}40, ${engine.color}20)` }}
+                />
+                <span className="text-[8px] font-bold text-primary/60 uppercase">{engine.badge}</span>
+              </div>
+              <div className="text-[10px] font-black text-foreground uppercase tracking-wider">
+                {engine.label}
+              </div>
+              <div className="text-[8px] text-muted-foreground/60 mt-1">
+                {engine.description}
+              </div>
+            </button>
+          ))}
+        </div>
+      </motion.div>
 
       {/* Default Chart Style */}
       <motion.div
@@ -126,10 +152,10 @@ export default function Charts() {
           {CHART_STYLES.map((style) => (
             <button
               key={style.id}
-              onClick={() => handleChange('chartStyle', style.id)}
+              onClick={() => handleSettingChange('chartStyle', style.id)}
               className={cn(
                 'p-4 border rounded-lg transition-all text-left',
-                charts.chartStyle === style.id
+                settings.chartStyle === style.id
                   ? 'border-primary bg-primary/10'
                   : 'border-border/40 bg-white/5 hover:border-primary/40'
               )}
@@ -170,10 +196,10 @@ export default function Charts() {
           {TIMEFRAMES.map((tf) => (
             <button
               key={tf}
-              onClick={() => handleChange('defaultTimeframe', tf)}
+              onClick={() => handleSettingChange('defaultTimeframe', tf)}
               className={cn(
                 'p-2 border rounded-lg text-[10px] font-mono font-black uppercase tracking-wider transition-all',
-                charts.defaultTimeframe === tf
+                settings.defaultTimeframe === tf
                   ? 'border-primary bg-primary/10 text-primary'
                   : 'border-border/40 bg-white/5 text-muted-foreground/60 hover:border-primary/40'
               )}
@@ -200,7 +226,7 @@ export default function Charts() {
                 Default Indicators
               </h3>
               <p className="text-[9px] text-muted-foreground/60 mt-1">
-                Indicators added to new charts ({charts.defaultIndicators.length} selected)
+                Indicators added to new charts ({(settings.defaultIndicators?.length || 0)} selected)
               </p>
             </div>
             <ChevronDown className={cn(
@@ -219,7 +245,7 @@ export default function Charts() {
                     onClick={() => toggleIndicator(ind.id)}
                     className={cn(
                       'p-3 border rounded-lg text-left transition-all',
-                      charts.defaultIndicators.includes(ind.id)
+                      settings.defaultIndicators?.includes(ind.id)
                         ? 'border-primary bg-primary/10'
                         : 'border-border/40 bg-white/5 hover:border-primary/40'
                     )}
@@ -227,11 +253,11 @@ export default function Charts() {
                     <div className="flex items-center gap-2">
                       <div className={cn(
                         'w-4 h-4 border rounded transition-all',
-                        charts.defaultIndicators.includes(ind.id)
+                        settings.defaultIndicators?.includes(ind.id)
                           ? 'bg-primary border-primary'
                           : 'border-border/40'
                       )}>
-                        {charts.defaultIndicators.includes(ind.id) && (
+                        {settings.defaultIndicators?.includes(ind.id) && (
                           <div className="w-full h-full flex items-center justify-center text-black text-[10px]">✓</div>
                         )}
                       </div>
@@ -272,12 +298,12 @@ export default function Charts() {
               </div>
 
               {/* Saved Presets List */}
-              {savedPresets.length > 0 && (
+              {(settings.indicatorPresets || []).length > 0 && (
                 <div className="space-y-2 mt-4">
                   <h5 className="text-[9px] text-muted-foreground/60 uppercase tracking-wider">
                     Saved Presets
                   </h5>
-                  {savedPresets.map((preset) => (
+                  {(settings.indicatorPresets || []).map((preset) => (
                     <div
                       key={preset.name}
                       className="flex items-center justify-between p-2 bg-black/20 border border-border/20 rounded text-[9px] font-mono"
@@ -327,17 +353,17 @@ export default function Charts() {
           </p>
         </div>
         <button
-          onClick={() => handleChange('gridVisible', !charts.gridVisible)}
+          onClick={() => handleSettingChange('gridVisible', !settings.gridVisible)}
           className={cn(
             'w-12 h-6 rounded-full p-1 transition-all flex-shrink-0',
-            charts.gridVisible ? 'bg-primary' : 'bg-white/10'
+            settings.gridVisible ? 'bg-primary' : 'bg-white/10'
           )}
         >
           <motion.div
             layout
             className={cn(
               'w-4 h-4 bg-white rounded-full transition-all',
-              charts.gridVisible ? 'ml-6' : 'ml-0'
+              settings.gridVisible ? 'ml-6' : 'ml-0'
             )}
           />
         </button>
@@ -362,10 +388,10 @@ export default function Charts() {
           {['linear', 'logarithmic'].map((scale) => (
             <button
               key={scale}
-              onClick={() => handleChange('scaleType', scale)}
+              onClick={() => handleSettingChange('scaleType', scale as 'linear' | 'logarithmic')}
               className={cn(
                 'p-3 border rounded-lg text-[10px] font-black uppercase tracking-wider transition-all',
-                charts.scaleType === scale
+                settings.scaleType === scale
                   ? 'border-primary bg-primary/10 text-primary'
                   : 'border-border/40 bg-white/5 text-muted-foreground/60 hover:border-primary/40'
               )}
@@ -392,17 +418,17 @@ export default function Charts() {
           </p>
         </div>
         <button
-          onClick={() => handleChange('crosshairMagnet', !charts.crosshairMagnet)}
+          onClick={() => handleSettingChange('crosshairMagnet', !settings.crosshairMagnet)}
           className={cn(
             'w-12 h-6 rounded-full p-1 transition-all flex-shrink-0',
-            charts.crosshairMagnet ? 'bg-primary' : 'bg-white/10'
+            settings.crosshairMagnet ? 'bg-primary' : 'bg-white/10'
           )}
         >
           <motion.div
             layout
             className={cn(
               'w-4 h-4 bg-white rounded-full transition-all',
-              charts.crosshairMagnet ? 'ml-6' : 'ml-0'
+              settings.crosshairMagnet ? 'ml-6' : 'ml-0'
             )}
           />
         </button>
@@ -445,77 +471,35 @@ export default function Charts() {
                 </p>
               </div>
               <button
-                onClick={() => handleChange('showVolume', !charts.showVolume)}
+                onClick={() => handleSettingChange('showVolume', !settings.showVolume)}
                 className={cn(
                   'w-10 h-5 rounded-full p-1 transition-all flex-shrink-0',
-                  charts.showVolume ? 'bg-primary' : 'bg-white/10'
+                  settings.showVolume ? 'bg-primary' : 'bg-white/10'
                 )}
               >
                 <motion.div
                   layout
                   className={cn(
                     'w-3 h-3 bg-white rounded-full transition-all',
-                    charts.showVolume ? 'ml-5' : 'ml-0'
-                  )}
-                />
-              </button>
-            </div>
-
-            {/* Show Session Labels */}
-            <div className="flex items-center justify-between p-4 border border-border/20 bg-slate-950/40 backdrop-blur-sm rounded-lg">
-              <div>
-                <label className="text-[10px] font-black text-foreground uppercase tracking-wider cursor-pointer">
-                  Session Labels
-                </label>
-                <p className="text-[8px] text-muted-foreground/60 mt-1">
-                  Market session region background colors
-                </p>
-              </div>
-              <button
-                onClick={() => handleChange('showSessionLabels', !charts.showSessionLabels)}
-                className={cn(
-                  'w-10 h-5 rounded-full p-1 transition-all flex-shrink-0',
-                  charts.showSessionLabels ? 'bg-primary' : 'bg-white/10'
-                )}
-              >
-                <motion.div
-                  layout
-                  className={cn(
-                    'w-3 h-3 bg-white rounded-full transition-all',
-                    charts.showSessionLabels ? 'ml-5' : 'ml-0'
-                  )}
-                />
-              </button>
-            </div>
-
-            {/* Extend to Edge */}
-            <div className="flex items-center justify-between p-4 border border-border/20 bg-slate-950/40 backdrop-blur-sm rounded-lg">
-              <div>
-                <label className="text-[10px] font-black text-foreground uppercase tracking-wider cursor-pointer">
-                  Extend to Edge
-                </label>
-                <p className="text-[8px] text-muted-foreground/60 mt-1">
-                  Chart extends to left/right edges
-                </p>
-              </div>
-              <button
-                onClick={() => handleChange('extendToEdge', !charts.extendToEdge)}
-                className={cn(
-                  'w-10 h-5 rounded-full p-1 transition-all flex-shrink-0',
-                  charts.extendToEdge ? 'bg-primary' : 'bg-white/10'
-                )}
-              >
-                <motion.div
-                  layout
-                  className={cn(
-                    'w-3 h-3 bg-white rounded-full transition-all',
-                    charts.extendToEdge ? 'ml-5' : 'ml-0'
+                    settings.showVolume ? 'ml-5' : 'ml-0'
                   )}
                 />
               </button>
             </div>
           </CollapsibleContent>
         </Collapsible>
+      </motion.div>
+
+      {/* Info Banner */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
+        className="p-4 border border-primary/20 bg-primary/5 rounded-lg"
+      >
+        <p className="text-[9px] text-muted-foreground">
+          <span className="font-bold text-primary">💡 Tip:</span> Chart settings persist automatically to localStorage. Switch chart engines in the Settings → Charts section to find the perfect fit for your trading style.
+        </p>
       </motion.div>
     </div>
   );

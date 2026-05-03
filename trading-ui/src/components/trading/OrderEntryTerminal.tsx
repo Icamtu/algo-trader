@@ -13,7 +13,7 @@ import {
   Info
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { cn } from "@/lib/utils";
 
 const orderTypes = ["MARKET", "LIMIT", "SL", "SL-M"] as const;

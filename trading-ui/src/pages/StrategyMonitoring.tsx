@@ -35,6 +35,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { CONFIG } from "@/lib/config";
+import { algoApi } from "@/features/aetherdesk/api/client";
 
 const MetricCard = ({ title, value, subtext, icon: Icon, trend }: any) => (
   <Card className="bg-slate-950/40 backdrop-blur-md border-white/5 hover:border-primary/20 transition-all group relative overflow-hidden">
@@ -81,11 +82,6 @@ const StrategyMonitoring = () => {
   const [scanResults, setScanResults] = useState<any[]>([]);
   const [pendingApproval, setPendingApproval] = useState<any>(null);
 
-  const token = localStorage.getItem("aether_token")
-    || localStorage.getItem("auth_token")
-    || sessionStorage.getItem("aether_token")
-    || "";
-
   // Real-time Urgency Toast
   useEffect(() => {
     if (!lastMessage) return;
@@ -107,14 +103,7 @@ const StrategyMonitoring = () => {
   }, [lastMessage]);
 
   const executeApproval = (signal: any) => {
-    fetch(`${CONFIG.API_BASE_URL}/api/v1/hitl/approve`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ id: signal.id })
-    }).then(res => res.json())
+    algoApi.hitlApprove(signal.id)
       .then(result => {
         if (result.status === 'success') {
           toast.success("Trade Approved");
@@ -127,16 +116,7 @@ const StrategyMonitoring = () => {
     setSelectedSignal(null); // Clear selection to show scan result
 
     try {
-      const response = await fetch(`${CONFIG.API_BASE_URL}/api/v1/aether/analyze`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ symbols, timeframe })
-      });
-
-      const result = await response.json();
+      const result = await algoApi.aetherAnalyze(symbols, timeframe);
       if (result.status === 'success') {
         const rawData = result.data;
         const analysisArray = Array.isArray(rawData) ? rawData : [rawData];

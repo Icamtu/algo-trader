@@ -13,8 +13,8 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 router = APIRouter(tags=["Intelligence Hub"])
 logger = logging.getLogger(__name__)
 
-@router.get("/api/v1/regime")
-@router.get("/api/v1/market_regime")
+@router.get("/regime")
+@router.get("/market_regime")
 async def get_market_regime():
     """
     Returns the current global market regime and risk multipliers.
@@ -31,7 +31,7 @@ async def get_market_regime():
         "data": telemetry
     }
 
-@router.get("/api/v1/intel/sectors")
+@router.get("/intel/sectors")
 async def get_sector_sentiment():
     """
     Returns sentiment analysis for all Tier 1 and Tier 2 sectors.
@@ -52,7 +52,7 @@ async def get_sector_sentiment():
         }
     }
 
-@router.get("/api/v1/intel/status")
+@router.get("/intel/status")
 async def get_intel_status():
     """
     Returns the operational health of the Intelligence Hub.
@@ -71,7 +71,7 @@ async def get_intel_status():
         "sectors_tracked": len(getattr(runner, "sector_sentiment", {}))
     }
 
-@router.get("/api/v1/backtest/results")
+@router.get("/backtest/results")
 async def get_backtest_results(strategy_id: str = Query(None)):
     """
     GET /api/v1/backtest/results

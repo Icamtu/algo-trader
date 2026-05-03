@@ -55,7 +55,7 @@ export default function IntelligenceHubPage() {
   ]
 
   return (
-    <div className="h-full flex flex-col p-8 space-y-8 bg-background overflow-hidden font-mono selection:bg-primary/30">
+    <div className="h-full flex flex-col p-8 space-y-8 bg-background overflow-y-auto custom-scrollbar font-mono selection:bg-primary/30">
       {/* Header */}
       <div className="flex flex-col space-y-2">
         <div className="flex items-center gap-3">

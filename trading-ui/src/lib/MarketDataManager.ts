@@ -1,9 +1,11 @@
 /**
  * MarketDataManager - Singleton class for shared WebSocket connection management
- * 
- * Ported from OpenAlgo with Industrial Telemetry enhancements.
+ *
+ * Ported from AetherDesk with Industrial Telemetry enhancements.
  * Handles single WS connection, ref-counted subscriptions, and REST fallback.
  */
+
+import { CONFIG } from './config'
 
 export interface DepthLevel {
   price: number
@@ -64,9 +66,15 @@ interface SubscriptionEntry {
 }
 
 async function fetchCSRFToken(): Promise<string> {
-  const response = await fetch('/auth/csrf-token', { credentials: 'include' })
-  const data = await response.json()
-  return data.csrf_token
+  try {
+    const response = await fetch('/algo-api/api/v1/auth/csrf-token', { credentials: 'include' })
+    if (!response.ok) return "aether-core-session-token-v1";
+    const data = await response.json()
+    return data.csrf_token || "aether-core-session-token-v1";
+  } catch (err) {
+    console.warn("WS_CSRF_HANDSHAKE_FAULT", err);
+    return "aether-core-session-token-v1";
+  }
 }
 
 interface QuotesApiData {
@@ -240,12 +248,14 @@ export class MarketDataManager {
       const csrfToken = await fetchCSRFToken()
       if (this.userDisconnected || abortSignal.aborted) return
 
-      const configResponse = await fetch('/api/websocket/config', {
+      console.log("[MarketDataManager] Fetching WS config from:", '/algo-api/api/websocket/config');
+      const configResponse = await fetch('/algo-api/api/websocket/config', {
         headers: { 'X-CSRFToken': csrfToken },
         credentials: 'include',
         signal: abortSignal,
       })
       const configData = await configResponse.json()
+      console.log("[MarketDataManager] WS Config Received:", configData);
       if (configData.status !== 'success') throw new Error('Failed to get WebSocket configuration')
 
       const socket = new WebSocket(configData.websocket_url)
@@ -258,16 +268,30 @@ export class MarketDataManager {
         this.reconnectAttempts = 0
         try {
           const authCsrfToken = await fetchCSRFToken()
-          const apiKeyResponse = await fetch('/api/websocket/apikey', {
-            headers: { 'X-CSRFToken': authCsrfToken },
+          // Get session token from Supabase
+          const { supabase } = await import('@/integrations/supabase/client')
+          const { data } = await supabase.auth.getSession()
+          const token = data.session?.access_token
+
+          console.log("[MarketDataManager] Fetching API key from:", '/algo-api/api/websocket/apikey');
+          const apiKeyResponse = await fetch('/algo-api/api/websocket/apikey', {
+            method: 'POST',
+            headers: {
+              'X-CSRFToken': authCsrfToken,
+              'Authorization': `Bearer ${token}`
+            },
             credentials: 'include',
           })
           const apiKeyData = await apiKeyResponse.json()
+          console.log("[MarketDataManager] API Key Received:", apiKeyData.status);
+
           if (apiKeyData.status === 'success' && apiKeyData.api_key) {
             this.setConnectionState('authenticating')
+            console.log("[MarketDataManager] Sending authenticate message...");
             socket.send(JSON.stringify({ action: 'authenticate', api_key: apiKeyData.api_key }))
           } else {
             this.setError('No API key found')
+            console.error("[MarketDataManager] No API key in response:", apiKeyData);
           }
         } catch (err) {
           this.setError(`Authentication error: ${err}`)
@@ -321,9 +345,12 @@ export class MarketDataManager {
   private handleMessage(event: MessageEvent): void {
     try {
       const data = JSON.parse(event.data)
-      const type = (data.type || data.status) as string
+      const { type } = data
 
-      switch (type) {
+      if (CONFIG.DEBUG) console.debug("[MarketDataManager] RX:", type, data);
+      const typeStr = (type || data.status) as string
+
+      switch (typeStr) {
         case 'auth':
           if (data.status === 'success') {
             this.setConnectionState('authenticated')
@@ -432,10 +459,17 @@ export class MarketDataManager {
   private async fetchApiKeyForFallback(): Promise<void> {
     try {
       const csrfToken = await fetchCSRFToken()
-      const response = await fetch('/api/websocket/apikey', { headers: { 'X-CSRFToken': csrfToken }, credentials: 'include' })
+      // Fix: Use correct institutional path (root-level analytics router)
+      const response = await fetch('/algo-api/api/websocket/apikey', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken },
+        credentials: 'include'
+      })
       const data = await response.json()
       if (data.status === 'success') this.apiKey = data.api_key
-    } catch {}
+    } catch (err) {
+      console.warn("[MarketDataManager] Fallback API key fetch failed:", err);
+    }
   }
 
   private startFallbackPolling(): void {
@@ -457,7 +491,7 @@ export class MarketDataManager {
       const symbols = Array.from(new Set(Array.from(this.subscriptions.values()).map(e => `${e.exchange}:${e.symbol}`)))
         .map(s => ({ exchange: s.split(':')[0], symbol: s.split(':')[1] }))
 
-      const response = await fetch('/api/v1/multiquotes', {
+      const response = await fetch('/algo-api/api/v1/multiquotes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

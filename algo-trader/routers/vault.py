@@ -6,7 +6,7 @@ from services.asset_vault import get_vault
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1/vault", tags=["Vault"])
+router = APIRouter(prefix="/vault", tags=["Vault"])
 
 class VaultRegisterRequest(BaseModel):
     name: str
@@ -21,6 +21,7 @@ class VaultSearchRequest(BaseModel):
     term: str
 
 @router.get("/list")
+@router.get("/assets")
 async def vault_list(type: Optional[str] = None, tags: Optional[List[str]] = Query(None)):
     """FastAPI port of /api/v1/vault/list."""
     try:

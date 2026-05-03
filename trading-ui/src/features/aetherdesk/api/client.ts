@@ -227,5 +227,33 @@ export const algoApi = {
     aetherClient("/api/v1/explorer/save", { method: "POST", body: JSON.stringify({ path, content }) }),
   deleteExplorerItem: (path: string) => aetherClient(`/api/v1/explorer/delete?path=${encodeURIComponent(path)}`, { method: "DELETE" }),
 
+  // HITL & Action Center
+  getHitlSignals: () => aetherClient("/api/v1/hitl/signals"),
+  hitlApprove: (id: number) => aetherClient("/api/v1/hitl/approve", { method: "POST", body: JSON.stringify({ id }) }),
+  hitlReject: (id: number, reason?: string) => aetherClient("/api/v1/hitl/reject", { method: "POST", body: JSON.stringify({ id, reason }) }),
+  bulkApprove: (ids: number[]) => aetherClient("/api/v1/hitl/bulk-approve", { method: "POST", body: JSON.stringify({ ids }) }),
+  bulkReject: (ids: number[], reason?: string) => aetherClient("/api/v1/hitl/bulk-reject", { method: "POST", body: JSON.stringify({ ids, reason }) }),
+  getActionCenter: (limit = 200, status = "all") => aetherClient(`/api/v1/actioncenter?limit=${limit}&status=${status}`),
+  aetherAnalyze: (symbols: string, timeframe: string) => aetherClient("/api/v1/aether/analyze", { method: "POST", body: JSON.stringify({ symbols, timeframe }) }),
+  toggleAutoExecute: (enabled: boolean) => aetherClient("/api/v1/action/audit/auto", { method: "POST", body: JSON.stringify({ enabled }) }),
+  toggleRiskLock: (locked: boolean) => aetherClient("/api/v1/action/audit/lock", { method: "POST", body: JSON.stringify({ locked }) }),
+
+  // AutoResearch
+  getAutoResearchBaseCode: (name: string) => aetherClient(`/api/v1/autoresearch/base-code?name=${encodeURIComponent(name)}`),
+  getHistorifyCatalog: (interval: string) => aetherClient(`/api/v1/historify/catalog?interval=${interval}`),
+  downloadHistorifyData: (data: any) => aetherClient("/api/v1/historify/download", { method: "POST", body: JSON.stringify(data) }),
+  saveAutoResearchVersion: (data: any) => aetherClient("/api/v1/autoresearch/save-version", { method: "POST", body: JSON.stringify(data) }),
+  getAutoResearchHistory: () => aetherClient("/api/v1/autoresearch/history"),
+  getAutoResearchHistoryItem: (id: string) => aetherClient(`/api/v1/autoresearch/history/${id}`),
+  deployAutoResearch: (data: any) => aetherClient("/api/v1/autoresearch/deploy", { method: "POST", body: JSON.stringify(data) }),
+  startAutoResearchIteration: (data: any) => aetherClient("/api/v1/autoresearch/iteration", { method: "POST", body: JSON.stringify(data) }),
+  getAutoResearchStatus: (taskId: string) => aetherClient(`/api/v1/autoresearch/status/${taskId}`),
+  getMarketRegime: () => aetherClient("/api/v1/market_regime"),
+
+  // Indicators
+  getIndicatorsList: () => aetherClient("/api/v1/indicators/list"),
+  saveIndicator: (data: { name: string; code: string }) => aetherClient("/api/v1/indicators/save", { method: "POST", body: JSON.stringify(data) }),
+  calculateIndicator: (data: { name: string; candles: any[]; params: any }) => aetherClient("/api/v1/indicators/calculate", { method: "POST", body: JSON.stringify(data) }),
+
   client: aetherClient,
 };

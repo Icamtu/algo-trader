@@ -1,6 +1,6 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Library, Zap, Filter } from "lucide-react";
@@ -22,7 +22,7 @@ export const StrategyLibrary: React.FC<StrategyLibraryProps> = ({ onSelect, sele
 
   const strategies = propStrategies !== undefined
     ? { strategies: propStrategies }
-    : fetchedData;
+    : (fetchedData?.data || fetchedData);
 
   const showLoading = propStrategies === undefined && isLoading;
   const isEmpty = !showLoading && (strategies?.strategies?.length ?? 0) === 0;
@@ -60,7 +60,7 @@ export const StrategyLibrary: React.FC<StrategyLibraryProps> = ({ onSelect, sele
               </p>
             </div>
           )}
-          {strategies?.strategies?.map((strat: any) => (
+          {Array.isArray(strategies?.strategies) && strategies.strategies.map((strat: any) => (
             <div
               key={strat.id}
               onClick={() => onSelect(strat)}

@@ -192,7 +192,8 @@ class RiskManager:
         price: float,
         current_position: int = 0,
         strategy_id: str = "default",
-        product: str = "MIS"
+        product: str = "MIS",
+        mode: str = "live"
     ) -> RiskCheckResult:
         """
         Validate an order against all risk rules.
@@ -200,12 +201,16 @@ class RiskManager:
         """
         self._maybe_reset_daily()
 
+        # Phase 16: Sandbox Bypass
+        # In sandbox mode, we relax almost all rules to allow testing at any time.
+        is_sandbox = mode.lower() == "sandbox"
+
         # 0. Global Halt Check (Bypassed by EMERGENCY_PANIC)
         if self.global_halt and strategy_id != "EMERGENCY_PANIC":
             return RiskCheckResult(False, "PORTFOLIO-WIDE GLOBAL HALT ACTIVE. All trading is frozen.")
 
-        # 0.5 Strategy Safeguard Check (Bypassed by EMERGENCY_PANIC)
-        if strategy_id in self._breached_strategies and strategy_id != "EMERGENCY_PANIC":
+        # 0.5 Strategy Safeguard Check (Bypassed by EMERGENCY_PANIC or Sandbox)
+        if not is_sandbox and strategy_id in self._breached_strategies and strategy_id != "EMERGENCY_PANIC":
             return RiskCheckResult(False, f"strategy '{strategy_id}' is HALTED due to risk breach or manual stop.")
 
         # 1. Basic sanity
@@ -216,14 +221,14 @@ class RiskManager:
             return RiskCheckResult(False, "price cannot be negative")
 
         # 2. Per-order quantity cap
-        if quantity > self.max_order_quantity:
+        if not is_sandbox and quantity > self.max_order_quantity:
             return RiskCheckResult(
                 False,
                 f"order qty {quantity} exceeds max_order_quantity {self.max_order_quantity}",
             )
 
         # 3. Per-order notional cap (skip for MARKET orders where price==0)
-        if price > 0 and quantity * price > self.max_order_notional:
+        if not is_sandbox and price > 0 and quantity * price > self.max_order_notional:
             return RiskCheckResult(
                 False,
                 f"order notional ₹{quantity * price:,.0f} exceeds max_order_notional "
@@ -236,7 +241,7 @@ class RiskManager:
             if action.upper() == "BUY"
             else max(0, current_position - quantity)
         )
-        if projected > self.max_position_quantity_per_symbol:
+        if not is_sandbox and projected > self.max_position_quantity_per_symbol:
             return RiskCheckResult(
                 False,
                 f"projected position {projected} for {symbol} exceeds "
@@ -244,7 +249,7 @@ class RiskManager:
             )
 
         # 5. Max simultaneous open positions (only block new BUY into a new symbol)
-        if action.upper() == "BUY" and current_position == 0:
+        if not is_sandbox and action.upper() == "BUY" and current_position == 0:
             if self._open_symbol_count >= self.max_open_positions:
                 return RiskCheckResult(
                     False,
@@ -253,14 +258,14 @@ class RiskManager:
                 )
 
         # 6. Daily trade count
-        if self._daily_trades >= self.max_daily_trades:
+        if not is_sandbox and self._daily_trades >= self.max_daily_trades:
             return RiskCheckResult(
                 False,
                 f"daily trade limit {self.max_daily_trades} reached",
             )
 
         # 7. Daily loss circuit-breaker
-        if self._daily_realised_loss >= self.max_daily_loss:
+        if not is_sandbox and self._daily_realised_loss >= self.max_daily_loss:
             return RiskCheckResult(
                 False,
                 f"daily loss circuit-breaker triggered — loss ₹{self._daily_realised_loss:,.0f} "
@@ -268,16 +273,16 @@ class RiskManager:
             )
 
         # 7.5 Strategy-specific Daily Loss check
-        strategy_loss = self._strategy_daily_realised_loss.get(strategy_id, 0.0)
-        if strategy_loss >= self.strategy_max_daily_loss:
-            return RiskCheckResult(
-                False,
-                f"strategy '{strategy_id}' daily loss limit reached (₹{strategy_loss:,.0f} >= ₹{self.strategy_max_daily_loss:,.0f})"
-            )
+        if not is_sandbox:
+            strategy_loss = self._strategy_daily_realised_loss.get(strategy_id, 0.0)
+            if strategy_loss >= self.strategy_max_daily_loss:
+                return RiskCheckResult(
+                    False,
+                    f"strategy '{strategy_id}' daily loss limit reached (₹{strategy_loss:,.0f} >= ₹{self.strategy_max_daily_loss:,.0f})"
+                )
 
         # 7.6 Symbol Notional Concentration check
-        if price > 0:
-            current_notional = abs(current_position) * price
+        if not is_sandbox and price > 0:
             new_notional = projected * price
             if new_notional > self.max_symbol_notional:
                 return RiskCheckResult(
@@ -285,8 +290,8 @@ class RiskManager:
                     f"symbol concentration breach: {symbol} projected notional ₹{new_notional:,.0f} exceeds max ₹{self.max_symbol_notional:,.0f}"
                 )
 
-        # 8. MIS Time Check
-        if product.upper() == "MIS" and not self.is_mis_allowed():
+        # 8. MIS Time Check (Bypassed in Sandbox)
+        if not is_sandbox and product.upper() == "MIS" and not self.is_mis_allowed():
             return RiskCheckResult(
                 False,
                 "MIS orders are not allowed outside market hours (09:15 - 15:15 IST). Please use CNC or NRML."

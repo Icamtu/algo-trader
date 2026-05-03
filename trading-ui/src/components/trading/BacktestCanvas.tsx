@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Loader2, TrendingUp, Folder, History, Settings2, Calendar, Coins, Banknote, Zap, ChevronDown, Receipt, Waves, Timer, LineChart, List, Download, ChevronLeft, ChevronRight, PieChart, Info, PlusCircle, Play } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { IndustrialValue } from "./IndustrialValue";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,8 @@ export function BacktestCanvas({ latestResult }: BacktestCanvasProps = {}) {
   const [availableSymbols, setAvailableSymbols] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const { toast } = useToast();
 
   const [selectedStrategy, setSelectedStrategy] = useState("aether_swing");
@@ -141,37 +143,36 @@ export function BacktestCanvas({ latestResult }: BacktestCanvasProps = {}) {
     try {
       if (retryCount === 0) await new Promise(r => setTimeout(r, 800));
 
-      const results = await algoApi.getBacktestResults();
-      if (results && results.status === "success") {
-        const mapped = [{
-          id: results.strategy_id || results.strategy || Date.now().toString(),
-          name: results.strategy_id || results.strategy || "Institutional Strategy",
-          date: new Date(results.created_at || Date.now()).toISOString().split("T")[0],
-          cagr: results.metrics?.cagr || results.cagr || 0,
-          sharpe: results.metrics?.sharpe_ratio || results.sharpe_ratio || 0,
-          sortino: results.metrics?.sortino_ratio || results.sortino_ratio || 0,
-          maxDD: results.metrics?.max_drawdown_pct || results.max_drawdown_pct || 0,
-          winRate: results.metrics?.win_rate_pct || results.win_rate_pct || 0,
-          pf: results.metrics?.profit_factor || results.profit_factor || 0,
-          tradesCount: results.metrics?.total_trades || results.total_trades || 0,
-          trades: results.trades || [],
-          equityCurve: results.metrics?.equity_curve || results.equityCurve || [],
-          metrics: results.metrics || {},
-          calmar: results.metrics?.calmar_ratio || 0,
-          profitFactor: results.metrics?.profit_factor || 0,
-          expectedValue: results.metrics?.expectancy || 0,
-          exposure: results.metrics?.exposure_ratio || 0,
+      const response = await algoApi.getBacktestHistory();
+      if (response && response.status === "success" && response.results) {
+        const mapped = response.results.map((res: any) => ({
+          id: res.id,
+          strategy_id: res.strategy_id,
+          name: res.strategy_id || "Institutional Strategy",
+          date: new Date(res.created_at || Date.now()).toLocaleString(),
+          cagr: res.metrics?.cagr || 0,
+          sharpe: res.metrics?.sharpe_ratio || 0,
+          sortino: res.metrics?.sortino_ratio || 0,
+          maxDD: res.metrics?.max_drawdown_pct || 0,
+          winRate: res.metrics?.win_rate_pct || 0,
+          pf: res.metrics?.profit_factor || 0,
+          tradesCount: res.metrics?.total_trades || 0,
+          trades: res.trades || [],
+          equityCurve: res.metrics?.equity_curve || [],
+          metrics: res.metrics || {},
+          calmar: res.metrics?.calmar_ratio || 0,
+          profitFactor: res.metrics?.profit_factor || 0,
+          expectedValue: res.metrics?.expectancy || 0,
+          exposure: res.metrics?.exposure_ratio || 0,
+          symbol: res.symbol,
+          days: res.days,
+          interval: res.interval,
           isReal: true
-        }];
+        }));
         setDbResults(mapped);
-      } else if (retryCount < 3) {
-        setTimeout(() => fetchResults(retryCount + 1), 1500);
       }
     } catch (err) {
-      console.warn("Retrying backtest fetch...", retryCount);
-      if (retryCount < 3) {
-        setTimeout(() => fetchResults(retryCount + 1), 1500);
-      }
+      console.warn("Backtest fetch failure:", err);
     } finally {
       setIsLoading(false);
     }
@@ -181,7 +182,7 @@ export function BacktestCanvas({ latestResult }: BacktestCanvasProps = {}) {
     fetchResults();
   }, []);
 
-  const currentResult = useMemo(() => dbResults[0] || null, [dbResults]);
+  const currentResult = useMemo(() => dbResults[selectedIndex] || null, [dbResults, selectedIndex]);
 
   // Use the HTML-provided trades if we don't have real data
   const fallbackTrades = [
@@ -221,11 +222,69 @@ export function BacktestCanvas({ latestResult }: BacktestCanvasProps = {}) {
               <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.4)] animate-pulse"></span>
               <span className="text-[11px] font-mono font-medium text-emerald-400 uppercase">Engine Ready</span>
             </div>
-            <button className="p-1.5 hover:bg-slate-800 rounded text-slate-400 transition-colors">
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className={cn("p-1.5 rounded transition-colors", showHistory ? "bg-primary text-black" : "hover:bg-slate-800 text-slate-400")}
+            >
                <History className="w-4 h-4" />
             </button>
           </div>
         </div>
+
+        {/* History Overlay Panel */}
+        <AnimatePresence>
+          {showHistory && (
+            <motion.div
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              className="absolute top-[65px] right-0 bottom-0 w-80 bg-[#0F172A] border-l border-slate-800 z-50 shadow-2xl p-4 flex flex-col"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="font-mono font-bold text-[12px] text-white tracking-widest uppercase">Simulation_History</h3>
+                <button onClick={() => setShowHistory(false)} className="text-slate-500 hover:text-white">
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2">
+                {dbResults.length === 0 ? (
+                  <div className="text-center py-10 opacity-20 italic text-[10px]">No historical data found</div>
+                ) : (
+                  dbResults.map((res, idx) => (
+                    <button
+                      key={res.id}
+                      onClick={() => { setSelectedIndex(idx); setShowHistory(false); }}
+                      className={cn(
+                        "w-full text-left p-3 border transition-all hover:bg-slate-800 group",
+                        selectedIndex === idx ? "border-primary/50 bg-primary/5" : "border-slate-800 bg-slate-900/40"
+                      )}
+                    >
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="text-[11px] font-bold text-white group-hover:text-primary">{res.strategy_id}</span>
+                        <span className="text-[9px] font-mono text-slate-500">{res.date}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex flex-col">
+                          <span className="text-[8px] font-mono text-slate-500 uppercase">CAGR</span>
+                          <span className="text-[10px] font-bold text-emerald-400">+{res.cagr.toFixed(1)}%</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[8px] font-mono text-slate-500 uppercase">Sharpe</span>
+                          <span className="text-[10px] font-bold text-blue-400">{res.sharpe.toFixed(2)}</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[8px] font-mono text-slate-500 uppercase">Symbol</span>
+                          <span className="text-[10px] font-bold text-slate-300">{res.symbol}</span>
+                        </div>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
