@@ -44,10 +44,10 @@ class AngelOneBroker(BaseBroker):
                 return True
             else:
                 msg = session.get("message") if session else "No response"
-                logger.error(f"Angel One login failed: {msg}")
-                raise Exception(f"Angel One login failed: {msg}")
-        except Exception as e:
-            logger.error(f"Angel One login exception: {e}")
+                logger.error("Angel One login failed: %s", msg)
+                raise Exception("Angel One login failed")
+        except Exception:
+            logger.error("Angel One login exception", exc_info=True)
             raise
 
     async def logout(self) -> bool:
@@ -58,8 +58,8 @@ class AngelOneBroker(BaseBroker):
             self.is_connected = False
             logger.info(f"Angel One disconnected: {self.client_id}")
             return True
-        except Exception as e:
-            logger.error(f"Angel One logout exception: {e}")
+        except Exception:
+            logger.error("Angel One logout exception", exc_info=True)
             self.is_connected = False
             return False
 
@@ -125,8 +125,8 @@ class AngelOneBroker(BaseBroker):
                     raw_response={"order_id": str(order_id)},
                 )
             raise Exception("Angel One placeOrder returned no order ID")
-        except Exception as e:
-            logger.error(f"Angel One place_order failed: {e}")
+        except Exception:
+            logger.error("Angel One place_order failed", exc_info=True)
             raise
 
     async def cancel_order(self, broker_order_id: str) -> bool:
@@ -137,10 +137,10 @@ class AngelOneBroker(BaseBroker):
             )
             if res and res.get("status"):
                 return True
-            logger.error(f"Angel One cancel_order failed: {res}")
+            logger.error("Angel One cancel_order failed")
             return False
-        except Exception as e:
-            logger.error(f"Angel One cancel_order exception: {e}")
+        except Exception:
+            logger.error("Angel One cancel_order exception", exc_info=True)
             return False
 
     async def get_positions(self) -> List[NormalizedPosition]:
@@ -170,8 +170,8 @@ class AngelOneBroker(BaseBroker):
                         exchange=p.get("exchange", "NSE"),
                     ))
             return positions
-        except Exception as e:
-            logger.error(f"Angel One get_positions failed: {e}")
+        except Exception:
+            logger.error("Angel One get_positions failed", exc_info=True)
             return []
 
     async def get_margins(self) -> Dict[str, float]:
@@ -188,8 +188,8 @@ class AngelOneBroker(BaseBroker):
                     "total": net + used,
                 }
             return {"available": 0.0, "used": 0.0, "total": 0.0}
-        except Exception as e:
-            logger.error(f"Angel One get_margins failed: {e}")
+        except Exception:
+            logger.error("Angel One get_margins failed", exc_info=True)
             return {"available": 0.0, "used": 0.0, "total": 0.0}
 
     async def get_orders(self) -> List[NormalizedOrder]:
@@ -234,8 +234,8 @@ class AngelOneBroker(BaseBroker):
                         raw_response=o,
                     ))
             return orders
-        except Exception as e:
-            logger.error(f"Angel One get_orders failed: {e}")
+        except Exception:
+            logger.error("Angel One get_orders failed", exc_info=True)
             return []
 
     async def subscribe_ticks(self, symbols: List[str]):
