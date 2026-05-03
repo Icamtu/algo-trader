@@ -150,8 +150,8 @@ class GeneticOptimizer:
 
             self.cache[param_key] = fitness
             return fitness, result
-        except Exception as e:
-            logger.error(f"Fitness evaluation failed: {e}")
+        except Exception:
+            logger.error("Fitness evaluation failed", exc_info=True)
             return -999999.0, None
 
     def _tournament_selection(self, population: List[Dict[str, Any]], scores: List[float]) -> Dict[str, Any]:
