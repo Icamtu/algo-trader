@@ -75,8 +75,8 @@ class OrderManager:
                 self.native_broker = BrokerFactory.get_broker(broker_name, broker_config)
                 logger.info("AetherBridge: Native Broker [%s] initialized (Shadow Mode: %s)",
                             broker_name.upper(), self.shadow_mode)
-            except Exception as e:
-                logger.error("AetherBridge: Failed to initialize native broker: %s", e)
+            except Exception:
+                logger.error("AetherBridge: Failed to initialize native broker", exc_info=True)
 
         # Position Management Delegates (Phase 16: Separate state tracks)
         self.live_position_manager = (position_manager if self.mode == "live" else None) or PositionManager()
@@ -275,7 +275,7 @@ class OrderManager:
                                 )
                                 native_latency = (time.perf_counter() - start_native) * 1000
                                 native_order_id = native_order.order_id
-                                logger.info(f"[AETHERBRIDGE] {effective_mode.upper()} Execution: {native_latency:.2f}ms | OrderID: {native_order_id}")
+                                logger.info("[AETHERBRIDGE] %s Execution: %s ms | OrderID: %s", effective_mode.upper(), f"{native_latency:.2f}", native_order_id)
 
                                 response = {
                                     "status": "success",
@@ -283,12 +283,12 @@ class OrderManager:
                                     "price": native_order.price,
                                     "message": "Executed via AetherBridge Native"
                                 }
-                            except Exception as ne:
-                                logger.error(f"Native broker execution failed: {ne}")
-                                raise ne
+                            except Exception:
+                                logger.error("Native broker execution failed", exc_info=True)
+                                raise
 
                         if not response:
-                            logger.error(f"AetherBridge native execution failed to provide a response for {symbol}")
+                            logger.error("AetherBridge native execution failed to provide a response for %s", symbol)
                             raise Exception(f"Native execution failed for {symbol}")
 
                         if response:
@@ -296,7 +296,7 @@ class OrderManager:
                             broker_span.set_attribute("order_id", str(response.get("order_id", "N/A")))
 
                     broker_latency = (time.perf_counter() - start_broker) * 1000
-                    logger.info(f"[AUDIT] Broker Latency for {symbol} {action}: {broker_latency:.2f}ms")
+                    logger.info("[AUDIT] Broker Latency for %s %s: %s ms", symbol, action, f"{broker_latency:.2f}")
                     # Prometheus metrics
                     try:
                         from fastapi_app import ORDER_COUNTER, LATENCY_HISTOGRAM
@@ -304,8 +304,8 @@ class OrderManager:
                         LATENCY_HISTOGRAM.labels(operation="order_execution").observe(broker_latency / 1000)
                     except Exception:
                         pass
-                except Exception as e:
-                    logger.error("[%s] Broker call failed for %s: %s", strategy_name, symbol, e, exc_info=True)
+                except Exception:
+                    logger.error("[%s] Broker call failed for %s", strategy_name, symbol, exc_info=True)
                     asyncio.create_task(self.trade_logger.log_trade(
                         strategy=strategy_name,
                         symbol=symbol,
@@ -329,8 +329,8 @@ class OrderManager:
                             "exchange": exchange,
                             "ai_reasoning": ai_reasoning,
                             "conviction": conviction,
-                        }, str(e))
-                    return {"status": "error", "message": str(e)}
+                        }, "Internal execution error")
+                    return {"status": "error", "message": "Broker execution failed"}
 
                 logger.info("[%s] << Response: %s", strategy_name, response)
 
@@ -362,8 +362,8 @@ class OrderManager:
                             if broker_ltp > 0:
                                 execution_price = broker_ltp
                                 logger.info("[%s] Fallback pricing triggered for %s: %s", strategy_name, symbol, execution_price)
-                    except Exception as pe:
-                         logger.warning(f"PLACE_ORDER_PRICING_FALLBACK_FAULT: {pe}")
+                    except Exception:
+                         logger.warning("PLACE_ORDER_PRICING_FALLBACK_FAULT", exc_info=True)
 
                 # Calculate charges
                 est_charges = 0.0
@@ -377,8 +377,8 @@ class OrderManager:
                             side=action, quantity=quantity, price=execution_price, product=product, asset_type=asset_type
                         )
                         est_charges = charge_data["total"]
-                    except Exception as ce:
-                        logger.warning(f"CHARGE_CALC_FAULT: {ce}")
+                    except Exception:
+                        logger.warning("CHARGE_CALC_FAULT", exc_info=True)
 
                 # 3. Log to database
                 asyncio.create_task(self.trade_logger.log_trade(
@@ -468,9 +468,9 @@ class OrderManager:
                     product=product,
                     exchange=exchange
                 )
-            except Exception as e:
-                logger.error("[%s] SmartOrder failed: %s", strategy_name, e, exc_info=True)
-                return {"status": "error", "message": str(e)}
+            except Exception:
+                logger.error("[%s] SmartOrder failed", strategy_name, exc_info=True)
+                return {"status": "error", "message": "Smart order calculation failed"}
 
     async def place_basket_order(self, strategy_name: str, orders: list):
         """Send multiple orders sequentially (AetherBridge bulk processing)."""
@@ -517,8 +517,8 @@ class OrderManager:
                 product=n_product,
                 exchange=exchange
             )
-        except Exception as e:
-            logger.error("ModifyOrder failed: %s", e, exc_info=True)
+        except Exception:
+            logger.error("ModifyOrder failed", exc_info=True)
             return None
 
     async def cancel_order(self, order_id: str):
@@ -528,8 +528,8 @@ class OrderManager:
             active_broker = self.native_broker if self.mode == "live" else self.paper_broker
             if not active_broker: return None
             return await active_broker.cancel_order(order_id)
-        except Exception as e:
-            logger.error("CancelOrder failed: %s", e, exc_info=True)
+        except Exception:
+            logger.error("CancelOrder failed", exc_info=True)
             return None
 
     async def cancel_all_orders(self):
@@ -545,8 +545,8 @@ class OrderManager:
                 tasks = [active_broker.cancel_order(o["order_id"]) for o in orders if o["status"] in ["OPEN", "PENDING", "MODIFY_PENDING"]]
                 if tasks: await asyncio.gather(*tasks)
                 return {"status": "success", "message": "All orders cancelled"}
-        except Exception as e:
-            logger.error("CancelAllOrders failed: %s", e, exc_info=True)
+        except Exception:
+            logger.error("CancelAllOrders failed", exc_info=True)
             return None
 
     async def square_off_all(self):
@@ -591,9 +591,9 @@ class OrderManager:
 
                 results = await asyncio.gather(*tasks)
                 return {"status": "success", "results": results}
-            except Exception as e:
-                logger.error("EMERGENCY_SQUARE_OFF_FAULT: %s", e, exc_info=True)
-                return {"status": "error", "message": str(e)}
+            except Exception:
+                logger.error("EMERGENCY_SQUARE_OFF_FAULT", exc_info=True)
+                return {"status": "error", "message": "Emergency square-off failed"}
 
     async def liquidate_strategy(self, strategy_id: str):
         """
@@ -601,7 +601,7 @@ class OrderManager:
         1. Halt the strategy in RiskManager to block new orders.
         2. Identify and square off all positions with this strategy metadata.
         """
-        logger.warning(f"!!! TARGETED LIQUIDATION INITIATED: {strategy_id} !!!")
+        logger.warning("!!! TARGETED LIQUIDATION INITIATED: %s !!!", strategy_id)
         try:
             # 1. Block further orders
             self.risk_manager.halt_strategy(strategy_id)
@@ -619,7 +619,7 @@ class OrderManager:
 
                         action = "SELL" if pos.quantity > 0 else "BUY"
                         qty = abs(pos.quantity)
-                        logger.warning(f"Liquidating {strategy_id} -> {symbol} {action} {qty}")
+                        logger.warning("Liquidating %s -> %s %s %s", strategy_id, symbol, action, qty)
                         tasks.append(self.place_order(
                             strategy_name=f"KILL_{strategy_id}",
                             symbol=symbol,
@@ -635,9 +635,9 @@ class OrderManager:
 
             return {"status": "success", "message": "No positions found for this strategy."}
 
-        except Exception as e:
-            logger.error(f"Targeted liquidation for {strategy_id} failed: {e}", exc_info=True)
-            return {"status": "error", "message": str(e)}
+        except Exception:
+            logger.error(f"Targeted liquidation for {strategy_id} failed", exc_info=True)
+            return {"status": "error", "message": "Strategy liquidation failed"}
 
     async def get_order_status(self, order_id: str):
         return await asyncio.to_thread(self.client.get_order_status, order_id)
@@ -653,16 +653,16 @@ class OrderManager:
             try:
                 positions = await self.native_broker.get_positions()
                 return [p.model_dump() if hasattr(p, "model_dump") else (p.dict() if hasattr(p, "dict") else p) for p in positions]
-            except Exception as e:
-                logger.error(f"Native get_positions failed: {e}")
+            except Exception:
+                logger.error("Native get_positions failed", exc_info=True)
                 if not self.shadow_mode: return []
 
         # Fallback to paper broker for sandbox or as secondary source
         try:
             positions = await self.paper_broker.get_positions()
             return [p.model_dump() if hasattr(p, "model_dump") else (p.dict() if hasattr(p, "dict") else p) for p in positions]
-        except Exception as e:
-            logger.error(f"Paper get_positions failed: {e}")
+        except Exception:
+            logger.error("Paper get_positions failed", exc_info=True)
             return []
 
     async def get_open_positions_dict(self) -> Dict[str, int]:
@@ -704,8 +704,8 @@ class OrderManager:
             orders = await active_broker.get_orders()
             # Use model_dump() for V2, dict() for V1 fallback
             return [o.model_dump() if hasattr(o, "model_dump") else (o.dict() if hasattr(o, "dict") else o) for o in orders]
-        except Exception as e:
-            logger.error(f"GetOrders failed: {e}")
+        except Exception:
+            logger.error("GetOrders failed", exc_info=True)
             return []
 
     async def get_trades(self):
@@ -720,9 +720,9 @@ class OrderManager:
                 
             funds = await active_broker.get_funds()
             return funds.model_dump() if hasattr(funds, "model_dump") else (funds.dict() if hasattr(funds, "dict") else funds)
-        except Exception as e:
-            logger.error(f"GetFunds failed: {e}")
-            return {"status": "error", "message": str(e)}
+        except Exception:
+            logger.error("GetFunds failed", exc_info=True)
+            return {"status": "error", "message": "Failed to fetch funds"}
 
     async def get_history(
         self,
@@ -759,8 +759,8 @@ class OrderManager:
                 start_time=n_start,
                 end_time=n_end
             )
-        except Exception as e:
-            logger.error(f"GetHistory failed: {e}")
+        except Exception:
+            logger.error("GetHistory failed", exc_info=True)
             return []
 
     async def toggle_analyzer(self, state: bool):
@@ -780,8 +780,9 @@ class OrderManager:
         try:
             quote = await active_broker.get_quote(symbol, exchange)
             return {"status": "success", "data": quote}
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+        except Exception:
+            logger.error("Quote fetch failure", exc_info=True)
+            return {"status": "error", "message": "Failed to fetch market data"}
 
     async def get_multi_quotes(self, symbols: list):
         """
@@ -797,9 +798,9 @@ class OrderManager:
             # Delegate to the broker's native (or default concurrent) get_multi_quotes
             results = await active_broker.get_multi_quotes(symbols)
             return {"status": "success", "data": results}
-        except Exception as e:
-            logger.error(f"Bulk quote fetch failed: {e}")
-            return {"status": "error", "message": str(e)}
+        except Exception:
+            logger.error("Bulk quote fetch failed", exc_info=True)
+            return {"status": "error", "message": "Bulk quote fetch failed"}
 
     # ------------------------------------------------------------------
     # Synchronization & Reconciliation
@@ -846,8 +847,8 @@ class OrderManager:
                     return True
 
             return False
-        except Exception as e:
-            logger.error(f"Drift check failed: {e}")
+        except Exception:
+            logger.error("Drift check failed", exc_info=True)
             return False
 
 
@@ -951,5 +952,5 @@ class OrderManager:
                     pm.set_position(symbol, 0, 0.0)
 
             logger.info("Broker reconciliation complete.")
-        except Exception as e:
-            logger.error("Error during broker reconciliation: %s", e, exc_info=True)
+        except Exception:
+            logger.error("Error during broker reconciliation", exc_info=True)
