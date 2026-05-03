@@ -27,8 +27,8 @@ async def vault_list(type: Optional[str] = None, tags: Optional[List[str]] = Que
     try:
         assets = get_vault().list_assets(type, tags)
         return {"status": "success", "assets": assets}
-    except Exception as e:
-        logger.error(f"Vault list error: {e}")
+    except Exception:
+        logger.error("Vault list error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/register")
@@ -45,8 +45,8 @@ async def vault_register(request: VaultRegisterRequest):
             version=request.version
         )
         return {"status": "success", "asset_id": asset_id}
-    except Exception as e:
-        logger.error(f"Vault register error: {e}")
+    except Exception:
+        logger.error("Vault register error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/details/{asset_id}")
@@ -58,8 +58,8 @@ async def vault_details(asset_id: int):
             raise HTTPException(status_code=404, detail="Asset not found")
         return {"status": "success", "asset": details}
     except HTTPException: raise
-    except Exception as e:
-        logger.error(f"Vault details error: {e}")
+    except Exception:
+        logger.error("Vault details error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/search")
@@ -68,8 +68,8 @@ async def vault_search(request: VaultSearchRequest):
     try:
         results = get_vault().search_assets(request.term)
         return {"status": "success", "assets": results}
-    except Exception as e:
-        logger.error(f"Vault search error: {e}")
+    except Exception:
+        logger.error("Vault search error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/content/{asset_id}")
@@ -89,6 +89,6 @@ async def vault_content(asset_id: int):
             content = f.read()
         return {"status": "success", "content": content}
     except HTTPException: raise
-    except Exception as e:
-        logger.error(f"Vault content error: {e}")
+    except Exception:
+        logger.error("Vault content error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
