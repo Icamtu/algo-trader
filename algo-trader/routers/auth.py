@@ -45,8 +45,8 @@ async def get_broker_config():
         db_logger = get_trade_logger()
         config = db_logger.get_broker_config()
         return config
-    except Exception as e:
-        logger.error(f"Broker config error: {e}")
+    except Exception:
+        logger.error("Broker config error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/brokers/shoonya/auth")
@@ -62,8 +62,8 @@ async def shoonya_auth_init(request: Request):
         return {"status": "success", "auth_url": auth_url}
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Shoonya Auth Init Error: {e}")
+    except Exception:
+        logger.error("Shoonya Auth Init Error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/auth/callback/shoonya")
@@ -78,8 +78,8 @@ async def shoonya_callback(code: str = Query(None)):
             return RedirectResponse(url=f"{UI_BASE_URL}/aetherdesk/broker?status=success&message=shoonya_linked")
         else:
             return RedirectResponse(url=f"{UI_BASE_URL}/aetherdesk/broker?status=error&message=auth_failed")
-    except Exception as e:
-        logger.error(f"Critical failure in Shoonya callback: {e}")
+    except Exception:
+        logger.error("Critical failure in Shoonya callback", exc_info=True)
         return RedirectResponse(url=f"{UI_BASE_URL}/aetherdesk/broker?status=error&message=internal_error")
 
 @router.post("/brokers/zerodha/auth")
@@ -105,8 +105,8 @@ async def zerodha_auth_init(request: Request):
         return {"status": "success", "auth_url": auth_url}
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Zerodha Auth Init Error: {e}")
+    except Exception:
+        logger.error("Zerodha Auth Init Error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/auth/callback/zerodha")
@@ -124,6 +124,6 @@ async def zerodha_callback(request: Request, request_token: str = Query(None)):
              return RedirectResponse(url=f"{UI_BASE_URL}/aetherdesk/broker?status=success&message=zerodha_linked")
         else:
              return RedirectResponse(url=f"{UI_BASE_URL}/aetherdesk/broker?status=error&message=auth_failed")
-    except Exception as e:
-        logger.error(f"Critical failure in Zerodha callback: {e}")
+    except Exception:
+        logger.error("Critical failure in Zerodha callback", exc_info=True)
         return RedirectResponse(url=f"{UI_BASE_URL}/aetherdesk/broker?status=error&message=internal_error")
