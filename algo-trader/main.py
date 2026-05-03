@@ -121,9 +121,8 @@ async def system_health_monitor(order_manager):
                     headers={"X-Heartbeat-Token": token}
                 )
 
-        except Exception as e:
-            # Don't swarm logs if API is booting up
-            logger.debug(f"Heartbeat monitor loop suppressed error: {e}")
+        except Exception:
+            logger.error("Health Monitor heartbeat failed", exc_info=True)
 
         await asyncio.sleep(10)
 
