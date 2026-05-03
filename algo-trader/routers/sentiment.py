@@ -15,8 +15,8 @@ async def get_news_sentiment(
     try:
         results = await sentiment_service.get_latest_news_sentiment(query)
         return {"status": "success", "count": len(results), "news": results}
-    except Exception as e:
-        logger.error(f"News Sentiment Error: {e}")
+    except Exception:
+        logger.error("News Sentiment Error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/aggregate")
@@ -27,6 +27,6 @@ async def get_aggregated_sentiment(
     try:
         result = await sentiment_service.get_aggregated_sentiment(symbol)
         return {"status": "success", "data": result}
-    except Exception as e:
-        logger.error(f"Aggregated Sentiment Error: {e}")
+    except Exception:
+        logger.error("Aggregated Sentiment Error", exc_info=True)
         raise HTTPException(status_code=500, detail="An internal error occurred")
