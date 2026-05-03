@@ -36,11 +36,11 @@ class ActionManager:
 
     def set_auto_execute(self, enabled: bool):
         self.auto_execute = enabled
-        logger.info(f"AUDIT_PROTOCOL: Auto-Execution {'ENABLED' if enabled else 'DISABLED'}")
+        logger.info("AUDIT_PROTOCOL: Auto-Execution %s", 'ENABLED' if enabled else 'DISABLED')
 
     def set_risk_lock(self, locked: bool):
         self.risk_lock = locked
-        logger.info(f"AUDIT_PROTOCOL: System-wide Risk Lock {'ARMED' if locked else 'DISARMED'}")
+        logger.info("AUDIT_PROTOCOL: System-wide Risk Lock %s", 'ARMED' if locked else 'DISARMED')
 
     def get_action_queue(self, status='pending', limit=100) -> list:
         """Proxies store call to fetch queued orders by status."""
@@ -68,11 +68,11 @@ class ActionManager:
                     continue
 
             for oid in expired_ids:
-                logger.info(f"Signal {oid} expired after {expiry_minutes}m. Auto-rejecting.")
+                logger.info("Signal %s expired after %sm. Auto-rejecting.", oid, expiry_minutes)
                 self.reject_order(oid, reason=f"Signal Expired ({expiry_minutes}m)")
 
-        except Exception as e:
-            logger.error(f"Signal cleanup error: {e}")
+        except Exception:
+            logger.error("Signal cleanup error", exc_info=True)
 
     def queue_for_approval(self, order_data: dict) -> Optional[int]:
         """Queues an order for human approval and broadcasts via telemetry."""
@@ -81,7 +81,7 @@ class ActionManager:
 
         # Risk Lock Check - Institutional Override
         if self.risk_lock:
-            logger.warning(f"INSTITUTIONAL_LOCK_ACTIVE: Rejecting order for {order_data.get('symbol')}")
+            logger.warning("INSTITUTIONAL_LOCK_ACTIVE: Rejecting order for %s", order_data.get('symbol'))
             order_data['status'] = 'rejected'
             order_data['reason'] = 'System-wide Risk Lock'
             self.sqlite.save_signal(order_data)
@@ -101,7 +101,7 @@ class ActionManager:
 
         # Auto-Execution Mode
         if self.auto_execute:
-            logger.info(f"AUTO_EXECUTE_ACTIVE: Auto-approving signal {order_id}")
+            logger.info("AUTO_EXECUTE_ACTIVE: Auto-approving signal %s", order_id)
             if self.loop and self.loop.is_running():
                 self.loop.call_soon_threadsafe(
                     lambda: asyncio.create_task(self.approve_order(order_id))
@@ -164,7 +164,7 @@ class ActionManager:
         try:
             order_id = int(order_id)
         except (ValueError, TypeError):
-            logger.error(f"Approval failed: Invalid order ID format: {order_id}")
+            logger.error("Approval failed: Invalid order ID format: %s", order_id)
             return False
 
         start_time = time.perf_counter()
@@ -172,10 +172,10 @@ class ActionManager:
         order = next((o for o in queue if o['id'] == order_id), None)
 
         if not order:
-            logger.error(f"Approval failed: Order ID {order_id} not found in pending queue")
+            logger.error("Approval failed: Order ID %s not found in pending queue", order_id)
             return False
 
-        logger.info(f"Human Approval Received: ID {order_id} | {order['symbol']} {order['action']}")
+        logger.info("Human Approval Received: ID %s | %s %s", order_id, order['symbol'], order['action'])
 
         # Route to OrderManager or Handle Action
         try:
@@ -215,9 +215,9 @@ class ActionManager:
                         if quote and isinstance(quote, dict):
                             # Handle different response formats from broker
                             price = float(quote.get("last_price") or quote.get("lp") or price)
-                            logger.info(f"Updated MARKET order price with fresh LTP: {price}")
+                            logger.info("Updated MARKET order price with fresh LTP: %s", price)
                     except Exception as qe:
-                        logger.warning(f"LTP_FETCH_FAULT for {order['symbol']}: {qe}")
+                        logger.warning("LTP_FETCH_FAULT for %s: %s", order['symbol'], qe)
 
                 result = await self.order_manager.place_order(
                     strategy_name=strategy,
@@ -234,11 +234,11 @@ class ActionManager:
                 )
                 if result.get("status") == "success":
                     success = True
-                    logger.info(f"Approved order routed successfully: {order_id} (Strategy: {strategy})")
+                    logger.info("Approved order routed successfully: %s (Strategy: %s)", order_id, strategy)
                 else:
                     success = False
                     error_msg = result.get('message', 'Broker rejection')
-                    logger.error(f"Execution failed for approved order {order_id}: {error_msg}")
+                    logger.error("Execution failed for approved order %s: %s", order_id, error_msg)
 
             if success:
                 # Mark as approved in SignalStore only if execution succeeded
@@ -268,7 +268,7 @@ class ActionManager:
                 return False
 
         except Exception as e:
-            logger.error(f"Error executing approved order {order_id}: {e}", exc_info=True)
+            logger.error("Error executing approved order %s", order_id, exc_info=True)
             # Revert state or mark as critical error
             self.store.resolve_signal(order_id, 'exec_error', reason=str(e))
             return False
@@ -280,7 +280,7 @@ class ActionManager:
             code = payload.get("code")
 
             if not filename or not code:
-                logger.error(f"Deployment action failed: Missing filename or code in payload")
+                logger.error("Deployment action failed: Missing filename or code in payload")
                 return False
 
             strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'strategies'))
@@ -289,16 +289,16 @@ class ActionManager:
 
             # Security check
             if not os.path.abspath(file_path).startswith(os.path.abspath(strat_dir)):
-                logger.error(f"Forbidden deployment path: {file_path}")
+                logger.error("Forbidden deployment path: %s", file_path)
                 return False
 
             with open(file_path, "w") as f:
                 f.write(code)
 
-            logger.info(f"Strategy deployed successfully via HITL Approval: {filename}")
+            logger.info("Strategy deployed successfully via HITL Approval: %s", filename)
             return True
-        except Exception as e:
-            logger.error(f"Strategy deployment fault: {e}")
+        except Exception:
+            logger.error("Strategy deployment fault", exc_info=True)
             return False
 
     async def approve_all_pending(self) -> int:
@@ -350,10 +350,10 @@ class ActionManager:
         try:
             order_id = int(order_id)
         except (ValueError, TypeError):
-            logger.error(f"Rejection failed: Invalid order ID format: {order_id}")
+            logger.error("Rejection failed: Invalid order ID format: %s", order_id)
             return False
 
-        logger.info(f"Human Rejection Received: ID {order_id} | Reason: {reason or 'No reason provided'}")
+        logger.info("Human Rejection Received: ID %s | Reason: %s", order_id, reason or 'No reason provided')
         success = self.store.resolve_signal(order_id, 'rejected', reason=reason)
 
         if success and self.telemetry_callback:
@@ -383,16 +383,16 @@ class ActionManager:
         """
         order = self.sqlite.get_action_order(order_id)
         if not order:
-            logger.error(f"Retry failed: Order ID {order_id} not found in database")
+            logger.error("Retry failed: Order ID %s not found in database", order_id)
             return None
 
         # Get the original order data
         payload = order.get('raw_order_data')
         if not payload:
-            logger.error(f"Retry failed: No payload found for order {order_id}")
+            logger.error("Retry failed: No payload found for order %s", order_id)
             return None
 
-        logger.info(f"Retrying Order {order_id}: {order['symbol']} {order['action']}")
+        logger.info("Retrying Order %s: %s %s", order_id, order['symbol'], order['action'])
 
         # Add a note that it's a retry
         if isinstance(payload, dict):
