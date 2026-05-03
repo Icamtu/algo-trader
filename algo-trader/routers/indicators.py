@@ -22,8 +22,8 @@ async def save_indicator(
     try:
         path = indicator_service.save_indicator(name, code)
         return {"status": "success", "path": path}
-    except Exception as e:
-        logger.error(f"Save Indicator Error: {e}")
+    except Exception:
+        logger.error("Save Indicator Error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/calculate")
@@ -49,6 +49,6 @@ async def calculate_indicator(
             res_list = list(result)
 
         return {"status": "success", "result": res_list}
-    except Exception as e:
-        logger.error(f"Calculate Indicator Error: {e}")
+    except Exception:
+        logger.error("Calculate Indicator Error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
