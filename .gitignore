@@ -26,7 +26,12 @@ __pycache__/
 *.duckdb
 algo-trader/database/*.db
 algo-trader/database/*.duckdb
-algo-trader/data/
+# Track all Python logic in data/ and database/
+!algo-trader/data/**/*.py
+!algo-trader/database/**/*.py
+# Ignore binary/temp files in data/
+algo-trader/data/*
+!algo-trader/data/__init__.py
 !algo-trader/data/*.py
 algo-trader/storage/
 mongodb_data/
