@@ -32,8 +32,8 @@ class StatArbEngine:
             # Inner join to ensure alignment
             df = df1.join(df2, how='inner').dropna()
             return df
-        except Exception as e:
-            logger.error(f"Data alignment failed for {symbol1}-{symbol2}: {e}")
+        except Exception:
+            logger.error("Data alignment failed for %s-%s", symbol1, symbol2, exc_info=True)
             return None
 
     async def check_cointegration(self, symbol1: str, symbol2: str, interval: str = "1h", limit: int = 500) -> Dict[str, Any]:
@@ -68,8 +68,8 @@ class StatArbEngine:
                 "alpha": round(alpha, 4),
                 "data_points": len(df)
             }
-        except Exception as e:
-            logger.error(f"Cointegration test failed for {symbol1}-{symbol2}: {e}")
+        except Exception:
+            logger.error("Cointegration test failed for %s-%s", symbol1, symbol2, exc_info=True)
             return {"status": "error", "message": "Internal service error"}
 
     async def calculate_current_zscore(self, symbol1: str, symbol2: str, window: int = 20, interval: str = "1h") -> Dict[str, Any]:
@@ -107,8 +107,8 @@ class StatArbEngine:
                 "last_price1": df[symbol1].iloc[-1],
                 "last_price2": df[symbol2].iloc[-1]
             }
-        except Exception as e:
-            logger.error(f"Z-score calculation failed for {symbol1}-{symbol2}: {e}")
+        except Exception:
+            logger.error("Z-score calculation failed for %s-%s", symbol1, symbol2, exc_info=True)
             return {"status": "error", "message": "Internal service error"}
 
     async def scan_market_for_pairs(self, universe: List[str], interval: str = "1h") -> Dict[str, Any]:
@@ -118,7 +118,7 @@ class StatArbEngine:
         """
         pairs = []
         n = len(universe)
-        logger.info(f"Scanning {n} symbols for cointegrated pairs...")
+        logger.info("Scanning %s symbols for cointegrated pairs...", n)
 
         for i in range(n):
             for j in range(i + 1, n):
