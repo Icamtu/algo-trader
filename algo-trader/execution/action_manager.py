@@ -284,6 +284,7 @@ class ActionManager:
                 return False
 
             strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'strategies'))
+            filename = os.path.basename(filename.replace(":", "/"))
             file_path = os.path.join(strat_dir, filename)
 
             # Security check
