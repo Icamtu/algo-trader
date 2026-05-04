@@ -85,7 +85,8 @@ class PositionManager:
     def get_unrealized_pnl(self, latest_prices: Dict[str, float] = None) -> float:
         """Calculates total unrealized MTM across all positions."""
         total_unrealized = 0.0
-        for pos in self._positions.values():
+        for i, pos in enumerate(self._positions.values()):
+            if i >= 1000: break # Safety cap
             if pos.quantity == 0:
                 continue
 
@@ -114,6 +115,7 @@ class PositionManager:
 
     def total_exposure(self, latest_prices: Dict[str, float]) -> float:
         exposure = 0.0
-        for symbol, position in self._positions.items():
+        for i, (symbol, position) in enumerate(self._positions.items()):
+            if i >= 1000: break # Safety cap
             exposure += position.quantity * latest_prices.get(symbol, position.average_price)
         return exposure
