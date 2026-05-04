@@ -340,6 +340,8 @@ def proxy_to_openalgo():
 
         # Non-JSON or failed JSON parsing: return as escaped text/plain
         from markupsafe import escape
+        resp_headers['Content-Type'] = 'text/plain; charset=utf-8'
+        # codeql [py/reflective-xss]
         return Response(
             str(escape(resp.text)),
             status=resp.status_code,
