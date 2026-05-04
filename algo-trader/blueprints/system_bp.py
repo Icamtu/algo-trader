@@ -69,7 +69,11 @@ def system_heartbeat():
         if len(_heartbeat_data["checks"]) > 100:
             # Retain only core institutional checks if registry exceeds limit
             core_keys = {"algo_engine", "broker", "redis", "database"}
-            _heartbeat_data["checks"] = {k: v for k, v in _heartbeat_data["checks"].items() if k in core_keys}
+            new_checks = {}
+            for k, v in _heartbeat_data["checks"].items():
+                if k in core_keys:
+                    new_checks[k] = v
+            _heartbeat_data["checks"] = new_checks
 
         # Process and sanitize custom checks (supporting both top-level and nested 'checks')
         checks_source = data.get("checks") if isinstance(data.get("checks"), dict) else data
