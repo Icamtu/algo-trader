@@ -20,7 +20,7 @@ def ema(values: Iterable[float], period: int) -> Optional[float]:
     v = np.array(values, dtype=float)
     if period <= 0 or len(v) < period:
         return None
-    
+
     # Use Pandas EWM for highly optimized exponential weighting
     return pd.Series(v).ewm(span=period, adjust=False).mean().iloc[-1]
 
@@ -43,7 +43,7 @@ def rsi(values: Iterable[float], period: int = 14) -> Optional[float]:
         d_val = -d if d < 0 else 0
         up = (up * (period - 1) + u) / period
         down = (down * (period - 1) + d_val) / period
-    
+
     if down == 0:
         return 100.0
     rs = up / down
@@ -89,14 +89,14 @@ def vwap(prices: Iterable[float], volumes: Iterable[float]) -> Optional[float]:
     """Volume Weighted Average Price using vectorized NumPy logic."""
     p = np.array(prices, dtype=float)
     v = np.array(volumes, dtype=float)
-    
+
     if len(p) == 0 or len(v) != len(p):
         return None
-    
+
     total_v = np.sum(v)
     if total_v == 0:
         return None
-        
+
     return np.sum(p * v) / total_v
 
 
@@ -105,11 +105,11 @@ def bollinger_bands(values: Iterable[float], period: int = 20, num_std: float = 
     v = np.array(values, dtype=float)
     if len(v) < period:
         return {"upper": None, "middle": None, "lower": None}
-    
+
     window = v[-period:]
     middle = np.mean(window)
     std_dev = np.std(window)
-    
+
     return {
         "upper": middle + (num_std * std_dev),
         "middle": middle,
@@ -123,15 +123,15 @@ def macd(values: Iterable[float], fast_period: int = 12, slow_period: int = 26, 
     # We need enough data to compute the slow EMA, plus enough resulting MACD values for the signal EMA
     if len(v) < (slow_period + signal_period):
         return {"macd": None, "signal": None, "histogram": None}
-    
+
     s = pd.Series(v)
     fast_ema = s.ewm(span=fast_period, adjust=False).mean()
     slow_ema = s.ewm(span=slow_period, adjust=False).mean()
-    
+
     macd_series = fast_ema - slow_ema
     signal_series = macd_series.ewm(span=signal_period, adjust=False).mean()
     histogram_series = macd_series - signal_series
-    
+
     return {
         "macd": macd_series.iloc[-1],
         "signal": signal_series.iloc[-1],
@@ -144,17 +144,17 @@ def atr(highs: Iterable[float], lows: Iterable[float], closes: Iterable[float], 
     h = np.array(highs, dtype=float)
     l = np.array(lows, dtype=float)
     c = np.array(closes, dtype=float)
-    
+
     if len(h) < period + 1 or len(l) < period + 1 or len(c) < period + 1:
         return None
-        
+
     # True Range calculation
     tr1 = h[1:] - l[1:]
     tr2 = np.abs(h[1:] - c[:-1])
     tr3 = np.abs(l[1:] - c[:-1])
     tr = np.maximum(tr1, np.maximum(tr2, tr3))
-    
+
     if len(tr) < period:
         return None
-        
+
     return np.mean(tr[-period:])

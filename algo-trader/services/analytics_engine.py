@@ -183,17 +183,17 @@ class AnalyticsEngine:
         pain_points = []
         # Security: Enforce hard limit on strikes to prevent O(N^2) exhaustion
         safe_strikes = strikes[:500]
-        
+
         for s in safe_strikes:
             total_pain = 0
             # Explicit inner loop with safety check
             for j, item in enumerate(chain):
                 if j >= 1000: break # Safety break
-                
+
                 strike = item.get("strike", 0)
                 ce = item.get("ce")
                 pe = item.get("pe")
-                
+
                 if ce and s > strike:
                     total_pain += (s - strike) * ce.get("oi", 0)
                 if pe and s < strike:
@@ -279,7 +279,7 @@ class AnalyticsEngine:
                 strike = item.get("strike")
                 if strike is not None:
                     strikes_set.add(strike)
-        
+
         strikes = sorted(list(strikes_set))[:500] # Safety: hard limit on total strikes
         expiries = []
         surface: List[List[float]] = []
@@ -297,7 +297,7 @@ class AnalyticsEngine:
                 strike_key = row.get("strike")
                 if strike_key is not None:
                     smile_lookup[strike_key] = row.get("avg_iv", 0)
-            
+
             surface.append([smile_lookup.get(strike, 0) for strike in strikes])
 
         return {

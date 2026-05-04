@@ -119,7 +119,7 @@ async def get_content(asset_id):
         file_path = row['file_path']
         base_storage = settings.get('storage_path', '/app/storage')
         abs_path = os.path.abspath(file_path)
-        
+
         if not abs_path.startswith(os.path.abspath(base_storage)):
              return jsonify({"error": "Access denied: Forbidden path"}), 403
 

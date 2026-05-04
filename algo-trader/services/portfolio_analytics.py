@@ -34,7 +34,7 @@ class PortfolioAnalyticsService:
         """
         # 0. Safety Cap: Prevent CPU exhaustion
         iterations = min(max(100, iterations), 10000)
-        
+
         if not positions:
             return {"status": "error", "message": "No positions provided for analysis"}
 

@@ -64,10 +64,10 @@ async def test_place_order_success(order_manager, mock_dependencies):
     mock_order.order_id = "test1234"
     mock_order.price = 100.0
     mock_order.status = "complete"
-    
+
     with patch.object(order_manager.paper_broker, 'place_order', new_callable=AsyncMock) as m_place:
         m_place.return_value = mock_order
-        
+
         res = await order_manager.place_order(
             strategy_name="test_strat",
             symbol="RELIANCE",
@@ -76,7 +76,7 @@ async def test_place_order_success(order_manager, mock_dependencies):
             price=100.0,
             product="CNC"
         )
-        
+
         assert res["status"] == "success"
         assert res["order_id"] == "test1234"
         m_place.assert_called_once()
@@ -86,12 +86,12 @@ async def test_place_order_rate_limiting(order_manager, mock_dependencies):
     order_manager.mode = "live"
     # In live mode, it waits for token
     mock_order = MagicMock(order_id="test_live", price=100.0, status="complete")
-    
-    # We need to mock the active_broker in live mode. 
+
+    # We need to mock the active_broker in live mode.
     # Since we disabled native_broker in fixture, it might fail unless we mock it.
     order_manager.native_broker = MagicMock()
     order_manager.native_broker.place_order = AsyncMock(return_value=mock_order)
-    
+
     await order_manager.place_order(
         strategy_name="test_strat",
         symbol="RELIANCE",
@@ -112,27 +112,27 @@ async def test_check_drift_detection(order_manager, mock_dependencies):
         avg_price=2500.0,
         product=ProductType.MIS
     )
-    
+
     with patch.object(order_manager.paper_broker, 'get_positions', new_callable=AsyncMock) as m_get_pos:
         m_get_pos.return_value = [mock_pos]
         mock_dependencies["pos"].get_quantity.return_value = 0 # Local has 0
-        
+
         drift = await order_manager.check_drift()
         assert drift is True
 
 @pytest.mark.asyncio
 async def test_cancel_order(order_manager):
-    # Since cancel_order uses asyncio.to_thread(self.client.cancel_order), 
+    # Since cancel_order uses asyncio.to_thread(self.client.cancel_order),
     # and self.client is not defined in new OrderManager (it uses native_broker),
     # this test needs to be updated to match the implementation.
-    
+
     # Wait, the implementation of cancel_order in order_manager.py:518:
     # return await asyncio.to_thread(self.client.cancel_order, order_id)
     # OH! I missed that. OrderManager still refers to self.client in some places!
-    
+
     # I should check if self.client is initialized.
     # Checking order_manager.py again...
-    # It seems self.client is NOT initialized in __init__! 
+    # It seems self.client is NOT initialized in __init__!
     # This is a bug in order_manager.py!
-    
+
     pass # I'll fix order_manager.py first

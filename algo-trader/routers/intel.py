@@ -42,14 +42,14 @@ async def get_sector_sentiment():
         raise HTTPException(status_code=503, detail="Strategy Runner not initialized")
 
     sector_data = getattr(runner, "sector_sentiment", {})
-    
+
     # Security: Explicit loop with limit to prevent resource exhaustion (CodeQL mitigation)
     tier_1 = {}
     tier_2 = {}
     for i, (name, data) in enumerate(sector_data.items()):
         if i >= 100: break # Hard limit to prevent bloat
         if not isinstance(data, dict): continue
-        
+
         tier = data.get("tier")
         if tier == "tier_1":
             tier_1[name] = data

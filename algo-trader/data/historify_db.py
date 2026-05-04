@@ -55,7 +55,7 @@ def init_database():
         conn.execute("CREATE TABLE IF NOT EXISTS market_data (symbol VARCHAR, exchange VARCHAR, interval VARCHAR, timestamp BIGINT, open DOUBLE, high DOUBLE, low DOUBLE, close DOUBLE, volume BIGINT, oi BIGINT DEFAULT 0, created_at TIMESTAMP DEFAULT current_timestamp, PRIMARY KEY (symbol, exchange, interval, timestamp))")
         conn.execute("CREATE TABLE IF NOT EXISTS watchlist (symbol VARCHAR, exchange VARCHAR, display_name VARCHAR, added_at TIMESTAMP DEFAULT current_timestamp, PRIMARY KEY (symbol, exchange))")
         conn.execute("CREATE TABLE IF NOT EXISTS download_jobs (id VARCHAR PRIMARY KEY, status VARCHAR, total_symbols INTEGER, completed_symbols INTEGER, last_symbol VARCHAR DEFAULT '', last_provider VARCHAR DEFAULT '', operator VARCHAR DEFAULT '', error_message VARCHAR, interval VARCHAR DEFAULT '', start_date VARCHAR DEFAULT '', end_date VARCHAR DEFAULT '', created_at TIMESTAMP DEFAULT current_timestamp)")
-        
+
         # Migrations
         for col in ['interval', 'start_date', 'end_date', 'last_symbol', 'last_provider', 'operator']:
             try: conn.execute(f"ALTER TABLE download_jobs ADD COLUMN {col} VARCHAR DEFAULT ''")
@@ -73,7 +73,7 @@ def upsert_market_data(data, symbol, exchange, interval):
                 df = data.copy()
                 if 'oi' not in df.columns:
                     df['oi'] = 0
-                
+
                 # We use the 'data' name in the query because DuckDB can query local variables
                 conn.execute("INSERT OR REPLACE INTO market_data (symbol, exchange, interval, timestamp, open, high, low, close, volume, oi) SELECT ? as symbol, ? as exchange, ? as interval, timestamp, open, high, low, close, volume, oi FROM df", (symbol.upper(), exchange.upper(), interval))
                 return len(df)
@@ -109,14 +109,14 @@ def remove_from_watchlist(symbol, exchange=None):
 
 def upsert_job(job_id, status, total_symbols=0, completed_symbols=0, last_symbol='', last_provider='', operator='', error_message=None, interval='', start_date='', end_date=''):
     with get_connection() as conn:
-        conn.execute("INSERT OR REPLACE INTO download_jobs (id, status, total_symbols, completed_symbols, last_symbol, last_provider, operator, error_message, interval, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+        conn.execute("INSERT OR REPLACE INTO download_jobs (id, status, total_symbols, completed_symbols, last_symbol, last_provider, operator, error_message, interval, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                      (job_id, status, total_symbols, completed_symbols, last_symbol, last_provider, operator, error_message, interval, start_date, end_date))
 
 def get_job(job_id):
     with get_connection() as conn:
         r = conn.execute("SELECT id, status, total_symbols, completed_symbols, last_symbol, last_provider, operator, error_message, interval, start_date, end_date, created_at FROM download_jobs WHERE id=?", (job_id,)).fetchone()
         return {
-            "id": r[0], "status": r[1], "total_symbols": r[2], "completed_symbols": r[3], 
+            "id": r[0], "status": r[1], "total_symbols": r[2], "completed_symbols": r[3],
             "last_symbol": r[4], "last_provider": r[5], "operator": r[6],
             "error_message": r[7], "interval": r[8], "start_date": r[9], "end_date": r[10], "created_at": r[11]
         } if r else None
@@ -125,7 +125,7 @@ def get_all_jobs():
     with get_connection() as conn:
         res = conn.execute("SELECT id, status, total_symbols, completed_symbols, last_symbol, last_provider, operator, error_message, interval, start_date, end_date, created_at FROM download_jobs ORDER BY created_at DESC").fetchall()
         return [{
-            "id": r[0], "status": r[1], "total_symbols": r[2], "completed_symbols": r[3], 
+            "id": r[0], "status": r[1], "total_symbols": r[2], "completed_symbols": r[3],
             "last_symbol": r[4], "last_provider": r[5], "operator": r[6],
             "error_message": r[7], "interval": r[8], "start_date": r[9], "end_date": r[10], "created_at": r[11]
         } for r in res]
@@ -169,26 +169,26 @@ def get_db_stats():
     with get_connection() as conn:
         count = conn.execute("SELECT COUNT(*) FROM market_data").fetchone()[0]
         unique_symbols = conn.execute("SELECT COUNT(DISTINCT symbol) FROM market_data").fetchone()[0]
-        
+
         # Calculate date span with millisecond safety
         date_res = conn.execute("SELECT MIN(timestamp), MAX(timestamp) FROM market_data").fetchone()
         date_span = "N/A"
         first_unix = None
         last_unix = None
-        
+
         if date_res and date_res[0] and date_res[1]:
             t1 = date_res[0]
             t2 = date_res[1]
             # Millisecond safety
             if t1 > 200000000000: t1 = t1 / 1000
             if t2 > 200000000000: t2 = t2 / 1000
-            
+
             first_unix = t1
             last_unix = t2
             first = datetime.fromtimestamp(t1).strftime('%Y-%m-%d')
             last = datetime.fromtimestamp(t2).strftime('%Y-%m-%d')
             date_span = f"{first} to {last}"
-            
+
         # Calculate last ingest
         ingest_res = conn.execute("SELECT MAX(created_at) FROM market_data").fetchone()
         last_ingested_at = "N/A"
@@ -197,9 +197,9 @@ def get_db_stats():
 
         size = os.path.getsize(HISTORIFY_DB_PATH) / (1024*1024) if os.path.exists(HISTORIFY_DB_PATH) else 0
         return {
-            "status": "HEALTHY", 
-            "market_records": count, 
-            "total_candles": count, 
+            "status": "HEALTHY",
+            "market_records": count,
+            "total_candles": count,
             "unique_symbols": unique_symbols,
             "date_span": date_span,
             "first_date_unix": first_unix,
@@ -250,25 +250,25 @@ def get_market_breadth(interval):
             # This is a rough estimation for the distribution matrix
             res = conn.execute("""
                 WITH latest_data AS (
-                    SELECT symbol, close, 
+                    SELECT symbol, close,
                            LAG(close) OVER (PARTITION BY symbol ORDER BY timestamp) as prev_close
                     FROM market_data
                     WHERE interval = ?
                     QUALIFY row_number() OVER (PARTITION BY symbol ORDER BY timestamp DESC) = 1
                 )
-                SELECT 
+                SELECT
                     COUNT(CASE WHEN close > prev_close THEN 1 END) as advances,
                     COUNT(CASE WHEN close < prev_close THEN 1 END) as declines,
                     COUNT(CASE WHEN close = prev_close THEN 1 END) as unchanged
                 FROM latest_data
             """, (interval,)).fetchone()
-            
+
             adv = res[0] or 0
             dec = res[1] or 0
             unc = res[2] or 0
             total = adv + dec + unc
             ratio = adv / total if total > 0 else 0.5
-            
+
             return {
                 "advances": adv,
                 "declines": dec,

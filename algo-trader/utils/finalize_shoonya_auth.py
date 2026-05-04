@@ -61,9 +61,10 @@ def finalize_shoonya_session(auth_code, user_id=None, api_secret=None, broker_ap
     checksum_input = f"{client_id}{secret}{auth_code}"
     # SHA256 is mandated by the Finvasia/Shoonya API contract for this authentication handshake.
     # We use the cryptography library here as it's better recognized as a secure implementation for sensitive data.
+    # codeql [py/weak-cryptographic-hash-on-sensitive-data] - Mandatory broker API contract
     digest = hashes.Hash(hashes.SHA256())
     digest.update(checksum_input.encode())
-    checksum = digest.finalize().hex() # codeql [py/weak-cryptographic-hash-on-sensitive-data] - Mandatory broker API contract
+    checksum = digest.finalize().hex()
 
     payload = {"code": auth_code, "checksum": checksum}
     payload_str = "jData=" + json.dumps(payload)

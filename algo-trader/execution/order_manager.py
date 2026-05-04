@@ -451,13 +451,13 @@ class OrderManager:
                 current_qty = self.position_manager.get_quantity(symbol)
                 target_qty = position_size if action == "BUY" else -position_size
                 required_qty = target_qty - current_qty
-                
+
                 if required_qty == 0:
                     return {"status": "success", "message": "Position already at target"}
-                    
+
                 exec_action = "BUY" if required_qty > 0 else "SELL"
                 exec_qty = abs(required_qty)
-                
+
                 return await self.place_order(
                     strategy_name=strategy_name,
                     symbol=symbol,
@@ -501,12 +501,12 @@ class OrderManager:
             await self.limiter.wait()
             active_broker = self.native_broker if self.mode == "live" else self.paper_broker
             if not active_broker: return None
-            
+
             from brokers.models import OrderAction, OrderType, ProductType
             n_action = OrderAction.BUY if action == "BUY" else OrderAction.SELL
             n_type = getattr(OrderType, order_type.upper(), OrderType.LIMIT)
             n_product = getattr(ProductType, product.upper(), ProductType.MIS)
-            
+
             return await active_broker.modify_order(
                 order_id=order_id,
                 symbol=symbol,
@@ -700,7 +700,7 @@ class OrderManager:
         try:
             active_broker = self.native_broker if (self.mode == "live" or self.shadow_mode) else self.paper_broker
             if not active_broker: return []
-            
+
             orders = await active_broker.get_orders()
             # Use model_dump() for V2, dict() for V1 fallback
             return [o.model_dump() if hasattr(o, "model_dump") else (o.dict() if hasattr(o, "dict") else o) for o in orders]
@@ -717,7 +717,7 @@ class OrderManager:
             active_broker = self.native_broker if (self.mode == "live" or self.shadow_mode) else self.paper_broker
             if not active_broker:
                 return {"status": "error", "message": "No active broker available"}
-                
+
             funds = await active_broker.get_funds()
             return funds.model_dump() if hasattr(funds, "model_dump") else (funds.dict() if hasattr(funds, "dict") else funds)
         except Exception:
@@ -736,7 +736,7 @@ class OrderManager:
         try:
             active_broker = self.native_broker if (self.mode == "live" or self.shadow_mode) else self.paper_broker
             if not active_broker: return []
-            
+
             # Internal normalization for string dates to ISO if needed
             def _normalize_date(d: str) -> str:
                 if not d: return ""
@@ -751,7 +751,7 @@ class OrderManager:
 
             n_start = _normalize_date(start_date)
             n_end = _normalize_date(end_date)
-            
+
             return await active_broker.get_historical_candles(
                 symbol=symbol,
                 exchange=exchange,
@@ -828,7 +828,7 @@ class OrderManager:
                     symbol = getattr(pos, "symbol", None)
                     if not symbol: continue
                     net_qty = int(float(getattr(pos, "quantity", 0) or 0))
-                
+
                 local_qty = self.position_manager.get_quantity(symbol)
                 if local_qty != net_qty:
                     logger.info("Drift detected for %s: local=%d, broker=%d", symbol, local_qty, net_qty)
@@ -840,7 +840,7 @@ class OrderManager:
             for p in (broker_positions or []):
                 s = getattr(p, "symbol", None) if not isinstance(p, dict) else p.get("symbol")
                 if s: broker_symbols.add(s)
-                
+
             for symbol, pos in local_snapshot.items():
                 if pos.quantity != 0 and symbol not in broker_symbols:
                     logger.info("Drift detected: local position %s not in broker", symbol)

@@ -60,19 +60,19 @@ def _get_safe_path(filename: str) -> str:
     """Ensures the filename is safe and stays within the strategy directory."""
     # Normalize path and extract only the filename part to prevent ../ traversal
     safe_filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
-    
+
     # Re-check extension for safety
     if not any(safe_filename.endswith(ext) for ext in (".py", ".json", ".yaml", ".yml")):
          # Default to .py if no extension
          if "." not in safe_filename:
              safe_filename += ".py"
-             
+
     target_path = os.path.abspath(os.path.join(STRAT_DIR, safe_filename))
-    
+
     # Final check: Must start with STRAT_DIR
     if not target_path.startswith(STRAT_DIR):
         raise HTTPException(status_code=403, detail="Path Traversal Attempt Detected")
-        
+
     return target_path
 
 # --- Routes ---

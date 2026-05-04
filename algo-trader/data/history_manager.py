@@ -36,10 +36,10 @@ class HistoryManager:
         # Note: Directory is ensured by historify_db.init_database() called in service
 
     def get_candles(
-        self, 
-        symbol: str, 
-        interval: str = "1m", 
-        start_date: Optional[str] = None, 
+        self,
+        symbol: str,
+        interval: str = "1m",
+        start_date: Optional[str] = None,
         end_date: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
@@ -90,22 +90,22 @@ class HistoryManager:
         candles = self.get_candles(symbol, interval, start_date, end_date)
         if not candles:
             return pd.DataFrame()
-        
+
         return pd.DataFrame(candles)
 
     def _read_from_duckdb(self, symbol: str, start: str, end: str) -> List[Dict[str, Any]]:
         """Reads OHLCV data from DuckDB using unified Historify data layer."""
         if not self.db_path.exists():
             return []
-        
+
         try:
-            # We use the service's get_records logic via hdb wrapper eventually, 
+            # We use the service's get_records logic via hdb wrapper eventually,
             # but for now we'll do a simple query to maintain compatibility with BacktestEngine
             with get_connection() as conn:
                 # Table columns: symbol, exchange, interval, timestamp, open, high, low, close, volume, oi
                 # BacktestEngine expects numeric interval like '1' for '1m'
                 oa_interval = "1" if "1m" in str(symbol) else "5" # Heuristic/Fallback
-                
+
                 # Try to determine interval from context or use default
                 query = "SELECT timestamp, open, high, low, close, volume, oi FROM market_data WHERE symbol = ? ORDER BY timestamp ASC"
                 res = conn.execute(query, (symbol.upper(),)).fetchall()
@@ -134,7 +134,7 @@ class HistoryManager:
         try:
             df = pd.DataFrame(candles)
             if df.empty: return
-            
+
             # Use Historify's robust upsert logic
             # exchange defaults to NSE for unified storage
             hdb.upsert_market_data(df, symbol, "NSE", interval)
@@ -146,7 +146,7 @@ class HistoryManager:
     def _fetch_from_yfinance(self, symbol: str, interval: str, start: str, end: str) -> List[Dict[str, Any]]:
         if not yf:
             return []
-        
+
         try:
             # yfinance symbol normalization
             # 1. Handle common indices
@@ -158,7 +158,7 @@ class HistoryManager:
                 "NIFTYIT": "^CNXIT",
                 "SENSEX": "^BSESN"
             }
-            
+
             upper_symbol = symbol.upper()
             if upper_symbol in index_map:
                 yf_symbol = index_map[upper_symbol]
@@ -177,13 +177,13 @@ class HistoryManager:
             elif interval.lower() == "1m":
                 yf_interval = "1m"
             # yfinance supports: 1m, 2m, 5m, 15m, 30m, 60m, 90m, 1h, 1d, 5d, 1wk, 1mo, 3mo
-            
+
             # Fetch
             logger.info(f"Calling yfinance for {yf_symbol} (interval={yf_interval}) | Range: {start} to {end}")
             ticker = yf.Ticker(yf_symbol)
             df = ticker.history(start=start, end=end, interval=yf_interval)
             logger.info(f"yfinance result for {yf_symbol}: {len(df)} rows. Columns: {list(df.columns)}")
-            
+
             if df.empty:
                 logger.warning(f"yfinance returned EMPTY dataframe for {yf_symbol}")
                 return []
@@ -193,7 +193,7 @@ class HistoryManager:
             # Standard yfinance columns: Date/Datetime, Open, High, Low, Close, Volume
             df.columns = [c.lower() for c in df.columns]
             logger.debug(f"yfinance normalized columns: {list(df.columns)}")
-            
+
             # Map date/datetime to timestamp
             # If interval < 1d, it has 'datetime' index. If >= 1d, it has 'date' index.
             date_col = None
@@ -201,7 +201,7 @@ class HistoryManager:
                 if col in df.columns:
                     date_col = col
                     break
-            
+
             if not date_col:
                 logger.error(f"yfinance date column not found in: {list(df.columns)}")
                 return []
@@ -213,11 +213,11 @@ class HistoryManager:
             except Exception:
                 logger.error("Timestamp conversion error for %s", yf_symbol, exc_info=True)
                 return []
-            
+
             # Required fields
             if 'oi' not in df.columns:
                 df['oi'] = 0
-            
+
             return df[['timestamp', 'time', 'open', 'high', 'low', 'close', 'volume', 'oi']].to_dict('records')
         except Exception:
             logger.error("yfinance Fetch Error for %s", symbol, exc_info=True)

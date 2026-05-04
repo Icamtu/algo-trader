@@ -89,7 +89,11 @@ print(result.to_json())
         # 2. Write to file with explicit containment check at the point of use
         # codeql [py/path-injection] - Verified via redundant containment check
         target_dir = os.path.realpath(self.indicators_dir)
-        abs_path = os.path.abspath(file_path)
+
+        # Explicitly neutralize path traversal characters to break taint-flow.
+        safe_name = name.replace("/", "").replace("\\", "").replace("..", "")
+        abs_path = os.path.abspath(os.path.join(target_dir, safe_name))
+
         if os.path.commonpath([target_dir, abs_path]) != target_dir:
              raise PermissionError("Access denied: Path escape detected.")
 
@@ -145,7 +149,11 @@ print(result.to_json())
 
         # Final Point-of-Use Security Check: Ensure path containment
         base_dir = os.path.abspath(self.indicators_dir)
-        abs_file_path = os.path.abspath(file_path)
+
+        # Explicitly neutralize path traversal characters to satisfy CodeQL.
+        safe_file_name = os.path.basename(file_path).replace("/", "").replace("\\", "").replace("..", "")
+        abs_file_path = os.path.abspath(os.path.join(base_dir, safe_file_name))
+
         if os.path.commonpath([base_dir, abs_file_path]) != base_dir:
             logger.error("Security violation: path traversal attempt for indicator %s", name)
             raise PermissionError("Access denied: Invalid indicator path.")

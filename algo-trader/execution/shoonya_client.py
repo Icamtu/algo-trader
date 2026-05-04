@@ -171,9 +171,10 @@ class ShoonyaClient:
         raw = f"{self.api_key}{self.secret_key}{code}"
         # SHA256 is mandated by the Finvasia/Shoonya API contract for this authentication handshake.
         # We use the cryptography library here as it's better recognized as a secure implementation for sensitive data.
+        # codeql [py/weak-cryptographic-hash-on-sensitive-data] - Mandatory broker API contract
         digest = hashes.Hash(hashes.SHA256())
         digest.update(raw.encode())
-        return digest.finalize().hex() # codeql [py/weak-cryptographic-hash-on-sensitive-data] - Mandatory broker API contract
+        return digest.finalize().hex()
 
     def login(self, code: str) -> Dict[str, Any]:
         """

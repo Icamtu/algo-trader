@@ -25,7 +25,7 @@ class ScannerEngine:
     Core engine for market scanning and technical analysis.
     Processes batches of symbols to find high-conviction setups.
     """
-    
+
     def __init__(self, order_manager=None):
         self.order_manager = order_manager
 
@@ -40,7 +40,7 @@ class ScannerEngine:
                 logger.warning("Scanner: Insufficient data for %s on attempt %d (interval=%s)", symbol, attempt+1, interval)
             except Exception:
                 logger.warning("Scanner: Attempt %d failed for %s", attempt+1, symbol, exc_info=True)
-            
+
             if attempt < retries:
                 await asyncio.sleep(0.5) # Small backoff
         return []
@@ -52,9 +52,9 @@ class ScannerEngine:
             op = cond.get("operator", ">")
             val = cond.get("value", 0)
             target = None
-            
+
             close = df["close"].values
-            
+
             if indicator == "rsi":
                 period = cond.get("params", {}).get("period", 14)
                 target = ta.rsi(close, period)[-1]
@@ -72,10 +72,10 @@ class ScannerEngine:
                 l_ema = ta.ema(close, long)[-1]
                 target = s_ema
                 val = l_ema
-            
+
             if target is None:
                 return False
-                
+
             if op == ">": return target > val
             if op == ">=": return target >= val
             if op == "<": return target < val
@@ -83,7 +83,7 @@ class ScannerEngine:
             if op == "==": return abs(target - val) < 0.0001
             if op == "above": return target > val
             if op == "below": return target < val
-            
+
             return False
         except Exception:
             logger.debug("Scanner: Condition eval error", exc_info=True)
@@ -97,10 +97,10 @@ class ScannerEngine:
         if "group" in logic:
             group_type = logic["group"].upper()
             sub_conditions = logic.get("conditions", [])
-            
+
             if not sub_conditions:
                 return True if group_type == "AND" else False
-                
+
             if group_type == "AND":
                 return all(self._evaluate_logic(df, c) for c in sub_conditions)
             elif group_type == "OR":
@@ -118,10 +118,10 @@ class ScannerEngine:
             history = await self._fetch_history_with_retry(symbol, exchange, interval=interval)
             if not history:
                 return {"symbol": symbol, "status": "insufficient_data"}
-            
+
             df = pd.DataFrame(history)
             close = df["close"].values
-            
+
             # Default scoring if no conditions provided
             if not conditions:
                 conditions = [
@@ -137,7 +137,7 @@ class ScannerEngine:
                 if self._evaluate_logic(df, cond):
                     score += cond.get("weight", 0)
                     matched_count += 1
-            
+
             # Additional diagnostics for UI
             rsi = ta.rsi(close, 14)[-1]
             price = close[-1]
@@ -163,23 +163,23 @@ class ScannerEngine:
         """Run batch scan for a predefined index OR a custom symbol list."""
         if not symbols:
             symbols = INDICES.get(index_name, [])
-            
+
         if not symbols:
             logger.warning("Scanner: No symbols found for scan (index=%s)", index_name)
             return []
-            
+
         logger.info("Scanner: Starting batch scan for %d symbols at %s interval", len(symbols), interval)
-        
+
         # Max concurrency to prevent API rate limiting
-        sem = asyncio.Semaphore(5) 
-        
+        sem = asyncio.Semaphore(5)
+
         async def sem_scan(symbol):
             async with sem:
                 return await self.scan_single_symbol(symbol, interval=interval, conditions=conditions)
-                
+
         tasks = [sem_scan(s) for s in symbols]
         results = await asyncio.gather(*tasks)
-        
+
         # Filter out errors and sort by score
         successful = [r for r in results if r.get("status") not in {"error", "insufficient_data"}]
         return sorted(successful, key=lambda x: x["score"], reverse=True)

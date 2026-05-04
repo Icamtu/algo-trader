@@ -46,17 +46,17 @@ class BlackScholesEngine:
         # Handle zero volatility case
         if sigma <= 0:
             sigma = 0.0001
-            
+
         d1 = (math.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * math.sqrt(T))
         d2 = d1 - sigma * math.sqrt(T)
 
         greeks = {}
-        
+
         if option_type == "CE":
             # Delta
             greeks["delta"] = norm.cdf(d1)
             # Theta
-            greeks["theta"] = (-(S * norm.pdf(d1) * sigma) / (2 * math.sqrt(T)) - 
+            greeks["theta"] = (-(S * norm.pdf(d1) * sigma) / (2 * math.sqrt(T)) -
                                 r * K * math.exp(-r * T) * norm.cdf(d2)) / 365
             # Rho
             greeks["rho"] = (K * T * math.exp(-r * T) * norm.cdf(d2)) / 100
@@ -64,14 +64,14 @@ class BlackScholesEngine:
             # Delta
             greeks["delta"] = norm.cdf(d1) - 1.0
             # Theta
-            greeks["theta"] = (-(S * norm.pdf(d1) * sigma) / (2 * math.sqrt(T)) + 
+            greeks["theta"] = (-(S * norm.pdf(d1) * sigma) / (2 * math.sqrt(T)) +
                                 r * K * math.exp(-r * T) * norm.cdf(-d2)) / 365
             # Rho
             greeks["rho"] = (-K * T * math.exp(-r * T) * norm.cdf(-d2)) / 100
 
         # Gamma (Same for Call and Put)
         greeks["gamma"] = norm.pdf(d1) / (S * sigma * math.sqrt(T))
-        
+
         # Vega (Same for Call and Put) - Returns change for 1% IV
         greeks["vega"] = (S * norm.pdf(d1) * math.sqrt(T)) / 100
 
@@ -122,37 +122,37 @@ class BlackScholesEngine:
         """
         if S <= 0 or K <= 0 or T <= 0 or price <= 0:
             return 0.0
-            
+
         sigma = 0.5 # Initial guess
         for i in range(max_iterations):
             # Calculate option price with current sigma
             d1 = (math.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * math.sqrt(T))
             d2 = d1 - sigma * math.sqrt(T)
-            
+
             if option_type == "CE":
                 curr_price = S * norm.cdf(d1) - K * math.exp(-r * T) * norm.cdf(d2)
             else:
                 curr_price = K * math.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
-                
+
             diff = price - curr_price
             if abs(diff) < precision:
                 return sigma
-                
+
             # Vega for Newton-Raphson
             # Note: We need actual vega (not for 1% change)
             vega = S * norm.pdf(d1) * math.sqrt(T)
-            
+
             if vega > 0:
                 sigma = sigma + diff / vega
             else:
                 return sigma
-                
+
             # Prevent extreme sigma
             if sigma <= 0:
                 sigma = 0.0001
             if sigma > 5.0:
                 sigma = 5.0
-                
+
         return sigma
 
 def build_option_matrix(
@@ -169,18 +169,18 @@ def build_option_matrix(
     now = datetime.now()
     delta_t = (expiry - now).total_seconds()
     T = max(0, delta_t / (365 * 24 * 3600))
-    
+
     matrix = []
     engine = BlackScholesEngine()
-    
+
     for strike in strikes:
         # Mocking prices for now - in production these would come from the broker
         # We assume 20% IV for initial Greek estimates
         iv = 0.2
-        
+
         ce_greeks = engine.calculate_greeks(underlying_price, strike, T, risk_free_rate, iv, "CE")
         pe_greeks = engine.calculate_greeks(underlying_price, strike, T, risk_free_rate, iv, "PE")
-        
+
         matrix.append({
             "strike": strike,
             "ce": {
@@ -203,5 +203,5 @@ def build_option_matrix(
             },
             "is_atm": abs(strike - underlying_price) < 25 # Threshold for Nifty-style indices
         })
-        
+
     return matrix
