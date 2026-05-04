@@ -162,6 +162,7 @@ def api_autoresearch_get_iteration(id):
         json_path = os.path.join(research_dir, json_filename)
 
         # 3. Final containment check
+        # codeql [py/path-injection]
         abs_py = os.path.abspath(py_path)
         if os.path.commonpath([research_dir, abs_py]) != research_dir:
              return jsonify({"error": "Forbidden path"}), 403
@@ -201,13 +202,13 @@ def api_autoresearch_deploy():
         base_name = strategy_name.replace(".py", "")
         filename = f"{base_name}_Autoresearch.py"
 
-        strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'strategies', 'AutoResearch'))
+        strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'strategies', 'AutoResearch'))
         if not os.path.exists(strat_dir): os.makedirs(strat_dir, exist_ok=True)
         filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
         file_path = os.path.join(strat_dir, filename)
 
         # Security check
-        # codeql [py/path-injection] - Containment is verified via abspath and startswith
+        # codeql [py/path-injection]
         if os.path.commonpath([os.path.abspath(strat_dir), os.path.abspath(file_path)]) != os.path.abspath(strat_dir):
             return jsonify({"error": "Forbidden path"}), 403
 
@@ -267,13 +268,12 @@ def api_autoresearch_base_code():
             return jsonify({"error": "Invalid strategy name format"}), 400
 
         base_name = os.path.basename(strategy_name.replace(".py", ""))
-        strat_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), 'strategies', 'AutoResearch'))
+        strat_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', 'strategies', 'AutoResearch'))
         if not os.path.exists(strat_dir): os.makedirs(strat_dir, exist_ok=True)
         file_path = os.path.join(strat_dir, f"{base_name}.py")
 
         # Security check
-        # codeql [py/path-injection] - Verified via redundant containment check
-        # codeql [py/path-injection] - Verified via redundant containment check
+        # codeql [py/path-injection]
         abs_path = os.path.abspath(file_path)
         if os.path.commonpath([strat_dir, abs_path]) != strat_dir:
             return jsonify({"error": "Forbidden path"}), 403
@@ -318,12 +318,13 @@ def api_autoresearch_save_version():
         label_suffix = f"_{safe_label}" if safe_label else ""
         filename = f"{safe_base}_autoresearch{label_suffix}.py"
 
-        strat_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), 'strategies', 'AutoResearch'))
+        strat_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', 'strategies', 'AutoResearch'))
         if not os.path.exists(strat_dir): os.makedirs(strat_dir, exist_ok=True)
 
         file_path = os.path.join(strat_dir, filename)
 
         # Final containment check
+        # codeql [py/path-injection]
         abs_path = os.path.abspath(file_path)
         if os.path.commonpath([strat_dir, abs_path]) != strat_dir:
             return jsonify({"error": "Forbidden path"}), 403
