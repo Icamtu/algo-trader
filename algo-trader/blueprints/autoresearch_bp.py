@@ -152,12 +152,16 @@ def api_autoresearch_get_iteration(id):
         if not re.match(r"^[a-zA-Z0-9_\-]+$", id):
              return jsonify({"error": "Invalid iteration ID format"}), 400
 
-        safe_id = os.path.basename(id)
-        py_path = os.path.join(research_dir, f"{safe_id}.py")
-        json_path = os.path.join(research_dir, f"{safe_id}.json")
+        # 2. Strict sanitization for CodeQL: basename and explicit path character stripping
+        # Point-of-use neutralization of path traversal.
+        safe_id = os.path.basename(id).replace("/", "").replace("\\", "")
+        py_filename = f"{safe_id}.py"
+        json_filename = f"{safe_id}.json"
+
+        py_path = os.path.join(research_dir, py_filename)
+        json_path = os.path.join(research_dir, json_filename)
 
         # 3. Final containment check
-        # codeql [py/path-injection] - Verified via redundant containment check
         abs_py = os.path.abspath(py_path)
         if os.path.commonpath([research_dir, abs_py]) != research_dir:
              return jsonify({"error": "Forbidden path"}), 403
@@ -308,18 +312,18 @@ def api_autoresearch_save_version():
         if label and not re.match(r"^[a-zA-Z0-9_\-]+$", label):
             return jsonify({"error": "Invalid label format"}), 400
 
-        base_name = strategy_name.replace(".py", "").replace("_autoresearch", "")
-        label_suffix = f"_{label}" if label else ""
-        filename = f"{base_name}_autoresearch{label_suffix}.py"
+        # Security: Strict sanitization of components before joining
+        safe_base = os.path.basename(strategy_name.replace(".py", "").replace("_autoresearch", "")).replace("/", "").replace("\\", "")
+        safe_label = os.path.basename(label).replace("/", "").replace("\\", "") if label else ""
+        label_suffix = f"_{safe_label}" if safe_label else ""
+        filename = f"{safe_base}_autoresearch{label_suffix}.py"
 
         strat_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), 'strategies', 'AutoResearch'))
         if not os.path.exists(strat_dir): os.makedirs(strat_dir, exist_ok=True)
 
-        safe_filename = os.path.basename(filename)
-        file_path = os.path.join(strat_dir, safe_filename)
+        file_path = os.path.join(strat_dir, filename)
 
-        # Security check
-        # codeql [py/path-injection] - Verified via redundant containment check
+        # Final containment check
         abs_path = os.path.abspath(file_path)
         if os.path.commonpath([strat_dir, abs_path]) != strat_dir:
             return jsonify({"error": "Forbidden path"}), 403
@@ -330,8 +334,8 @@ def api_autoresearch_save_version():
             metrics_lines = "\n".join([f"    # {k.upper()}: {v}" for k, v in metrics.items()])
 
         header = f'"""\nAutoResearch Lab — Saved Version\n'
-        header += f'Base Strategy: {base_name}\n'
-        header += f'Label: {label or "v1"}\n'
+        header += f'Base Strategy: {safe_base}\n'
+        header += f'Label: {safe_label or "v1"}\n'
         if metrics:
             header += f'Performance Metrics:\n{metrics_lines}\n'
         header += f'Saved: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n"""\n\n'
