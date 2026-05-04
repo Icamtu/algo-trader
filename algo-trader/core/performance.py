@@ -28,8 +28,12 @@ class PerformanceCalculator:
                 t_dict = t.to_dict()
 
             if t_dict:
-                # Flatten only primitive types to avoid pandas 2.2+ "Mixing dicts with non-Series" error
-                cleaned_t = {k: v for k, v in t_dict.items() if isinstance(v, (str, int, float, bool)) or v is None}
+                # Security: Explicit loop with limit to prevent exhaustion
+                cleaned_t = {}
+                for i, (k, v) in enumerate(t_dict.items()):
+                    if i >= 100: break # Hard limit on metadata keys
+                    if isinstance(v, (str, int, float, bool)) or v is None:
+                        cleaned_t[k] = v
                 cleaned_logs.append(cleaned_t)
 
         try:
