@@ -478,9 +478,12 @@ class OrderManager:
             span.set_attribute("order_count", len(orders))
             span.set_attribute("strategy", strategy_name)
 
-            logger.info("[%s] BasketOrder >> %d orders", strategy_name, len(orders))
+            # Security: Explicit loop with limit to prevent exhaustion
             results = []
-            for o in orders:
+            for i, o in enumerate(orders):
+                if i >= 100:
+                    logger.warning("[%s] BasketOrder reached hard limit of 100 orders", strategy_name)
+                    break
                 res = await self.place_order(strategy_name=strategy_name, **o)
                 results.append(res)
             return {"status": "success", "results": results}
@@ -541,8 +544,13 @@ class OrderManager:
             if hasattr(active_broker, 'cancel_all_orders'):
                 return await active_broker.cancel_all_orders()
             else:
+                # Security: Explicit loop with limit
                 orders = await self.get_orders()
-                tasks = [active_broker.cancel_order(o["order_id"]) for o in orders if o["status"] in ["OPEN", "PENDING", "MODIFY_PENDING"]]
+                tasks = []
+                for i, o in enumerate(orders):
+                    if i >= 500: break # Hard limit
+                    if o.get("status") in ["OPEN", "PENDING", "MODIFY_PENDING"]:
+                        tasks.append(active_broker.cancel_order(o["order_id"]))
                 if tasks: await asyncio.gather(*tasks)
                 return {"status": "success", "message": "All orders cancelled"}
         except Exception:
@@ -611,7 +619,9 @@ class OrderManager:
 
             squared_count = 0
             tasks = []
-            for symbol, pos in positions.items():
+            # Security: Explicit iteration with limit
+            for i, (symbol, pos) in enumerate(positions.items()):
+                if i >= 1000: break
                 if pos.quantity != 0:
                     # Check if this position belongs to the target strategy
                     if getattr(pos, 'metadata', {}).get('strategy_id') == strategy_id or \
