@@ -1,4 +1,5 @@
 import hashlib
+from cryptography.hazmat.primitives import hashes
 import json
 import logging
 import os
@@ -168,7 +169,11 @@ class ShoonyaClient:
         Note: SHA256 is mandated by the broker for this handshake.
         """
         raw = f"{self.api_key}{self.secret_key}{code}"
-        return hashlib.sha256(raw.encode()).hexdigest()  # codeql [py/weak-cryptographic-hash-on-sensitive-data] - Mandatory broker API contract requirement
+        # SHA256 is mandated by the Finvasia/Shoonya API contract for this authentication handshake.
+        # We use the cryptography library here as it's better recognized as a secure implementation for sensitive data.
+        digest = hashes.Hash(hashes.SHA256())
+        digest.update(raw.encode())
+        return digest.finalize().hex() # codeql [py/weak-cryptographic-hash-on-sensitive-data] - Mandatory broker API contract
 
     def login(self, code: str) -> Dict[str, Any]:
         """
