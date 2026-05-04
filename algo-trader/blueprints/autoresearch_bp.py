@@ -93,7 +93,7 @@ def api_autoresearch_history():
     def sanitize(obj, depth=0):
         """Recursively replace NaN/Inf with None for JSON safety, and drop heavy curve arrays."""
         if depth > 10: return None # Prevent recursion depth issues
-        
+
         if isinstance(obj, float):
             if math.isnan(obj) or math.isinf(obj):
                 return None
@@ -115,7 +115,7 @@ def api_autoresearch_history():
         return obj
 
     try:
-        strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'strategies'))
+        strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'strategies'))
         research_dir = os.path.join(strat_dir, 'autoresearch_history')
         if not os.path.exists(research_dir):
             os.makedirs(research_dir, exist_ok=True)
@@ -144,17 +144,22 @@ def api_autoresearch_history():
 @require_auth
 def api_autoresearch_get_iteration(id):
     try:
-        strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'strategies'))
-        research_dir = os.path.abspath(os.path.join(strat_dir, 'autoresearch_history'))
-        safe_id = os.path.basename(os.path.normpath(id))
+        strat_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', 'strategies'))
+        research_dir = os.path.realpath(os.path.join(strat_dir, 'autoresearch_history'))
+
+        # 1. Strict Regex validation for the ID
+        import re
+        if not re.match(r"^[a-zA-Z0-9_\-]+$", id):
+             return jsonify({"error": "Invalid iteration ID format"}), 400
+
+        safe_id = os.path.basename(id)
         py_path = os.path.join(research_dir, f"{safe_id}.py")
         json_path = os.path.join(research_dir, f"{safe_id}.json")
 
         # 3. Final containment check
-        abs_path = os.path.abspath(py_path)
-        
-        # 3. Final containment check
-        if os.path.commonpath([research_dir, abs_path]) != research_dir:
+        # codeql [py/path-injection] - Verified via os.path.commonpath
+        if os.path.commonpath([research_dir, os.path.abspath(py_path)]) != research_dir or \
+           os.path.commonpath([research_dir, os.path.abspath(json_path)]) != research_dir:
             return jsonify({"error": "Forbidden path"}), 403
 
         if not os.path.exists(py_path):
@@ -250,18 +255,20 @@ def api_autoresearch_base_code():
     Used to display the base strategy in the Evolution panel before research starts.
     """
     try:
+        # 1. Strict Regex validation for the strategy name
+        import re
         strategy_name = request.args.get("name", "")
-        if not strategy_name:
-            return jsonify({"error": "Missing strategy name"}), 400
+        if not strategy_name or not re.match(r"^[a-zA-Z0-9_\-]+$", strategy_name.replace(".py", "")):
+            return jsonify({"error": "Invalid strategy name format"}), 400
 
-        base_name = os.path.basename(os.path.normpath(strategy_name.replace(".py", "")))
-        strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'strategies', 'AutoResearch'))
+        base_name = os.path.basename(strategy_name.replace(".py", ""))
+        strat_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), 'strategies', 'AutoResearch'))
         if not os.path.exists(strat_dir): os.makedirs(strat_dir, exist_ok=True)
         file_path = os.path.join(strat_dir, f"{base_name}.py")
 
         # Security check
-        # codeql [py/path-injection] - Containment is verified via abspath and startswith
-        if os.path.commonpath([os.path.abspath(strat_dir), os.path.abspath(file_path)]) != os.path.abspath(strat_dir):
+        # codeql [py/path-injection] - Verified via os.path.commonpath
+        if os.path.commonpath([strat_dir, os.path.abspath(file_path)]) != strat_dir:
             return jsonify({"error": "Forbidden path"}), 403
 
         if not os.path.exists(file_path):
@@ -291,18 +298,26 @@ def api_autoresearch_save_version():
         if not strategy_name or not code:
             return jsonify({"error": "Missing name or code"}), 400
 
+        # 1. Strict Regex validation for the strategy name and label
+        import re
+        if not strategy_name or not re.match(r"^[a-zA-Z0-9_\-]+$", strategy_name.replace(".py", "").replace("_autoresearch", "")):
+            return jsonify({"error": "Invalid strategy name format"}), 400
+        if label and not re.match(r"^[a-zA-Z0-9_\-]+$", label):
+            return jsonify({"error": "Invalid label format"}), 400
+
         base_name = strategy_name.replace(".py", "").replace("_autoresearch", "")
         label_suffix = f"_{label}" if label else ""
         filename = f"{base_name}_autoresearch{label_suffix}.py"
 
-        strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'strategies', 'AutoResearch'))
+        strat_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), 'strategies', 'AutoResearch'))
         if not os.path.exists(strat_dir): os.makedirs(strat_dir, exist_ok=True)
-        filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
-        file_path = os.path.join(strat_dir, filename)
+
+        safe_filename = os.path.basename(filename)
+        file_path = os.path.join(strat_dir, safe_filename)
 
         # Security check
-        # codeql [py/path-injection] - Containment is verified via abspath and startswith
-        if os.path.commonpath([os.path.abspath(strat_dir), os.path.abspath(file_path)]) != os.path.abspath(strat_dir):
+        # codeql [py/path-injection] - Verified via os.path.commonpath
+        if os.path.commonpath([strat_dir, os.path.abspath(file_path)]) != strat_dir:
             return jsonify({"error": "Forbidden path"}), 403
 
         # Build header

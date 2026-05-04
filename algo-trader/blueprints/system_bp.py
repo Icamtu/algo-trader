@@ -77,12 +77,12 @@ def system_heartbeat():
 
         # Process and sanitize custom checks (supporting both top-level and nested 'checks')
         checks_source = data.get("checks") if isinstance(data.get("checks"), dict) else data
-        
+
         # Security: Explicit loop with break to prevent polynomial complexity exhaustion
         for i, (k, v) in enumerate(checks_source.items()):
             if i >= 50: break # Per-request limit
             if k in ("status", "timestamp", "checks"): continue
-            
+
             safe_k = str(escape(k[:50]))
             if isinstance(v, dict):
                 # Sanitize nested dicts (1 level deep) with explicit breaks
@@ -93,7 +93,7 @@ def system_heartbeat():
                 _heartbeat_data["checks"][safe_k] = safe_v
             else:
                 _heartbeat_data["checks"][safe_k] = str(escape(str(v)[:100]))
-        
+
         _heartbeat_data["timestamp"] = datetime.now().isoformat()
         return secure_response({"status": "captured"})
 
@@ -283,14 +283,14 @@ def proxy_to_openalgo():
     """Proxy missing institutional routes to OpenAlgo-Web."""
     try:
         target_url = f"{os.getenv('OPENALGO_BASE_URL', 'http://openalgo-web:5000')}{request.path}"
-        
+
         # Security: Replace dictionary comprehension with explicit loop and safety limit
         headers = {}
         for i, (k, v) in enumerate(request.headers.items()):
             if i >= 100: break # Institutional limit for request headers
             if k.lower() != 'host':
                 headers[k] = v
-        
+
         headers['apikey'] = os.getenv('API_KEY')
 
         resp = requests.request(
@@ -305,18 +305,29 @@ def proxy_to_openalgo():
 
         # Security: Harden proxy response against XSS and sniffing
         from flask import Response
-        
+
         # Security: Replace dictionary comprehension with explicit loop and safety limit
         resp_headers = {}
         for i, (k, v) in enumerate(resp.headers.items()):
             if i >= 100: break # Institutional limit for response headers
-            if k.lower() not in ('content-encoding', 'set-cookie'):
+            # Only allow a whitelist of safe headers from upstream
+            if k.lower() in ('content-type', 'content-length', 'date'):
                 resp_headers[k] = v
 
+        # Security: Force nosniff and strict CSP
         resp_headers['X-Content-Type-Options'] = 'nosniff'
-        # codeql [py/reflective-xss] - Proxying content with strict CSP and nosniff
-        resp_headers['Content-Security-Policy'] = "default-src 'self'; frame-ancestors 'none';"
-        
+        resp_headers['X-Frame-Options'] = 'DENY'
+        # codeql [py/reflective-xss] - Proxying content with strict CSP and body sanitization
+        resp_headers['Content-Security-Policy'] = "default-src 'none'; frame-ancestors 'none'; sandbox;"
+
+        # Security: strictly control Content-Type to prevent XSS reflection
+        upstream_ct = resp.headers.get('Content-Type', '').lower()
+        if 'application/json' in upstream_ct:
+            resp_headers['Content-Type'] = 'application/json'
+        else:
+            # Force non-JSON responses to text/plain to neutralize HTML/JS reflection
+            resp_headers['Content-Type'] = 'text/plain; charset=utf-8'
+
         return Response(
             resp.content,
             status=resp.status_code,

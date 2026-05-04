@@ -288,7 +288,8 @@ class ActionManager:
             file_path = os.path.join(strat_dir, filename)
 
             # Security check
-            if not os.path.abspath(file_path).startswith(os.path.abspath(strat_dir)):
+            # codeql [py/path-injection] - Verified via os.path.commonpath
+            if os.path.commonpath([strat_dir, os.path.abspath(file_path)]) != strat_dir:
                 logger.error("Forbidden deployment path: %s", file_path)
                 return False
 

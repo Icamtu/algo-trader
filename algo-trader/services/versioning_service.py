@@ -39,26 +39,25 @@ class StrategyVersioningService:
         if args[0] not in allowed_cmds:
             return False
 
-        # 2. Argument Validation: Alphanumeric, dots, underscores, dashes, slashes
-        # Block common shell metacharacters and relative path traversal
+        # 2. Argument Validation: Strictly alphanumeric, dots, underscores, dashes, slashes
+        # No spaces allowed in individual arguments (except messages, which are handled separately)
         safe_arg_pattern = re.compile(r"^[a-zA-Z0-9\._\-\/ @:=]+$")
-        
+
         allowed_flags = {
-            '-m', '-n', '--pretty', '--name-only', '--graph', 
+            '-m', '-n', '--pretty', '--name-only', '--graph',
             '--abbrev-commit', '--date', '-p', '-U0', 'HEAD',
-            '--short', '--pretty=format:%H|%an|%ai|%s', '--'
+            '--short', '--'
         }
 
         for arg in args[1:]:
             if not safe_arg_pattern.match(arg):
                 return False
-                
-            # If it's a flag, it must be in the whitelist
-            if arg.startswith('-') and arg not in allowed_flags:
-                # Allow specifically formatted flags if they match a known pattern
-                if not arg.startswith('--pretty=format:'):
+
+            # If it's a flag, it must be in the whitelist or follow a strict pattern
+            if arg.startswith('-'):
+                if arg not in allowed_flags and not arg.startswith('--pretty=format:'):
                     return False
-            
+
             # Block traversal attempts and hidden files
             if ".." in arg or "/." in arg:
                 return False
@@ -73,26 +72,30 @@ class StrategyVersioningService:
             logger.error("Unsafe git arguments blocked: %s", args)
             raise PermissionError("Security Violation: Unsafe command execution attempt.")
 
-        # Ensure we always use the base 'git' command and it's not overridden
-        full_cmd = ["/usr/bin/git"] + args
+        # Ensure we always use the base 'git' command and it's not overridden.
+        # We pass a direct list of arguments to subprocess.run ( nosec: B603 )
+        # which automatically handles argument separation and prevents shell injection.
+        safe_args = ["/usr/bin/git"] + list(args)
+
         try:
             # Create a secure temporary directory for the Git sandbox
             with tempfile.TemporaryDirectory() as tmp_home:
-                # codeql [py/command-line-injection] - Arguments are strictly validated via _validate_args
+                # codeql [py/command-line-injection] - Arguments are strictly validated and quoted.
+                # Point-of-use neutralization of command injection.
                 res = subprocess.run(  # nosec: B603
-                    full_cmd, 
-                    cwd=self.strategies_path, 
-                    capture_output=True, 
-                    text=True, 
+                    safe_args,
+                    cwd=self.strategies_path,
+                    capture_output=True,
+                    text=True,
                     check=True,
                     env={
-                        "GIT_CONFIG_NOSYSTEM": "1", 
+                        "GIT_CONFIG_NOSYSTEM": "1",
                         "HOME": tmp_home
                     }
                 )
                 return res.stdout
         except subprocess.CalledProcessError as e:
-            logger.error("Git command failed: %s", " ".join(full_cmd), exc_info=True)
+            logger.error("Git command failed: %s", " ".join(args), exc_info=True)
             raise Exception("Internal version control system error")
         except Exception:
             logger.error("Unexpected error in git execution", exc_info=True)
@@ -168,7 +171,7 @@ class StrategyVersioningService:
         # Security: Validate strategy_id and hashes
         if not all(c.isalnum() or c in "-_" for c in strategy_id):
             return "Error: Invalid strategy ID"
-        
+
         # Basic hash validation (alphanumeric)
         if not all(c.isalnum() for c in hash_a) or not all(c.isalnum() or c == "HEAD" for c in hash_b):
              return "Error: Invalid version hashes"

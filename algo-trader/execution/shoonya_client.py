@@ -168,8 +168,7 @@ class ShoonyaClient:
         Note: SHA256 is mandated by the broker for this handshake.
         """
         raw = f"{self.api_key}{self.secret_key}{code}"
-        # codeql [py/weak-cryptographic-hash-on-sensitive-data] - Mandatory broker API contract requirement
-        return hashlib.sha256(raw.encode()).hexdigest()  # nosec: B324
+        return hashlib.sha256(raw.encode()).hexdigest()  # codeql [py/weak-cryptographic-hash-on-sensitive-data] - Mandatory broker API contract requirement
 
     def login(self, code: str) -> Dict[str, Any]:
         """

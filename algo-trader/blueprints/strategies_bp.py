@@ -37,8 +37,11 @@ def _extract_strategy_params(strategy: Any) -> Dict[str, Any]:
 def _load_strategy_class(strategy_id: str) -> Optional[Type]:
     """Dynamically loads a strategy class from the strategies directory."""
     try:
-        # Normalize name: aether-scalper -> aether_scalper, AetherScalper -> aether_scalper
-        # Convert CamelCase to snake_case
+        # 1. Normalize name and strictly validate via regex
+        import re
+        if not re.match(r"^[a-zA-Z0-9_\-]+$", strategy_id):
+             return None
+
         filename = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', strategy_id)
         filename = re.sub('([a-z0-9])([A-Z])', r'\1_\2', filename).lower()
         filename = filename.replace("-", "_")
@@ -47,12 +50,12 @@ def _load_strategy_class(strategy_id: str) -> Optional[Type]:
             filename += ".py"
 
         # Correct path for strategies
-        strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
-        safe_filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
+        strat_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
+        safe_filename = os.path.basename(filename)
         file_path = os.path.join(strat_dir, safe_filename)
-        
+
         # 3. Final containment check
-        # codeql [py/path-injection] - Containment is verified via abspath and commonpath
+        # codeql [py/path-injection] - Verified via os.path.commonpath
         if os.path.commonpath([strat_dir, os.path.abspath(file_path)]) != strat_dir:
             return None
 
@@ -114,22 +117,57 @@ STRAT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strat
 
 def _get_safe_path(filename: str) -> str:
     """Ensures the filename is safe and stays within the strategy directory."""
-    # Normalize path and extract only the filename part to prevent ../ traversal
-    safe_filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
-    
+    # 1. Normalize path and extract only the filename part to prevent ../ traversal
+    import re
+    # Strict regex validation for filename
+    if not re.match(r"^[a-zA-Z0-9_\-.]+$", filename):
+         raise PermissionError("Access denied: Invalid filename format.")
+
+    safe_filename = os.path.basename(filename)
+
     # Re-check extension for safety
     if not any(safe_filename.endswith(ext) for ext in (".py", ".json", ".yaml", ".yml")):
          # Default to .py if no extension
          if "." not in safe_filename:
              safe_filename += ".py"
-             
-    target_path = os.path.abspath(os.path.join(STRAT_DIR, safe_filename))
-    
-    # Final check: Must be within STRAT_DIR
-    if os.path.commonpath([STRAT_DIR, target_path]) != STRAT_DIR:
+
+    strat_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
+    target_path = os.path.join(strat_dir, safe_filename)
+    target_real = os.path.realpath(target_path)
+
+    # Final check: Must be within strat_dir
+    # codeql [py/path-injection] - Verified via os.path.commonpath
+    if os.path.commonpath([strat_dir, os.path.abspath(target_real)]) != strat_dir:
         raise PermissionError("Path Traversal Attempt Detected")
-        
-    return target_path
+
+    return target_real
+
+def _get_safe_version_path(filename: str, timestamp: str) -> str:
+    """Ensures version backup path is safe and contained."""
+    import re
+    # Strict regex validation
+    if not re.match(r"^[a-zA-Z0-9_\-.]+$", filename):
+         raise PermissionError("Access denied: Invalid filename format.")
+
+    safe_filename = os.path.basename(filename)
+    strat_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
+    versions_base = os.path.realpath(os.path.join(strat_dir, ".versions"))
+
+    safe_ts = re.sub(r"[^0-9]", "", timestamp)
+    target_file = os.path.join(versions_base, safe_filename, f"{safe_ts}.txt")
+    target_real = os.path.abspath(target_file)
+
+    # 1. Final check: Must be within versions_base
+    # codeql [py/path-injection] - Verified via os.path.commonpath
+    if os.path.commonpath([versions_base, target_real]) != versions_base:
+        raise PermissionError("Version path containment violation")
+
+    # 2. Now perform file operations safely
+    target_dir = os.path.dirname(target_real)
+    if not os.path.exists(target_dir):
+        os.makedirs(target_dir, exist_ok=True)
+
+    return target_real
 
 
 # --- Routes ---
@@ -160,7 +198,7 @@ def get_strategy_file(filename):
         file_path = _get_safe_path(filename)
         if not os.path.exists(file_path):
             return jsonify({"status": "error", "message": "File not found"}), 404
-            
+
         with open(file_path, "r") as f:
             content = f.read()
         return jsonify({"filename": os.path.basename(file_path), "content": content})
@@ -236,8 +274,9 @@ async def liquidate_strategy():
     try:
         data = request.json or {}
         strategy_name = data.get("strategy")
-        if not strategy_name:
-            return jsonify({"error": "Missing strategy name"}), 400
+        # Added strict regex validation for strategy_name
+        if not strategy_name or not re.match(r"^[a-zA-Z0-9_\-]+$", strategy_name):
+            return jsonify({"error": "Invalid strategy name format"}), 400
 
         order_manager = app_context.get("order_manager")
         success = await order_manager.liquidate_strategy(strategy_name)
@@ -248,6 +287,10 @@ async def liquidate_strategy():
 @strategies_bp.route("/api/v1/strategies/safeguards/<strategy_id>", methods=["GET", "POST"])
 @require_auth
 def manage_strategy_safeguards(strategy_id):
+    # Added strict regex validation for strategy_id
+    if not re.match(r"^[a-zA-Z0-9_\-]+$", strategy_id):
+        return jsonify({"error": "Invalid strategy_id format"}), 400
+
     db_logger = get_trade_logger()
     if request.method == "GET":
         safeguards = db_logger.get_strategy_safeguards(strategy_id)
@@ -263,23 +306,21 @@ def save_strategy_file(filename):
     data = request.json
     content = data.get("content", "")
     message = data.get("message", "Update via Trading UI")
-    
+
     try:
         file_path = _get_safe_path(filename)
         with open(file_path, "w") as f:
             f.write(content)
-            
+
         # Versioning
         try:
-            strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
-            versions_dir = os.path.join(strat_dir, ".versions", filename)
-            os.makedirs(versions_dir, exist_ok=True)
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            with open(os.path.join(versions_dir, f"{timestamp}.txt"), "w") as vf:
+            version_file = _get_safe_version_path(filename, timestamp)
+            with open(version_file, "w") as vf:
                 vf.write(content)
         except Exception:
             logger.warning(f"Backup versioning failed for {filename}", exc_info=True)
-            
+
         return jsonify({"status": "success", "message": f"Strategy {filename} saved successfully"}), 200
     except PermissionError as e:
         return jsonify({"status": "error", "message": "Access denied"}), 403
@@ -482,7 +523,8 @@ def get_strategy_versions(filename):
         filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
         versions_dir = os.path.normpath(os.path.join(strat_dir, ".versions", filename))
 
-        if not versions_dir.startswith(strat_dir):
+        # codeql [py/path-injection] - Verified via os.path.commonpath
+        if os.path.commonpath([strat_dir, os.path.abspath(versions_dir)]) != strat_dir:
             return jsonify({"error": "Forbidden path"}), 403
 
         versions = []
@@ -509,7 +551,7 @@ def rename_strategy_file(filename):
     """Renames a specific strategy file."""
     try:
         file_path = _get_safe_path(filename)
-        
+
         data = request.json or {}
         new_filename = data.get("new_filename")
         if not new_filename:
@@ -579,17 +621,15 @@ def create_strategy():
 @strategies_bp.route("/api/v1/strategies/<strategy_id>", methods=["DELETE"])
 @require_auth
 def delete_strategy(strategy_id):
-    """
-    DELETE /api/strategies/{strategy_id}
-    Deletes a specific strategy file.
-    """
+    """Deletes a specific strategy file."""
+    # Added strict regex validation for strategy_id
+    if not re.match(r"^[a-zA-Z0-9_\-]+$", strategy_id):
+        return jsonify({"error": "Invalid strategy_id format"}), 400
     try:
         # First stop the strategy if it's running
         strategy_runner = app_context.get("strategy_runner")
         if strategy_runner:
-            strategy = _find_strategy_by_id(strategy_runner, strategy_id)
-            if strategy and hasattr(strategy, "stop"):
-                strategy.stop()
+            success = strategy_runner.halt_strategy(strategy_id)
 
         # Find and delete the file safely
         file_path = _get_safe_path(strategy_id)
