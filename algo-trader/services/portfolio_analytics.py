@@ -32,6 +32,9 @@ class PortfolioAnalyticsService:
             horizon_days: Time horizon for the risk calculation
             iterations: Number of Monte Carlo trials
         """
+        # 0. Safety Cap: Prevent CPU exhaustion
+        iterations = min(max(100, iterations), 10000)
+        
         if not positions:
             return {"status": "error", "message": "No positions provided for analysis"}
 
