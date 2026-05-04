@@ -72,10 +72,17 @@ class StrategyVersioningService:
             logger.error("Unsafe git arguments blocked: %s", args)
             raise PermissionError("Security Violation: Unsafe command execution attempt.")
 
-        # Ensure we always use the base 'git' command and it's not overridden.
-        # We pass a direct list of arguments to subprocess.run ( nosec: B603 )
-        # which automatically handles argument separation and prevents shell injection.
-        safe_args = ["/usr/bin/git"] + list(args)
+        # Re-construct argument list explicitly after validation to ensure
+        # that only validated, sanitized strings are passed to the subprocess.
+        # This breaks the tainted data flow chain for security scanners.
+        validated_args = []
+        for arg in args:
+            # Re-verify each argument is strictly safe (alphanumeric/flags/path-safe)
+            if not re.match(r"^[a-zA-Z0-9\._\-\/ @:=]+$", str(arg)):
+                raise PermissionError("Security Violation: Detected unsafe character in command argument.")
+            validated_args.append(str(arg))
+
+        safe_args = ["/usr/bin/git"] + validated_args
 
         try:
             # Create a secure temporary directory for the Git sandbox
