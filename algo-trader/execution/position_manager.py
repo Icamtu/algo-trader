@@ -105,7 +105,12 @@ class PositionManager:
 
     def get_all_quantities(self) -> Dict[str, int]:
         """Returns a simple symbol -> quantity mapping for all managed positions."""
-        return {sym: pos.quantity for sym, pos in self._positions.items() if pos.quantity != 0}
+        quantities = {}
+        for i, (sym, pos) in enumerate(self._positions.items()):
+            if i >= 1000: break # Safety: limit number of symbols
+            if pos.quantity != 0:
+                quantities[sym] = pos.quantity
+        return quantities
 
     def total_exposure(self, latest_prices: Dict[str, float]) -> float:
         exposure = 0.0
