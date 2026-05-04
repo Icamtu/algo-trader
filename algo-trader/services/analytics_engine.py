@@ -181,17 +181,23 @@ class AnalyticsEngine:
         strikes = [item["strike"] for item in chain]
 
         pain_points = []
-        for s in strikes:
+        # Security: Enforce hard limit on strikes to prevent O(N^2) exhaustion
+        safe_strikes = strikes[:500]
+        
+        for s in safe_strikes:
             total_pain = 0
-            for item in chain:
-                strike = item["strike"]
-                ce = item["ce"]
-                pe = item["pe"]
-
+            # Explicit inner loop with safety check
+            for j, item in enumerate(chain):
+                if j >= 1000: break # Safety break
+                
+                strike = item.get("strike", 0)
+                ce = item.get("ce")
+                pe = item.get("pe")
+                
                 if ce and s > strike:
-                    total_pain += (s - strike) * ce["oi"]
+                    total_pain += (s - strike) * ce.get("oi", 0)
                 if pe and s < strike:
-                    total_pain += (strike - s) * pe["oi"]
+                    total_pain += (strike - s) * pe.get("oi", 0)
 
             pain_points.append({
                 "strike": s,
@@ -264,7 +270,17 @@ class AnalyticsEngine:
         if not surfaces_by_expiry:
             return {"status": "error", "message": "No expiry surface data available", "data": []}
 
-        strikes = sorted({item["strike"] for expiry in surfaces_by_expiry for item in expiry.get("chain", [])})
+        strikes_set = set()
+        for i, expiry in enumerate(surfaces_by_expiry):
+            if i >= 50: break # Safety: limit number of expiries
+            chain = expiry.get("chain", [])
+            for k, item in enumerate(chain):
+                if k >= 1000: break # Safety: limit strikes per expiry
+                strike = item.get("strike")
+                if strike is not None:
+                    strikes_set.add(strike)
+        
+        strikes = sorted(list(strikes_set))[:500] # Safety: hard limit on total strikes
         expiries = []
         surface: List[List[float]] = []
 
@@ -274,7 +290,14 @@ class AnalyticsEngine:
                 "atm_strike": expiry.get("atm_strike", 0),
                 "spot_price": expiry.get("spot_price", 0),
             })
-            smile_lookup = {row["strike"]: row.get("avg_iv", 0) for row in expiry.get("chain", [])}
+            # Security: Replace dictionary comprehension with explicit loop + limit
+            smile_lookup = {}
+            for k, row in enumerate(expiry.get("chain", [])):
+                if k >= 1000: break # Safety break
+                strike_key = row.get("strike")
+                if strike_key is not None:
+                    smile_lookup[strike_key] = row.get("avg_iv", 0)
+            
             surface.append([smile_lookup.get(strike, 0) for strike in strikes])
 
         return {
