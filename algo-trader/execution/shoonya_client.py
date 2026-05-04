@@ -174,8 +174,6 @@ class ShoonyaClient:
         # codeql[py/weak-sensitive-data-hashing]
         # lgtm[py/weak-sensitive-data-hashing]
         digest = hashes.Hash(hashes.SHA256())
-        # codeql[py/weak-sensitive-data-hashing]
-        # lgtm[py/weak-sensitive-data-hashing]
         digest.update(raw.encode())
         return digest.finalize().hex()
 
