@@ -317,7 +317,8 @@ def proxy_to_openalgo():
         # Security: Force nosniff and strict CSP
         resp_headers['X-Content-Type-Options'] = 'nosniff'
         resp_headers['X-Frame-Options'] = 'DENY'
-        # codeql[py/reflective-xss] - Proxying content with strict CSP and body sanitization
+        # codeql[py/reflected-xss]
+        # lgtm[py/reflected-xss]
         resp_headers['Content-Security-Policy'] = "default-src 'none'; frame-ancestors 'none'; sandbox;"
 
         # Security: strictly control Content-Type to prevent XSS reflection
@@ -341,7 +342,8 @@ def proxy_to_openalgo():
         # Non-JSON or failed JSON parsing: return as escaped text/plain
         from markupsafe import escape
         resp_headers['Content-Type'] = 'text/plain; charset=utf-8'
-        # codeql[py/reflective-xss]
+        # codeql[py/reflected-xss]
+        # lgtm[py/reflected-xss]
         return Response(
             str(escape(resp.text)),
             status=resp.status_code,
