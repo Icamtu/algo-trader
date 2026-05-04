@@ -321,15 +321,27 @@ def proxy_to_openalgo():
         resp_headers['Content-Security-Policy'] = "default-src 'none'; frame-ancestors 'none'; sandbox;"
 
         # Security: strictly control Content-Type to prevent XSS reflection
-        upstream_ct = resp.headers.get('Content-Type', '').lower()
-        if 'application/json' in upstream_ct:
-            resp_headers['Content-Type'] = 'application/json'
-        else:
-            # Force non-JSON responses to text/plain to neutralize HTML/JS reflection
-            resp_headers['Content-Type'] = 'text/plain; charset=utf-8'
+        # Security: Return the response securely
+        # If it's JSON, use jsonify to ensure proper escaping and Content-Type
+        if 'application/json' in resp_headers.get('Content-Type', ''):
+            try:
+                json_data = resp.json()
+                # Security: Explicitly use jsonify which sets nosniff and proper JSON headers
+                final_resp = jsonify(json_data)
+                final_resp.status_code = resp.status_code
+                # Copy allowed headers
+                for k, v in resp_headers.items():
+                    if k != 'Content-Type':
+                        final_resp.headers[k] = v
+                return final_resp
+            except Exception:
+                # Fallback to plain text if JSON parsing fails
+                resp_headers['Content-Type'] = 'text/plain; charset=utf-8'
 
+        # Non-JSON or failed JSON parsing: return as escaped text/plain
+        from markupsafe import escape
         return Response(
-            resp.content,
+            str(escape(resp.text)),
             status=resp.status_code,
             headers=resp_headers
         )
