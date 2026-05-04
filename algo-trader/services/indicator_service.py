@@ -87,12 +87,17 @@ print(result.to_json())
         self._validate_imports(code)
 
         # 2. Write to file with explicit containment check at the point of use
-        # codeql [py/path-injection] - Verified via _get_safe_path
-        with open(file_path, "w") as f:
+        # codeql [py/path-injection] - Verified via redundant containment check
+        target_dir = os.path.realpath(self.indicators_dir)
+        abs_path = os.path.abspath(file_path)
+        if os.path.commonpath([target_dir, abs_path]) != target_dir:
+             raise PermissionError("Access denied: Path escape detected.")
+
+        with open(abs_path, "w") as f:
             f.write(code)
 
-        logger.info("Custom indicator %s saved to %s", name, file_path)
-        return file_path
+        logger.info("Custom indicator %s saved to %s", name, abs_path)
+        return abs_path
 
     def get_indicators(self) -> List[str]:
         """Lists all available custom indicators."""
