@@ -90,19 +90,28 @@ def api_autoresearch_status(task_id):
 @require_auth
 def api_autoresearch_history():
     import math
-    def sanitize(obj):
+    def sanitize(obj, depth=0):
         """Recursively replace NaN/Inf with None for JSON safety, and drop heavy curve arrays."""
+        if depth > 10: return None # Prevent recursion depth issues
+        
         if isinstance(obj, float):
             if math.isnan(obj) or math.isinf(obj):
                 return None
             return obj
         if isinstance(obj, dict):
-            return {k: sanitize(v) for k, v in obj.items() if k not in ('equity_curve', 'benchmark_curve', 'returns')}
+            # Security: Explicit loop with limit to prevent exhaustion
+            res = {}
+            for i, (k, v) in enumerate(obj.items()):
+                if i >= 50: break # Hard limit on keys per level
+                if k in ('equity_curve', 'benchmark_curve', 'returns'):
+                    continue
+                res[k] = sanitize(v, depth + 1)
+            return res
         if isinstance(obj, list):
             # Drop large arrays (>50 items) that are backtest curves
             if len(obj) > 50:
                 return None
-            return [sanitize(i) for i in obj]
+            return [sanitize(i, depth + 1) for i in obj]
         return obj
 
     try:
@@ -136,14 +145,16 @@ def api_autoresearch_history():
 def api_autoresearch_get_iteration(id):
     try:
         strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'strategies'))
-        research_dir = os.path.join(strat_dir, 'autoresearch_history')
+        research_dir = os.path.abspath(os.path.join(strat_dir, 'autoresearch_history'))
         safe_id = os.path.basename(os.path.normpath(id))
         py_path = os.path.join(research_dir, f"{safe_id}.py")
         json_path = os.path.join(research_dir, f"{safe_id}.json")
 
         # 3. Final containment check
-        # codeql [py/path-injection] - Containment is verified via abspath and startswith
-        if not os.path.abspath(py_path).startswith(research_dir):
+        abs_path = os.path.abspath(py_path)
+        
+        # 3. Final containment check
+        if os.path.commonpath([research_dir, abs_path]) != research_dir:
             return jsonify({"error": "Forbidden path"}), 403
 
         if not os.path.exists(py_path):
@@ -187,7 +198,7 @@ def api_autoresearch_deploy():
 
         # Security check
         # codeql [py/path-injection] - Containment is verified via abspath and startswith
-        if not os.path.abspath(file_path).startswith(os.path.abspath(strat_dir)):
+        if os.path.commonpath([os.path.abspath(strat_dir), os.path.abspath(file_path)]) != os.path.abspath(strat_dir):
             return jsonify({"error": "Forbidden path"}), 403
 
         # Inject metrics into docstring as requested
@@ -250,7 +261,7 @@ def api_autoresearch_base_code():
 
         # Security check
         # codeql [py/path-injection] - Containment is verified via abspath and startswith
-        if not os.path.abspath(file_path).startswith(os.path.abspath(strat_dir)):
+        if os.path.commonpath([os.path.abspath(strat_dir), os.path.abspath(file_path)]) != os.path.abspath(strat_dir):
             return jsonify({"error": "Forbidden path"}), 403
 
         if not os.path.exists(file_path):
@@ -291,7 +302,7 @@ def api_autoresearch_save_version():
 
         # Security check
         # codeql [py/path-injection] - Containment is verified via abspath and startswith
-        if not os.path.abspath(file_path).startswith(os.path.abspath(strat_dir)):
+        if os.path.commonpath([os.path.abspath(strat_dir), os.path.abspath(file_path)]) != os.path.abspath(strat_dir):
             return jsonify({"error": "Forbidden path"}), 403
 
         # Build header
