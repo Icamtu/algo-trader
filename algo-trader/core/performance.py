@@ -61,7 +61,11 @@ class PerformanceCalculator:
 
         # To calculate accurate equity curve with MTM
         equity_curve = []
+        # Security: Limit timestamps to prevent exhaustion
         timestamps = sorted(list(self.price_history.keys()))
+        if len(timestamps) > 10000:
+            logger.warning("PerformanceCalculator: Truncating timestamps to 10000")
+            timestamps = timestamps[:10000]
 
         # If no price history, we fallback to realized-only curve
         if not timestamps:
@@ -75,7 +79,10 @@ class PerformanceCalculator:
         total_charges = self.df['charges'].sum() if 'charges' in self.df.columns else 0.0
 
         # Realized P&L logic
-        for symbol in self.df['symbol'].unique():
+        # Security: Limit unique symbols to prevent exhaustion
+        unique_symbols = self.df['symbol'].unique()
+        for i, symbol in enumerate(unique_symbols):
+            if i >= 500: break # Hard limit
             sym_df = self.df[self.df['symbol'] == symbol].sort_values('time')
             pos = 0
             cost_basis = 0
