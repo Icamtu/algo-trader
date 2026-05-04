@@ -148,7 +148,7 @@ def _get_safe_path(filename: str) -> str:
 
     # Final check: Must be within strat_dir
     # codeql[py/path-injection]
-        # lgtm[py/path-injection]
+    # lgtm[py/path-injection]
     if os.path.commonpath([strat_dir, abs_path]) != strat_dir:
         raise PermissionError("Path Traversal Attempt Detected")
 
@@ -175,14 +175,14 @@ def _get_safe_version_path(filename: str, timestamp: str) -> str:
     abs_path = os.path.abspath(target_file)
 
     # codeql[py/path-injection]
-        # lgtm[py/path-injection]
+    # lgtm[py/path-injection]
     if os.path.commonpath([versions_base, abs_path]) != versions_base:
         raise PermissionError("Path Traversal Attempt Detected")
 
     # Now perform file operations safely
     target_dir = os.path.dirname(abs_path)
     # codeql[py/path-injection]
-        # lgtm[py/path-injection]
+    # lgtm[py/path-injection]
     if not os.path.exists(target_dir):
         # codeql[py/path-injection]
         # lgtm[py/path-injection]
