@@ -882,8 +882,12 @@ class OrderManager:
 
             # Full snapshot for audit log
             local_snapshot = pm.all_positions()
+            local_map = {}
+            for i, (s, p) in enumerate(local_snapshot.items()):
+                if i >= 500: break # Hard limit on snapshot size
+                local_map[s] = p.quantity
             snapshot_data = {
-                "local": {s: p.quantity for s, p in local_snapshot.items()},
+                "local": local_map,
                 "broker": {}
             }
 
