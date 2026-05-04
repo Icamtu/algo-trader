@@ -178,7 +178,17 @@ Based on the metrics and the directive, output an IMPROVED version of the above 
     base_name = os.path.basename(file_path).replace(".py", "")
     base_name = re.sub(r'_v\d+$', '', base_name) # Strip old version tag if any
     base_name = re.sub(r'_autoresearch$', '', base_name)
-    new_filename = os.path.join(os.path.dirname(file_path), f"{base_name}_autoresearch_v{iteration}.py")
+
+    # Security: Ensure filename is strictly alphanumeric to prevent injection/traversal
+    base_name = re.sub(r'[^a-zA-Z0-9_\-]', '', base_name)
+
+    dir_name = os.path.dirname(os.path.abspath(file_path))
+    new_filename = os.path.join(dir_name, f"{base_name}_autoresearch_v{iteration}.py")
+
+    # Security: Final path containment check
+    if os.path.commonpath([os.path.abspath(new_filename), dir_name]) != dir_name:
+        logger.error("Security violation: attempt to write outside strategy directory")
+        return None
 
     with open(new_filename, 'w') as f:
         f.write(new_script.strip())
@@ -190,6 +200,10 @@ async def run_iteration_api(code: str = None, strategy_name: str = None, symbol:
     import uuid
     strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'strategies'))
 
+    # Security: Sanitize model name
+    if model and not re.match(r'^[a-zA-Z0-9\-\.\:\/]+$', model):
+        return {"error": "Invalid model name format"}
+
     file_path = None
     if code:
         temp_id = str(uuid.uuid4())[:8]
@@ -197,7 +211,16 @@ async def run_iteration_api(code: str = None, strategy_name: str = None, symbol:
         with open(file_path, 'w') as f:
             f.write(code)
     elif strategy_name:
-        file_path = os.path.join(strat_dir, strategy_name if strategy_name.endswith('.py') else f"{strategy_name}.py")
+        # Security: Strict regex for strategy name to prevent path traversal
+        if not re.match(r'^[a-zA-Z0-9_\-\.]+$', strategy_name):
+            return {"error": "Invalid strategy name format"}
+
+        # Security: Canonicalize and verify path containment
+        requested_path = os.path.abspath(os.path.join(strat_dir, strategy_name if strategy_name.endswith('.py') else f"{strategy_name}.py"))
+        if os.path.commonpath([requested_path, strat_dir]) != strat_dir:
+            return {"error": "Security violation: Invalid strategy path"}
+
+        file_path = requested_path
         if not os.path.exists(file_path):
             return {"error": f"Strategy {strategy_name} not found"}
         with open(file_path, 'r') as f:
@@ -302,9 +325,17 @@ Based on the metrics and the directive, output an IMPROVED version of the above 
         # 3. SAVE THIS ITERATION
         base_name = strategy_name.replace('.py', '') if strategy_name else "generated_strat"
         base_name = re.sub(r'_autoresearch$', '', base_name)
+        # Security: Strict sanitization of base_name
+        base_name = re.sub(r'[^a-zA-Z0-9_\-]', '', base_name)
+
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         save_name = f"{base_name}_autoresearch_{timestamp}.py"
-        save_path = os.path.join(research_dir, save_name)
+        save_path = os.path.abspath(os.path.join(research_dir, save_name))
+
+        # Security: Path containment check
+        if os.path.commonpath([save_path, research_dir]) != research_dir:
+            logger.error("Security violation: attempt to write outside research directory")
+            break
 
         with open(save_path, 'w') as f:
             f.write(final_code)
