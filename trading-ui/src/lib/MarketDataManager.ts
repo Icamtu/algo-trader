@@ -366,7 +366,7 @@ export class MarketDataManager {
         case 'market_data':
         case 'market_data_batch': {
           const ticks = typeStr === 'market_data_batch' ? (data.data as any[]) : [data]
-          
+
           ticks.forEach(tick => {
             const symbol = (tick.symbol as string).toUpperCase()
             const exchange = (tick.exchange as string).toUpperCase()

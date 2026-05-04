@@ -3,10 +3,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { 
-  Search, 
-  Zap, 
-  Clock, 
+import {
+  Search,
+  Zap,
+  Clock,
   Brain,
   Cpu,
   Loader2,
@@ -50,15 +50,15 @@ export function NeuralScanControl({ onScan, isLoading }: NeuralScanControlProps)
           <div className="space-y-1">
             <label className="text-[8px] font-black uppercase tracking-tighter text-muted-foreground opacity-70">Asset Group (CSV)</label>
             <div className="flex gap-2">
-              <Input 
-                placeholder="e.g. NIFTY, BANKNIFTY, RELIANCE" 
+              <Input
+                placeholder="e.g. NIFTY, BANKNIFTY, RELIANCE"
                 value={symbols}
                 onChange={(e) => setSymbols(e.target.value)}
                 className="bg-black/40 border-primary/20 text-[10px] font-mono h-8 uppercase"
               />
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={handleStartScan}
                 disabled={isLoading || !symbols}
                 className="h-8 px-3 border-primary/40 bg-primary/10 hover:bg-primary/20 group"
@@ -72,7 +72,7 @@ export function NeuralScanControl({ onScan, isLoading }: NeuralScanControlProps)
           {/* Quick Stats / Symbols */}
           <div className="flex flex-wrap gap-1.5">
             {quickSymbols.map(s => (
-              <Badge 
+              <Badge
                 key={s}
                 variant="outline"
                 className={cn(
@@ -107,7 +107,7 @@ export function NeuralScanControl({ onScan, isLoading }: NeuralScanControlProps)
             </div>
 
             {/* Start Button */}
-            <Button 
+            <Button
               className={cn(
                 "h-9 bg-primary hover:bg-white text-black font-black uppercase tracking-widest text-[9px] shadow-lg shadow-primary/10 transition-all",
                 isLoading && "opacity-50 cursor-not-allowed"

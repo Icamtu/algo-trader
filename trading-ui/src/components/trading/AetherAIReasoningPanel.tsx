@@ -1,10 +1,10 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { 
-  Zap, 
-  Brain, 
-  TrendingUp, 
-  Activity, 
+import {
+  Zap,
+  Brain,
+  TrendingUp,
+  Activity,
   ShieldCheck,
   Cpu,
   Globe,
@@ -35,7 +35,7 @@ interface AetherAIReasoningPanelProps {
 
 export function AetherAIReasoningPanel({ data, isLoading }: AetherAIReasoningPanelProps) {
   const [activeIndex, setActiveIndex] = React.useState(0);
-  
+
   const results = React.useMemo(() => {
     if (!data) return [];
     return Array.isArray(data) ? data : [data];
@@ -66,7 +66,7 @@ export function AetherAIReasoningPanel({ data, isLoading }: AetherAIReasoningPan
     <Card className="bg-slate-950/40 border-primary/20 backdrop-blur-md h-full flex flex-col overflow-hidden relative group">
       {/* Background Animated Glow */}
       <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
-      
+
       <CardHeader className="pb-3 border-b border-white/5 bg-primary/5 flex flex-row items-center justify-between space-y-0 relative z-10">
         <CardTitle className="text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2">
           <Brain className={cn("w-4 h-4 text-primary", isLoading && "animate-pulse")} />
@@ -94,8 +94,8 @@ export function AetherAIReasoningPanel({ data, isLoading }: AetherAIReasoningPan
                     onClick={() => setActiveIndex(idx)}
                     className={cn(
                         "px-3 py-1 text-[8px] font-black uppercase tracking-widest transition-all rounded",
-                        activeIndex === idx 
-                          ? "bg-primary text-black" 
+                        activeIndex === idx
+                          ? "bg-primary text-black"
                           : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
                     )}
                   >
@@ -104,10 +104,10 @@ export function AetherAIReasoningPanel({ data, isLoading }: AetherAIReasoningPan
               ))}
           </div>
       )}
-      
+
       <CardContent className="flex-1 p-0 flex flex-col relative z-10">
         <AnimatePresence mode="wait">
-          <motion.div 
+          <motion.div
             key={currentData.symbol + currentData.regime}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -118,7 +118,7 @@ export function AetherAIReasoningPanel({ data, isLoading }: AetherAIReasoningPan
             {/* Core Logic Section */}
             <div className="p-4 border-b border-white/5 space-y-3 bg-white/[0.02] relative overflow-hidden">
               {isLoading && (
-                <motion.div 
+                <motion.div
                   initial={{ x: "-100%" }}
                   animate={{ x: "200%" }}
                   transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
@@ -163,14 +163,14 @@ export function AetherAIReasoningPanel({ data, isLoading }: AetherAIReasoningPan
                     <span className="text-[9px] uppercase font-black tracking-widest text-muted-foreground">Decision Vectors</span>
                     <Badge variant="outline" className="text-[8px] h-4 border-primary/10 bg-primary/5">WEIGHTED</Badge>
                  </div>
-                 
+
                  <div className="space-y-4">
                     {currentData.vectors.map((vec, idx) => (
-                        <VectorItem 
-                          key={vec.label} 
-                          label={vec.label} 
-                          value={isLoading ? 0 : vec.value} 
-                          color={idx === 0 ? "bg-primary" : idx === 1 ? "bg-primary/60" : "bg-primary/30"} 
+                        <VectorItem
+                          key={vec.label}
+                          label={vec.label}
+                          value={isLoading ? 0 : vec.value}
+                          color={idx === 0 ? "bg-primary" : idx === 1 ? "bg-primary/60" : "bg-primary/30"}
                         />
                     ))}
                  </div>
@@ -182,8 +182,8 @@ export function AetherAIReasoningPanel({ data, isLoading }: AetherAIReasoningPan
                    <span className="text-[9px] uppercase font-bold tracking-widest text-primary">Safety Protocol Verify</span>
                 </div>
                 <p className="text-[10px] text-muted-foreground leading-tight">
-                  {isLoading ? 
-                    "Verifying kernel integrity and liquidity constraints for incoming telemetry stream..." : 
+                  {isLoading ?
+                    "Verifying kernel integrity and liquidity constraints for incoming telemetry stream..." :
                     `Risk Engine has validated current liquidity buffer. Conviction threshold: ${(currentData.conviction * 100).toFixed(0)}%`
                   }
                 </p>
@@ -193,8 +193,8 @@ export function AetherAIReasoningPanel({ data, isLoading }: AetherAIReasoningPan
             <div className="p-3 bg-black/40 border-t border-white/5 flex items-center justify-between mt-auto">
               <div className="flex items-center gap-2">
                  <div className={cn(
-                   "w-1.5 h-1.5 rounded-full shadow-[0_0_8px]", 
-                   isLoading ? "bg-primary animate-ping" : 
+                   "w-1.5 h-1.5 rounded-full shadow-[0_0_8px]",
+                   isLoading ? "bg-primary animate-ping" :
                    currentData.symbol !== "NONE" ? "bg-green-500 shadow-green-500/50" : "bg-yellow-500/50 shadow-yellow-500/20"
                  )} />
                  <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest">
@@ -219,11 +219,11 @@ function VectorItem({ label, value, color }: { label: string, value: number, col
         <span className="font-mono text-primary font-black">{value}%</span>
       </div>
       <div className="h-1 bg-white/[0.03] rounded-full overflow-hidden border border-white/5">
-        <motion.div 
+        <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${value}%` }}
             transition={{ duration: 1.2, ease: "circOut" }}
-            className={cn("h-full relative", color)} 
+            className={cn("h-full relative", color)}
         >
             <div className="absolute top-0 bottom-0 right-0 w-8 bg-gradient-to-r from-transparent to-white/20" />
         </motion.div>

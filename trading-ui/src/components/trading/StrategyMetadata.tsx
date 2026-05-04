@@ -8,7 +8,7 @@ interface StrategyMetadataProps {
 }
 
 export function StrategyMetadata({ filename, accentColorClass }: StrategyMetadataProps) {
-  // Mock internal state for strategy parameters just as a visual panel implementation 
+  // Mock internal state for strategy parameters just as a visual panel implementation
   // until we tie it natively to backend dynamic parsing
   const [params, setParams] = useState([
     { name: "LOOKBACK_PERIOD", type: "int", value: "14" },
@@ -31,9 +31,9 @@ export function StrategyMetadata({ filename, accentColorClass }: StrategyMetadat
            <span className="text-[10px] font-mono font-black uppercase tracking-widest text-foreground">Strat_Metadata</span>
         </div>
       </div>
-      
+
       <div className="flex-1 overflow-y-auto min-h-0 custom-scrollbar p-3 space-y-4">
-        
+
         {/* Core Info */}
         <div className="space-y-2">
           <div className="flex flex-col gap-1">
@@ -60,7 +60,7 @@ export function StrategyMetadata({ filename, accentColorClass }: StrategyMetadat
              <SlidersHorizontal className="w-3 h-3 text-muted-foreground/40" />
              <span className="text-[9px] font-mono font-black uppercase tracking-widest text-muted-foreground/60">Tuning_Params</span>
           </div>
-          
+
           <div className="space-y-2">
             {params.map((p, i) => (
               <div key={i} className="flex items-center gap-2 bg-background/20 p-2 border border-border/10">
@@ -68,9 +68,9 @@ export function StrategyMetadata({ filename, accentColorClass }: StrategyMetadat
                   <span className="text-[8px] font-mono font-bold uppercase tracking-widest text-foreground">{p.name}</span>
                   <span className="text-[7px] font-mono text-muted-foreground/40 uppercase">{p.type}</span>
                 </div>
-                <input 
-                  type="text" 
-                  value={p.value} 
+                <input
+                  type="text"
+                  value={p.value}
                   onChange={(e) => {
                     const next = [...params];
                     next[i].value = e.target.value;
@@ -81,14 +81,14 @@ export function StrategyMetadata({ filename, accentColorClass }: StrategyMetadat
               </div>
             ))}
           </div>
-          
+
           <button className="mt-3 w-full border border-border/20 hover:border-primary/40 bg-white/5 hover:bg-white/10 transition-all py-1.5 flex justify-center items-center gap-1.5">
              <span className="text-[8px] font-mono font-black uppercase tracking-widest text-muted-foreground group-hover:text-foreground">+ Add_Parameter</span>
           </button>
         </div>
 
       </div>
-      
+
       <div className="p-3 border-t border-border bg-card/10">
         <button className={cn("w-full py-1.5 flex items-center justify-center gap-2 border text-[9px] font-mono font-black uppercase tracking-widest transition-all", `border-${accentColorClass.split('-')[1]}-500/20`, "bg-white/5 hover:bg-primary hover:text-black", accentColorClass)}>
           <Save className="w-3 h-3" />
