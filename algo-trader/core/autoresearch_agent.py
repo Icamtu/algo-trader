@@ -39,8 +39,8 @@ def call_ollama(prompt, model="qwen3.5-claude:latest"):
         response.raise_for_status()
         result = response.json()
         return result.get("response", "")
-    except Exception as e:
-        logger.error(f"Failed to call Ollama at {url}: {e}")
+    except Exception:
+        logger.error("Failed to call Ollama at %s", url, exc_info=True)
         return ""
 
 def extract_python_code(response_text):
@@ -115,8 +115,8 @@ async def run_iteration(file_path, directive, iteration, model="deepseek-coder:1
 
     try:
         results = await engine.run(days=7)
-    except Exception as e:
-        logger.error(f"Backtest engine failed during iteration {iteration}: {e}")
+    except Exception:
+        logger.error("Backtest engine failed during iteration %s", iteration, exc_info=True)
         return None
 
     perf = results.get("performance", {})
@@ -169,8 +169,8 @@ Based on the metrics and the directive, output an IMPROVED version of the above 
     # Validate basic syntax before saving
     try:
         ast.parse(new_script)
-    except SyntaxError as e:
-        logger.error(f"LLM generated invalid Python syntax: {e}")
+    except SyntaxError:
+        logger.error("LLM generated invalid Python syntax", exc_info=True)
         return None
 
     # Save the new iteration
@@ -178,7 +178,17 @@ Based on the metrics and the directive, output an IMPROVED version of the above 
     base_name = os.path.basename(file_path).replace(".py", "")
     base_name = re.sub(r'_v\d+$', '', base_name) # Strip old version tag if any
     base_name = re.sub(r'_autoresearch$', '', base_name)
-    new_filename = os.path.join(os.path.dirname(file_path), f"{base_name}_autoresearch_v{iteration}.py")
+
+    # Security: Ensure filename is strictly alphanumeric to prevent injection/traversal
+    base_name = re.sub(r'[^a-zA-Z0-9_\-]', '', base_name)
+
+    dir_name = os.path.dirname(os.path.abspath(file_path))
+    new_filename = os.path.join(dir_name, f"{base_name}_autoresearch_v{iteration}.py")
+
+    # Security: Final path containment check
+    if os.path.commonpath([os.path.abspath(new_filename), dir_name]) != dir_name:
+        logger.error("Security violation: attempt to write outside strategy directory")
+        return None
 
     with open(new_filename, 'w') as f:
         f.write(new_script.strip())
@@ -190,6 +200,10 @@ async def run_iteration_api(code: str = None, strategy_name: str = None, symbol:
     import uuid
     strat_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'strategies'))
 
+    # Security: Sanitize model name
+    if model and not re.match(r'^[a-zA-Z0-9\-\.\:\/]+$', model):
+        return {"error": "Invalid model name format"}
+
     file_path = None
     if code:
         temp_id = str(uuid.uuid4())[:8]
@@ -197,7 +211,16 @@ async def run_iteration_api(code: str = None, strategy_name: str = None, symbol:
         with open(file_path, 'w') as f:
             f.write(code)
     elif strategy_name:
-        file_path = os.path.join(strat_dir, strategy_name if strategy_name.endswith('.py') else f"{strategy_name}.py")
+        # Security: Strict regex for strategy name to prevent path traversal
+        if not re.match(r'^[a-zA-Z0-9_\-\.]+$', strategy_name):
+            return {"error": "Invalid strategy name format"}
+
+        # Security: Canonicalize and verify path containment
+        requested_path = os.path.abspath(os.path.join(strat_dir, strategy_name if strategy_name.endswith('.py') else f"{strategy_name}.py"))
+        if os.path.commonpath([requested_path, strat_dir]) != strat_dir:
+            return {"error": "Security violation: Invalid strategy path"}
+
+        file_path = requested_path
         if not os.path.exists(file_path):
             return {"error": f"Strategy {strategy_name} not found"}
         with open(file_path, 'r') as f:
@@ -209,6 +232,10 @@ async def run_iteration_api(code: str = None, strategy_name: str = None, symbol:
     final_code = code
     last_perf = {}
     save_path = None
+
+    # Initialize research output directory
+    research_dir = os.path.join(strat_dir, 'AutoResearch')
+    os.makedirs(research_dir, exist_ok=True)
 
     for i in range(1, total_iterations + 1):
         if check_cancel and check_cancel():
@@ -232,8 +259,8 @@ async def run_iteration_api(code: str = None, strategy_name: str = None, symbol:
 
         try:
             results = await engine.run(days=days)
-        except Exception as e:
-            return {"error": f"Backtest failed at step {i}: {str(e)}"}
+        except Exception:
+            return {"error": f"Backtest failed at step {i}"}
 
         perf = results.get("performance", {})
         last_perf = perf
@@ -254,7 +281,8 @@ async def run_iteration_api(code: str = None, strategy_name: str = None, symbol:
         if task_callback:
             task_callback({"iteration": i, "status": "synthesizing", "message": f"Synthesizing improvements for iteration {i}..."})
 
-        target_list = "\n".join([f"- target {k}: {v}" for k, v in (targets or {}).items()]) if targets else "Improve the strategy"
+        target_items = list((targets or {}).items())[:10]
+        target_list = "\n".join([f"- target {k}: {v}" for k, v in target_items]) if targets else "Improve the strategy"
         directive = f"Achieve the following target metrics mathematically:\n{target_list}"
 
         prompt = f"""
@@ -297,9 +325,17 @@ Based on the metrics and the directive, output an IMPROVED version of the above 
         # 3. SAVE THIS ITERATION
         base_name = strategy_name.replace('.py', '') if strategy_name else "generated_strat"
         base_name = re.sub(r'_autoresearch$', '', base_name)
+        # Security: Strict sanitization of base_name
+        base_name = re.sub(r'[^a-zA-Z0-9_\-]', '', base_name)
+
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         save_name = f"{base_name}_autoresearch_{timestamp}.py"
-        save_path = os.path.join(research_dir, save_name)
+        save_path = os.path.abspath(os.path.join(research_dir, save_name))
+
+        # Security: Path containment check
+        if os.path.commonpath([save_path, research_dir]) != research_dir:
+            logger.error("Security violation: attempt to write outside research directory")
+            break
 
         with open(save_path, 'w') as f:
             f.write(final_code)
@@ -309,7 +345,12 @@ Based on the metrics and the directive, output an IMPROVED version of the above 
         json_path = os.path.join(research_dir, f"{base_name}_autoresearch_{timestamp}.json")
         with open(json_path, 'w') as f:
             # Strip heavy curves which contain NaNs that break browser JSON.parse()
-            clean_metrics = {k: v for k, v in perf.items() if k not in ('equity_curve', 'benchmark_curve', 'returns')}
+            # Security: Explicit loop with limit to prevent exhaustion
+            clean_metrics = {}
+            for i, (k, v) in enumerate(perf.items()):
+                if i >= 100: break # Hard limit on keys
+                if k not in ('equity_curve', 'benchmark_curve', 'returns'):
+                    clean_metrics[k] = v
             json.dump({"metrics": clean_metrics, "symbol": symbol, "timeframe": timeframe, "targets": targets}, f)
             f.flush()
             os.fsync(f.fileno())
@@ -322,8 +363,10 @@ Based on the metrics and the directive, output an IMPROVED version of the above 
 
     # Cleanup temp file if needed
     if code and "temp_ar_" in file_path:
-        try: os.remove(file_path)
-        except: pass
+        try:
+            os.remove(file_path)
+        except OSError:
+            logger.warning("Failed to cleanup temp file %s", file_path, exc_info=True)
 
     return {
         "metrics": last_perf,

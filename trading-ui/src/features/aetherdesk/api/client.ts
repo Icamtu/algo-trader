@@ -1,0 +1,259 @@
+import { CONFIG } from "@/lib/config";
+import {
+  ApiError,
+  type PlaceOrderRequest,
+  type RiskLimitUpdates,
+  type IndicatorPayload,
+  type SystemSettings,
+  type BacktestRequest,
+  type BacktestResponse
+} from "@/types/api";
+
+import { supabase } from "@/integrations/supabase/client";
+
+const ALGO_TRADER_URL = CONFIG.API_BASE_URL;
+
+// ─── Base Fetch Utility ──────────────────────────────────────────
+const baseFetch = async (url: string, options: RequestInit = {}) => {
+  const response = await fetch(url, options);
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: response.statusText, status: response.status }));
+    throw new ApiError(response.status, body.error || `HTTP error! status: ${response.status}`, body);
+  }
+  return response.json();
+};
+
+// ─── AetherDesk Client Definition ──────────────────────────────────
+export const aetherClient = async (endpoint: string, options: RequestInit = {}) => {
+  const mode = localStorage.getItem("algodesk_mode") || "sandbox";
+
+  // Get current Supabase session
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+
+  const headers = {
+    "Content-Type": "application/json",
+    "apikey": CONFIG.API_KEY,
+    "X-Trading-Mode": mode,
+    ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+    ...options.headers,
+  };
+  return baseFetch(`${ALGO_TRADER_URL}${endpoint}`, { ...options, headers });
+};
+
+export const algoApi = {
+  // Strategies
+  getStrategies: () => aetherClient("/api/v1/strategies"),
+  getStrategy: (id: string) => aetherClient(`/api/v1/strategies/${id}`),
+  activateStrategy: (id: string) => aetherClient(`/api/v1/strategies/${id}/activate`, { method: "POST" }),
+  startStrategy: (id: string, config?: Record<string, unknown>) =>
+    aetherClient(`/api/v1/strategies/${id}/start`, {
+      method: "POST",
+      ...(config ? { body: JSON.stringify(config) } : {})
+    }),
+  stopStrategy: (id: string, squareOff = true) =>
+    aetherClient(`/api/v1/strategies/${id}/stop`, {
+      method: "POST",
+      body: JSON.stringify({ square_off: squareOff })
+    }),
+  getStrategyPerformance: (id: string) => aetherClient(`/api/v1/strategies/${id}/performance`),
+  getStrategyOrders: (id: string, limit = 100) => aetherClient(`/api/v1/strategies/${id}/orders?limit=${limit}`),
+  liquidateStrategy: (id: string) => aetherClient(`/api/v1/strategies/${id}/liquidate`, { method: "POST" }),
+  updateStrategyParams: (id: string, params: Record<string, unknown>) =>
+    aetherClient(`/api/v1/strategies/${id}/config`, { method: "PATCH", body: JSON.stringify(params) }),
+  createStrategy: (data: { name: string, template?: string }) =>
+    aetherClient("/api/v1/strategies", { method: "POST", body: JSON.stringify(data) }),
+  deleteStrategy: (id: string) => aetherClient(`/api/v1/strategies/${id}`, { method: "DELETE" }),
+
+  // Strategy Files (Physical storage)
+  getStrategyFiles: () => aetherClient("/api/v1/strategies/files"),
+  getStrategyFile: (filename: string) => aetherClient(`/api/v1/strategies/files/${filename}`),
+  saveStrategyFile: (filename: string, content: string) =>
+    aetherClient(`/api/v1/strategies/files/${filename}`, { method: "POST", body: JSON.stringify({ content }) }),
+  deleteStrategyFile: (filename: string) => aetherClient(`/api/v1/strategies/files/${filename}`, { method: "DELETE" }),
+  renameStrategyFile: (filename: string, newFilename: string) =>
+    aetherClient(`/api/v1/strategies/files/${filename}/rename`, { method: "POST", body: JSON.stringify({ new_filename: newFilename }) }),
+  getStrategyVersions: (filename: string) => aetherClient(`/api/v1/strategies/files/${filename}/versions`),
+
+  // Positions & P&L
+  getPositions: () => aetherClient("/api/v1/positionbook"),
+  getHoldings: () => aetherClient("/api/v1/holdings"),
+  getPnl: () => aetherClient("/api/v1/pnl"),
+  getRiskMetrics: () => aetherClient("/api/v1/risk-metrics"),
+
+  // Orders
+  getOrders: (params?: Record<string, string>) => {
+    const query = params ? `?${new URLSearchParams(params).toString()}` : "";
+    return aetherClient(`/api/v1/orderbook${query}`);
+  },
+  getTradebook: (params?: Record<string, string>) => {
+    const query = params ? `?${new URLSearchParams(params).toString()}` : "";
+    return aetherClient(`/api/v1/tradebook${query}`);
+  },
+  getTradesBySymbol: (symbol: string, limit = 50) =>
+    aetherClient(`/api/v1/tradebook?symbol=${symbol}&limit=${limit}`),
+  getTradesByStrategy: (strategy: string, limit = 100) =>
+    aetherClient(`/api/v1/tradebook?strategy=${strategy}&limit=${limit}`),
+  getOpenPositions: () => aetherClient("/api/v1/tradebook/open"),
+  getOrderStatus: (orderId: string) =>
+    aetherClient("/api/v1/orderstatus", { method: "POST", body: JSON.stringify({ orderid: orderId }) }),
+  cancelOrder: (id: string) =>
+    aetherClient("/api/v1/cancelorder", { method: "POST", body: JSON.stringify({ orderid: id }) }),
+  modifyOrder: (params: Record<string, any>) =>
+    aetherClient("/api/v1/modifyorder", { method: "POST", body: JSON.stringify(params) }),
+  splitOrder: (params: Record<string, any>) =>
+    aetherClient("/api/v1/splitorder", { method: "POST", body: JSON.stringify(params) }),
+  cancelAllOrders: () => aetherClient("/api/v1/cancelallorder", { method: "POST" }),
+
+  // Order Placement
+  placeOrder: (order: PlaceOrderRequest) =>
+    aetherClient("/api/v1/placeorder", { method: "POST", body: JSON.stringify(order) }),
+  smartOrder: (order: Record<string, unknown>) =>
+    aetherClient("/api/v1/placesmartorder", { method: "POST", body: JSON.stringify(order) }),
+  basketOrder: (orders: Record<string, unknown>[]) =>
+    aetherClient("/api/v1/basketorder", { method: "POST", body: JSON.stringify({ orders }) }),
+
+  // Square-off
+  exitPosition: (symbol: string) =>
+    aetherClient("/api/v1/exitposition", { method: "POST", body: JSON.stringify({ symbol }) }),
+  closePosition: () => aetherClient("/api/v1/closeposition", { method: "POST" }),
+
+  // Funds
+  getFunds: () => aetherClient("/api/v1/funds"),
+
+  // Risk Management
+  getRiskStatus: () => aetherClient("/api/v1/risk/status"),
+  getRiskMatrix: () => aetherClient("/api/v1/risk/matrix"),
+  getStrategySafeguards: (id: string) => aetherClient(`/api/v1/risk/safeguards/${id}`),
+  updateStrategySafeguards: (id: string, safeguards: any) =>
+    aetherClient(`/api/v1/risk/safeguards/${id}`, { method: "POST", body: JSON.stringify(safeguards) }),
+  updateRiskLimits: (updates: RiskLimitUpdates) =>
+    aetherClient("/api/v1/risk/limits", { method: "PUT", body: JSON.stringify(updates) }),
+
+  // Mode
+  getMode: () => aetherClient("/api/v1/mode"),
+  setMode: (mode: string) =>
+    aetherClient("/api/v1/mode", { method: "POST", body: JSON.stringify({ mode }) }),
+  getModeStatus: () => aetherClient("/api/v1/mode/status"),
+
+  // Sandbox-specific endpoints
+  getSandboxTrades: () => aetherClient("/api/v1/sandbox/trades"),
+  getSandboxPositions: () => aetherClient("/api/v1/sandbox/positions"),
+  getSandboxSummary: () => aetherClient("/api/v1/sandbox/summary"),
+
+  // System
+  getSystemSettings: () => aetherClient("/api/v1/settings"),
+  updateSystemSettings: (updates: Partial<SystemSettings>) =>
+    aetherClient("/api/v1/settings", { method: "PUT", body: JSON.stringify(updates) }),
+  getSystemStatus: () => aetherClient("/api/v1/system/health"),
+  getSystemLogs: () => aetherClient("/api/v1/system/logs"),
+  getSystemRbac: () => aetherClient("/api/v1/system/rbac"),
+  reconcilePositions: () => aetherClient("/api/v1/system/reconcile", { method: "POST" }),
+  getTickerConfig: () => aetherClient("/api/v1/system/config/ticker"),
+  resetPositions: () => aetherClient("/api/v1/system/reconcile/reset", { method: "POST" }),
+  getTelemetry: () => aetherClient("/api/v1/telemetry"),
+  getTelemetryPnl: () => aetherClient("/api/v1/telemetry/pnl"),
+  getTelemetryPerformance: () => aetherClient("/api/v1/telemetry/performance"),
+
+  // Symbols & Quotes
+  searchSymbols: (query: string) => aetherClient(`/api/v1/symbol/search?q=${encodeURIComponent(query)}`),
+  getQuotes: (symbols: string[]) => aetherClient(`/api/v1/quotes?symbols=${symbols.join(",")}`),
+  getDepth: (symbol: string) => aetherClient(`/api/v1/depth?symbol=${encodeURIComponent(symbol)}`),
+  getMarketBreadth: () => aetherClient("/api/v1/historify/breadth"),
+  getHistorifyBreadth: () => aetherClient("/api/v1/historify/breadth"),
+  getHistorifySymbols: () => aetherClient("/api/v1/historify/symbols"),
+
+  // Historical Data & Indicators
+  getHistory: (params: Record<string, string>) => {
+    const query = new URLSearchParams(params).toString();
+    return aetherClient(`/api/v1/history?${query}`);
+  },
+  calculateIndicators: (data: IndicatorPayload) =>
+    aetherClient("/api/v1/indicators", { method: "POST", body: JSON.stringify(data) }),
+
+  // Expert Terminal & Options
+  getOptionChain: (symbol: string, expiry: string) =>
+    aetherClient(`/api/v1/options/chain?symbol=${encodeURIComponent(symbol)}&expiry=${encodeURIComponent(expiry)}`),
+  getOptionGreeks: (symbol: string) =>
+    aetherClient(`/api/v1/options/greeks?symbol=${encodeURIComponent(symbol)}`),
+  getMargins: (order: Record<string, unknown>) =>
+    aetherClient("/api/v1/margins", { method: "POST", body: JSON.stringify(order) }),
+  triggerPanic: () => aetherClient("/api/v1/system/panic", { method: "POST" }),
+
+  // Backtesting
+  listBacktests: (limit = 100) => aetherClient(`/api/v1/backtests?limit=${limit}`),
+  runBacktest: (data: BacktestRequest): Promise<BacktestResponse> =>
+    aetherClient("/api/v1/backtest/run", { method: "POST", body: JSON.stringify(data) }),
+  getBacktestResults: () => aetherClient("/api/v1/backtest/results"),
+  optimizeStrategy: (data: any) =>
+    aetherClient("/api/v1/strategies/optimize", { method: "POST", body: JSON.stringify(data) }),
+
+  // Alerts
+  getAlerts: () => aetherClient("/api/v1/alerts"),
+  createAlert: (alert: Record<string, unknown>) =>
+    aetherClient("/api/v1/alerts", { method: "POST", body: JSON.stringify(alert) }),
+  deleteAlert: (id: number) => aetherClient(`/api/v1/alerts/${id}`, { method: "DELETE" }),
+
+  // Analyzer toggle
+  toggleAnalyzer: (state: boolean) => aetherClient("/api/v1/analyzertoggle", { method: "POST", body: JSON.stringify({ state }) }),
+  getAnalyzerStatus: () => aetherClient("/api/v1/analyzerstatus"),
+
+  // Brokers
+  listBrokers: () => aetherClient("/api/v1/brokers"),
+  updateBrokerCredentials: (brokerId: string, data: Record<string, any>) =>
+    aetherClient(`/api/v1/brokers/${brokerId}/credentials`, { method: "POST", body: JSON.stringify(data) }),
+  authorizeBroker: (brokerId: string, credentials?: Record<string, any>) =>
+    aetherClient(`/api/v1/brokers/${brokerId}/auth`, { method: "POST", body: credentials ? JSON.stringify(credentials) : undefined }),
+
+
+  exportTradesUrl: () => `${ALGO_TRADER_URL}/api/v1/tradebook/export?apikey=${CONFIG.API_KEY}`,
+
+  // Scanner
+  runScanner: (index: string) => aetherClient(`/api/v1/scanner?index=${index}`),
+  getBrokerHealth: () => aetherClient("/api/v1/broker/health"),
+  getMarketOverview: (universe = "nifty50", index_type = "spot") =>
+    aetherClient(`/api/v1/market/overview?universe=${universe}&index_type=${index_type}`),
+
+  // Vault
+  listVaultAssets: (type?: string) => aetherClient(`/api/v1/vault/assets${type ? `?type=${type}` : ""}`),
+  searchVaultAssets: (query: string) => aetherClient(`/api/v1/vault/search?q=${encodeURIComponent(query)}`),
+
+  sendTerminalCommand: (command: string) => aetherClient("/api/v1/terminal/command", { method: "POST", body: JSON.stringify({ command }) }),
+
+  // Strategy Explorer (Recursive)
+  getExplorerTree: (path = ".") => aetherClient(`/api/v1/explorer/tree?path=${encodeURIComponent(path)}`),
+  getExplorerFile: (path: string) => aetherClient(`/api/v1/explorer/file?path=${encodeURIComponent(path)}`),
+  saveExplorerFile: (path: string, content: string) =>
+    aetherClient("/api/v1/explorer/save", { method: "POST", body: JSON.stringify({ path, content }) }),
+  deleteExplorerItem: (path: string) => aetherClient(`/api/v1/explorer/delete?path=${encodeURIComponent(path)}`, { method: "DELETE" }),
+
+  // HITL & Action Center
+  getHitlSignals: () => aetherClient("/api/v1/hitl/signals"),
+  hitlApprove: (id: number) => aetherClient("/api/v1/hitl/approve", { method: "POST", body: JSON.stringify({ id }) }),
+  hitlReject: (id: number, reason?: string) => aetherClient("/api/v1/hitl/reject", { method: "POST", body: JSON.stringify({ id, reason }) }),
+  bulkApprove: (ids: number[]) => aetherClient("/api/v1/hitl/bulk-approve", { method: "POST", body: JSON.stringify({ ids }) }),
+  bulkReject: (ids: number[], reason?: string) => aetherClient("/api/v1/hitl/bulk-reject", { method: "POST", body: JSON.stringify({ ids, reason }) }),
+  getActionCenter: (limit = 200, status = "all") => aetherClient(`/api/v1/actioncenter?limit=${limit}&status=${status}`),
+  aetherAnalyze: (symbols: string, timeframe: string) => aetherClient("/api/v1/aether/analyze", { method: "POST", body: JSON.stringify({ symbols, timeframe }) }),
+  toggleAutoExecute: (enabled: boolean) => aetherClient("/api/v1/action/audit/auto", { method: "POST", body: JSON.stringify({ enabled }) }),
+  toggleRiskLock: (locked: boolean) => aetherClient("/api/v1/action/audit/lock", { method: "POST", body: JSON.stringify({ locked }) }),
+
+  // AutoResearch
+  getAutoResearchBaseCode: (name: string) => aetherClient(`/api/v1/autoresearch/base-code?name=${encodeURIComponent(name)}`),
+  getHistorifyCatalog: (interval: string) => aetherClient(`/api/v1/historify/catalog?interval=${interval}`),
+  downloadHistorifyData: (data: any) => aetherClient("/api/v1/historify/download", { method: "POST", body: JSON.stringify(data) }),
+  saveAutoResearchVersion: (data: any) => aetherClient("/api/v1/autoresearch/save-version", { method: "POST", body: JSON.stringify(data) }),
+  getAutoResearchHistory: () => aetherClient("/api/v1/autoresearch/history"),
+  getAutoResearchHistoryItem: (id: string) => aetherClient(`/api/v1/autoresearch/history/${id}`),
+  deployAutoResearch: (data: any) => aetherClient("/api/v1/autoresearch/deploy", { method: "POST", body: JSON.stringify(data) }),
+  startAutoResearchIteration: (data: any) => aetherClient("/api/v1/autoresearch/iteration", { method: "POST", body: JSON.stringify(data) }),
+  getAutoResearchStatus: (taskId: string) => aetherClient(`/api/v1/autoresearch/status/${taskId}`),
+  getMarketRegime: () => aetherClient("/api/v1/market_regime"),
+
+  // Indicators
+  getIndicatorsList: () => aetherClient("/api/v1/indicators/list"),
+  saveIndicator: (data: { name: string; code: string }) => aetherClient("/api/v1/indicators/save", { method: "POST", body: JSON.stringify(data) }),
+  calculateIndicator: (data: { name: string; candles: any[]; params: any }) => aetherClient("/api/v1/indicators/calculate", { method: "POST", body: JSON.stringify(data) }),
+
+  client: aetherClient,
+};

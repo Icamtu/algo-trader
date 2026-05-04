@@ -52,8 +52,8 @@ class IngestionScheduler:
                 from data.historify_db import enforce_retention_policy
                 enforce_retention_policy(max_days=30)
 
-            except Exception as e:
-                logger.error(f"Historify Scheduler Loop Error: {e}")
+            except Exception:
+                logger.error("Historify Scheduler Loop Error", exc_info=True)
 
             # Wait for next interval
             # Check is_running periodically to allow faster shutdown

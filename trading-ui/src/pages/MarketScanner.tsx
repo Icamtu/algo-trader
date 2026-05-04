@@ -4,7 +4,7 @@ import {
   Search, RefreshCw, Brain, PlayCircle, Settings2,
   Terminal, Fingerprint, Radar, Target, Cpu, Activity
 } from "lucide-react";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { IndustrialValue } from "@/components/trading/IndustrialValue";
 import { useAether } from "@/contexts/AetherContext";
@@ -17,10 +17,14 @@ export default function MarketScanner() {
   const { setSelectedSymbol } = useAether();
   const [selectedIndices, setSelectedIndices] = useState<IndexType[]>(["NIFTY_50"]);
   const [results, setResults] = useState<any[]>([]);
+  const [showAll, setShowAll] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [llmModel, setLlmModel] = useState("mistral");
   const [agentEnabled, setAgentEnabled] = useState(true);
+
+  const DISPLAY_LIMIT = 50;
+  const displayedResults = showAll ? results : results.slice(0, DISPLAY_LIMIT);
 
   const loadSettings = async () => {
     try {
@@ -38,9 +42,13 @@ export default function MarketScanner() {
 
   const runDiscovery = async () => {
     setIsScanning(true);
+    setShowAll(false);
     try {
       const allResults = await Promise.all(
-        selectedIndices.map(idx => algoApi.runScanner(idx).then(res => res.results || []))
+        selectedIndices.map(idx => algoApi.runScanner(idx).then(res => {
+          const data = res?.data || res;
+          return Array.isArray(data?.results) ? data.results : [];
+        }))
       );
       setResults(allResults.flat());
       toast({ title: "SCAN_COMPLETE", description: "RADAR_MATCH_STORED" });
@@ -183,7 +191,7 @@ export default function MarketScanner() {
 
             {results.length > 0 ? (
                <div className="grid grid-cols-1 gap-3">
-                  {results.map((sym, i) => (
+                  {displayedResults.map((sym, i) => (
                     <motion.div
                       key={sym.symbol + i}
                       onClick={() => setSelectedSymbol(sym.symbol)}
@@ -223,6 +231,19 @@ export default function MarketScanner() {
                       </div>
                     </motion.div>
                   ))}
+                  {!showAll && results.length > DISPLAY_LIMIT && (
+                    <div className="flex flex-col items-center gap-2 pt-2">
+                      <span className="text-[8px] font-mono text-muted-foreground/30 uppercase tracking-widest">
+                        Showing {DISPLAY_LIMIT} of {results.length} signals
+                      </span>
+                      <button
+                        onClick={() => setShowAll(true)}
+                        className="px-6 py-2 border border-primary/20 text-[9px] font-black uppercase tracking-widest text-primary hover:bg-primary/10 transition-all"
+                      >
+                        LOAD_ALL_{results.length - DISPLAY_LIMIT}_MORE
+                      </button>
+                    </div>
+                  )}
                </div>
             ) : (
                <div className="py-20 flex flex-col items-center justify-center border border-border/20 bg-card/2 border-dashed">

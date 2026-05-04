@@ -45,6 +45,7 @@ class SwingStrategy(BaseStrategy):
         # ====================== USER INPUT END ======================
 
         super().__init__(name, symbols, order_manager, portfolio_manager)
+        self.strategy_type = "swing"
         self.price_history: Dict[str, List[float]] = {symbol: [] for symbol in self.symbols}
         self.positions: Dict[str, int] = {symbol: 0 for symbol in self.symbols}
 

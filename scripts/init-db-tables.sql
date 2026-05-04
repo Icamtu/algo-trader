@@ -20,7 +20,7 @@ ALTER TABLE broker_configs ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Users can only see their own configs
 DROP POLICY IF EXISTS "Users can only see their own configs" ON broker_configs;
-CREATE POLICY "Users can only see their own configs" ON broker_configs 
+CREATE POLICY "Users can only see their own configs" ON broker_configs
 FOR ALL USING (auth.uid() = user_id);
 
 -- 2. Backtest Results
@@ -41,7 +41,7 @@ ALTER TABLE backtest_results ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Users can only see their own results
 DROP POLICY IF EXISTS "Users can only see their own results" ON backtest_results;
-CREATE POLICY "Users can only see their own results" ON backtest_results 
+CREATE POLICY "Users can only see their own results" ON backtest_results
 FOR ALL USING (auth.uid() = user_id);
 
 -- 3. Live Positions
@@ -63,7 +63,7 @@ ALTER TABLE positions ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Users can only see their own positions
 DROP POLICY IF EXISTS "Users can only see their own positions" ON positions;
-CREATE POLICY "Users can only see their own positions" ON positions 
+CREATE POLICY "Users can only see their own positions" ON positions
 FOR ALL USING (auth.uid() = user_id);
 
 -- 4. Alerts
@@ -85,7 +85,7 @@ ALTER TABLE alerts ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Users can only see their own alerts
 DROP POLICY IF EXISTS "Users can only see their own alerts" ON alerts;
-CREATE POLICY "Users can only see their own alerts" ON alerts 
+CREATE POLICY "Users can only see their own alerts" ON alerts
 FOR ALL USING (auth.uid() = user_id);
 
 -- 5. Trade Journal
@@ -111,7 +111,7 @@ ALTER TABLE trades ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Users can only see their own trades
 DROP POLICY IF EXISTS "Users can only see their own trades" ON trades;
-CREATE POLICY "Users can only see their own trades" ON trades 
+CREATE POLICY "Users can only see their own trades" ON trades
 FOR ALL USING (auth.uid() = user_id);
 
 -- Grant permissions

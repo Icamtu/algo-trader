@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { History, RotateCcw, Clock, Info } from "lucide-react";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { cn } from "@/lib/utils";
 
 interface StrategyHistoryProps {
@@ -52,12 +52,12 @@ export function StrategyHistory({ filename, onRestore, accentColorClass }: Strat
         </div>
         <button onClick={fetchVersions} className="text-muted-foreground/40 hover:text-primary"><RotateCcw className={cn("w-3 h-3", loading && "animate-spin")} /></button>
       </div>
-      
+
       <div className="flex-1 overflow-y-auto min-h-0 custom-scrollbar p-2 space-y-2">
         {loading && <div className="text-[9px] font-mono text-muted-foreground/50 text-center py-4">LOADING_HISTORY...</div>}
         {!loading && error && <div className="text-[9px] font-mono text-destructive/80 text-center py-4">{error}</div>}
         {!loading && versions.length === 0 && <div className="text-[9px] font-mono text-muted-foreground/30 text-center py-4 uppercase">No Backups Found</div>}
-        
+
         {!loading && versions.map((v, i) => (
           <div key={v.timestamp} className="p-2 border border-border/20 bg-background/40 hover:bg-white/5 transition-all group flex flex-col gap-2">
             <div className="flex items-center justify-between">
@@ -69,7 +69,7 @@ export function StrategyHistory({ filename, onRestore, accentColorClass }: Strat
             </div>
             <div className="flex items-center justify-between mt-1">
               <span className="text-[7px] font-mono font-bold text-muted-foreground/40">{v.content.length} BYTES</span>
-              <button 
+              <button
                 onClick={() => onRestore(v.content)}
                 className="px-2 py-0.5 text-[7px] font-mono font-black uppercase bg-primary/10 text-primary border border-primary/20 hover:bg-primary hover:text-black transition-colors"
                 title="Restore this version"

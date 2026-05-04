@@ -10,9 +10,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileCode, Plus, Search, Loader2, Play } from 'lucide-react';
+import { FileCode, Search, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { CONFIG } from '@/lib/config';
+import { algoApi } from '@/features/aetherdesk/api/client';
 
 interface StrategySelectionDialogProps {
   onSelect: (strategyName: string) => void;
@@ -28,13 +28,7 @@ export function StrategySelectionDialog({ onSelect, currentStrategy }: StrategyS
   const fetchStrategies = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${CONFIG.API_BASE_URL}/api/v1/strategies`, {
-        headers: {
-          "Authorization": `Bearer ${localStorage.getItem("aether_token") || "test-token"}`
-        }
-      });
-      if (!response.ok) throw new Error("Failed to fetch strategies");
-      const data = await response.json();
+      const data = await algoApi.getStrategies();
       setStrategies(data.strategies || []);
     } catch (e) {
       toast.error("Could not load strategies");

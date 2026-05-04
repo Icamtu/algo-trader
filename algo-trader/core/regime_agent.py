@@ -73,8 +73,8 @@ class RegimeAgent:
                 "source": "sql_native_quant"
             }
 
-        except Exception as e:
-            logger.error(f"Regime Agent SQL Error: {e}")
+        except Exception:
+            logger.error("Regime Agent SQL Error", exc_info=True)
             return self._get_ephemeral_quant_fallback(candles)
 
     def _get_ephemeral_quant_fallback(self, candles: List[Dict[str, Any]]) -> Dict[str, Any]:

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FileCode, Search, Plus, Trash2, ChevronRight, RefreshCw } from "lucide-react";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAppModeStore } from "@/stores/appModeStore";

@@ -1,0 +1,32 @@
+from fastapi import APIRouter, HTTPException, Query
+from typing import List, Optional, Dict
+import logging
+from services.sentiment_service import sentiment_service
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+@router.get("/news")
+async def get_news_sentiment(
+    query: Optional[str] = Query(None, description="Filter news by keyword (e.g. RELIANCE, NIFTY)")
+):
+    """Fetch latest news and their sentiment scores."""
+    try:
+        results = await sentiment_service.get_latest_news_sentiment(query)
+        return {"status": "success", "count": len(results), "news": results}
+    except Exception:
+        logger.error("News Sentiment Error", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal error")
+
+@router.get("/aggregate")
+async def get_aggregated_sentiment(
+    symbol: str = Query(..., description="Symbol to aggregate sentiment for")
+):
+    """Get a single aggregated sentiment score for a symbol."""
+    try:
+        result = await sentiment_service.get_aggregated_sentiment(symbol)
+        return {"status": "success", "data": result}
+    except Exception:
+        logger.error("Aggregated Sentiment Error", exc_info=True)
+        raise HTTPException(status_code=500, detail="An internal error occurred")

@@ -8,7 +8,6 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from execution.openalgo_client import client as openalgo
 import data.historify_db as hdb
 from data.history_manager import HistoryManager
 
@@ -24,18 +23,23 @@ class HistorifyService:
     def __init__(self):
         self.broadcast_callback = None
         self.history_manager = HistoryManager()
+        self.order_manager = None
         self.start_time = time.time()
 
     def set_broadcast_callback(self, callback):
         """Injects a callback for real-time progress broadcasting."""
         self.broadcast_callback = callback
 
+    def set_order_manager(self, order_manager):
+        """Injects the order manager for native broker access."""
+        self.order_manager = order_manager
+
     def _get_openalgo_db_path(self) -> Optional[str]:
         candidates = [
             os.getenv("OPENALGO_DB_PATH"),
-            "/app/storage/openalgo.db",
-            "/app/db/openalgo.db",
-            "/home/ubuntu/trading-workspace/openalgo/db/openalgo.db",
+            "/app/storage/symbols.db",
+            "/app/db/symbols.db",
+            "/home/ubuntu/trading-workspace/openalgo/db/symbols.db",
         ]
         for path in candidates:
             if path and os.path.exists(path):
@@ -75,17 +79,13 @@ class HistorifyService:
                     "status": "error",
                     "message": f"Symbol {normalized_symbol} is not present in the OpenAlgo master contract for {normalized_exchange}."
                 }
-            except Exception as e:
-                logger.warning(f"Historify symbol validation via master contract failed: {e}")
+            except Exception:
+                logger.warning("Historify symbol validation via master contract failed", exc_info=True)
 
-        quote = openalgo.get_quote(normalized_symbol, normalized_exchange)
-        if quote.get("status") == "success":
-            return {"status": "success", "symbol": normalized_symbol, "exchange": normalized_exchange}
-
-        return {
-            "status": "error",
-            "message": f"Symbol {normalized_symbol} failed validation for {normalized_exchange}. Refresh master contracts and try again."
-        }
+        # Phase 6: OpenAlgo quote validation is decommissioned.
+        # We rely on local contract master or just attempt the fetch.
+        logger.warning(f"Historify: Skipping legacy quote validation for {normalized_symbol}")
+        return {"status": "success", "symbol": normalized_symbol, "exchange": normalized_exchange}
 
     def _normalize_interval(self, interval: str) -> str:
         """Standardizes interval names to OpenAlgo/DuckDB storage format (1m, 5m, 1h, D)."""
@@ -131,10 +131,10 @@ class HistorifyService:
     def reconcile_jobs(self, timeout_minutes: int = 15):
         """Service-level trigger to clean up stale ingestion jobs."""
         try:
-            logger.info(f"Historify Service: Running job reconciliation (timeout={timeout_minutes}m)...")
+            logger.info("Historify Service: Running job reconciliation (timeout=%sm)...", timeout_minutes)
             hdb.cleanup_stale_jobs(timeout_minutes=timeout_minutes)
-        except Exception as e:
-            logger.error(f"Historify Service: Job reconciliation failed: {e}")
+        except Exception:
+            logger.error("Historify Service: Job reconciliation failed", exc_info=True)
 
     def trigger_download(
         self,
@@ -163,7 +163,7 @@ class HistorifyService:
         prefix = symbols[0].split(":")[-1].replace(" ", "_").upper() if symbols else "BULK"
         job_id = f"JOB_{prefix}_{normalized_interval.upper()}_{str(uuid.uuid4())[:4].upper()}"
 
-        logger.info(f"Triggering Historify download for {len(symbols)} symbols ({normalized_from} to {normalized_to}) interval={normalized_interval} incremental={is_incremental} JobID={job_id}")
+        logger.info("Triggering Historify download for %s symbols (%s to %s) interval=%s incremental=%s JobID=%s", len(symbols), normalized_from, normalized_to, normalized_interval, is_incremental, job_id)
 
         # Create job record
         hdb.upsert_job(job_id, "RUNNING", total_symbols=len(symbols), completed_symbols=0, operator=operator, interval=normalized_interval, start_date=normalized_from, end_date=normalized_to)
@@ -197,7 +197,7 @@ class HistorifyService:
             total = len(symbols)
             completed = 0
 
-            logger.info(f"Starting background ingestion task {job_id} for {total} symbols (incremental={is_incremental}) by {operator}...")
+            logger.info("Starting background ingestion task %s for %s symbols (incremental=%s) by %s...", job_id, total, is_incremental, operator)
 
             # Initial job record creation
             hdb.upsert_job(job_id, "RUNNING", total_symbols=total, completed_symbols=0, operator=operator, interval=interval, start_date=from_date, end_date=to_date)
@@ -217,7 +217,7 @@ class HistorifyService:
                     if last_ts:
                         from datetime import datetime as dt
                         effective_from = dt.fromtimestamp(last_ts).strftime("%Y-%m-%d")
-                        logger.info(f"Incremental: {current_symbol} resuming from {effective_from}")
+                        logger.info("Incremental: %s resuming from %s", current_symbol, effective_from)
 
                 try:
                     # Map standardized interval (e.g. '1m') to API expected format (e.g. '1')
@@ -227,37 +227,53 @@ class HistorifyService:
                     api_start = self._normalize_date(effective_from)
                     api_end = self._normalize_date(to_date)
 
-                    logger.info(f"Historify Request: {current_symbol} | {api_interval} | {api_start} -> {api_end}")
+                    logger.info("Historify Request: %s | %s | %s -> %s", current_symbol, api_interval, api_start, api_end)
 
-                    # Fetch from OpenAlgo standard history API
-                    res = openalgo.get_history(
-                        symbol=current_symbol,
-                        exchange=current_exchange,
-                        interval=api_interval,
-                        start_date=api_start,
-                        end_date=api_end
-                    )
-
+                    # Phase 6: AetherBridge Native First, then yfinance fallback.
                     data_list = []
-                    if res.get("status") == "success" and "data" in res:
-                        data_list = res["data"]
-                        logger.info(f"Historify Data Received: {current_symbol} | Records: {len(data_list)}")
-                    else:
-                        logger.warning(f"Historify OpenAlgo Failure: {current_symbol} | Status: {res.get('status')} | Message: {res.get('message')}")
+                    provider = "NONE"
 
-                        # Fallback to yfinance if Daily or OpenAlgo failed
-                        if interval.lower() in ['d', 'daily', '1d'] or res.get("status") != "success":
-                            logger.info(f"Historify Fallback Triggered (yfinance) for {current_symbol}")
-                            data_list = self.history_manager._fetch_from_yfinance(
-                                current_symbol,
+                    # 1. Native Broker (Shoonya)
+                    if self.order_manager and self.order_manager.native_broker:
+                        try:
+                            logger.info("Historify Triggered (Native: %s) for %s", self.order_manager.native_broker.broker_id, current_symbol)
+                            # Need to handle async call from thread
+                            from datetime import datetime as dt_class
+                            start_dt = dt_class.strptime(api_start, "%Y-%m-%d")
+                            end_dt = dt_class.strptime(api_end, "%Y-%m-%d")
+
+                            # Bridging async to sync in thread
+                            import asyncio
+                            native_candles = asyncio.run(self.order_manager.native_broker.get_historical_candles(
+                                symbol=current_symbol,
+                                exchange=current_exchange,
                                 interval=interval,
-                                start=api_start,
-                                end=api_end
-                            )
-                            if data_list:
-                                logger.info(f"Historify Fallback SUCCESS: {current_symbol} | Records: {len(data_list)}")
-                            else:
-                                logger.error(f"Historify Fallback FAILED for {current_symbol}")
+                                start_time=start_dt,
+                                end_time=end_dt
+                            ))
+
+                            if native_candles:
+                                data_list = native_candles
+                                provider = f"Native:{self.order_manager.native_broker.broker_id}"
+                                logger.info("Historify Native SUCCESS: %s | Records: %s", current_symbol, len(data_list))
+                        except Exception:
+                            logger.error("Historify Native FAILED for %s", current_symbol, exc_info=True)
+
+                    # 2. yfinance Fallback
+                    if not data_list:
+                        logger.info("Historify Triggered (yfinance) for %s", current_symbol)
+                        data_list = self.history_manager._fetch_from_yfinance(
+                            current_symbol,
+                            interval=interval,
+                            start=api_start,
+                            end=api_end
+                        )
+                        if data_list:
+                            logger.info("Historify Fallback SUCCESS: %s | Records: %s", current_symbol, len(data_list))
+                            provider = "YahooFinance"
+                        else:
+                            logger.error("Historify Fallback FAILED for %s", current_symbol)
+                            provider = "FAILED"
 
                     if data_list:
                         # Convert to DataFrame
@@ -273,13 +289,12 @@ class HistorifyService:
                         # Save to DuckDB
                         inserted = hdb.upsert_market_data(df, current_symbol, current_exchange, interval)
                         if inserted > 0:
-                            logger.info(f"Historify Upsert Complete: {current_symbol} | Rows: {inserted}")
+                            logger.info("Historify Upsert Complete: %s | Rows: %s", current_symbol, inserted)
                         else:
-                            logger.error(f"Historify Upsert Failed: {current_symbol} | No rows persisted")
+                            logger.error("Historify Upsert Failed: %s | No rows persisted", current_symbol)
                     else:
-                        logger.warning(f"Historify: No data available for {current_symbol} after all providers attempted.")
+                        logger.warning("Historify: No data available for %s after all providers attempted.", current_symbol)
 
-                    provider = "OpenAlgo" if res.get("status") == "success" else "YahooFinance"
                     completed += 1
                     # Update progress in DB
                     hdb.upsert_job(job_id, "RUNNING", total_symbols=total, completed_symbols=completed, last_symbol=current_symbol, last_provider=provider, operator=operator, interval=interval, start_date=from_date, end_date=to_date)
@@ -306,12 +321,12 @@ class HistorifyService:
                         else:
                             self.broadcast_callback("historify_progress", progress_data)
 
-                except Exception as e:
-                    logger.error(f"Error ingesting {symbol} in job {job_id}: {e}")
+                except Exception:
+                    logger.error("Error ingesting %s in job %s", symbol, job_id, exc_info=True)
                     # Continue with next symbol
                     completed += 1
 
-            logger.info(f"Ingestion {job_id} task finished. {completed}/{total} symbols processed.")
+            logger.info("Ingestion %s task finished. %s/%s symbols processed.", job_id, completed, total)
             hdb.upsert_job(job_id, "COMPLETED", total_symbols=total, completed_symbols=completed, interval=interval, start_date=from_date, end_date=to_date)
 
             # Final event — broadcast BOTH event names for frontend compatibility
@@ -324,13 +339,13 @@ class HistorifyService:
                     self.broadcast_callback("historify_completed", final_data)
                     self.broadcast_callback("historify_job_complete", final_data)
 
-        except Exception as e:
-            logger.error(f"Critical Ingestion Error {job_id}: {e}", exc_info=True)
-            hdb.upsert_job(job_id, "FAILED", total_symbols=len(symbols), completed_symbols=0, error_message=str(e), interval=interval, start_date=from_date, end_date=to_date)
+        except Exception:
+            logger.error("Critical Ingestion Error %s", job_id, exc_info=True)
+            hdb.upsert_job(job_id, "FAILED", total_symbols=len(symbols), completed_symbols=0, error_message="Internal service error", interval=interval, start_date=from_date, end_date=to_date)
 
             # Broadcast failure event
             if self.broadcast_callback:
-                fail_data = {"job_id": job_id, "status": "FAILED", "error": str(e)}
+                fail_data = {"job_id": job_id, "status": "FAILED", "error": "Internal service error"}
                 if asyncio.iscoroutinefunction(self.broadcast_callback) and loop and loop.is_running():
                     asyncio.run_coroutine_threadsafe(self.broadcast_callback("historify_job_failed", fail_data), loop)
                 elif not asyncio.iscoroutinefunction(self.broadcast_callback):
@@ -357,7 +372,7 @@ class HistorifyService:
         # 1. Trigger download
         res = self.trigger_download(symbol, exchange, interval, from_date, to_date)
         if res.get("status") == "error":
-            logger.error(f"Failed to trigger Historify download: {res.get('message')}")
+            logger.error("Failed to trigger Historify download: %s", res.get('message'))
             return False
 
         job_id = res.get("job_id")
@@ -376,12 +391,12 @@ class HistorifyService:
             if status == "COMPLETED":
                 return True
             elif status in ["FAILED", "ERROR"]:
-                logger.error(f"Historify job {job_id} failed: {job.get('error_message')}")
+                logger.error("Historify job %s failed: %s", job_id, job.get('error_message'))
                 return False
 
             time.sleep(2)
 
-        logger.error(f"Historify job {job_id} timed out after {timeout_seconds}s.")
+        logger.error("Historify job %s timed out after %ss.", job_id, timeout_seconds)
         return False
 
     def get_watchlist(self) -> List[Dict[str, Any]]:
@@ -415,7 +430,7 @@ class HistorifyService:
             hdb.add_to_watchlist(normalized_symbol, normalized_exchange)
             return {"status": "success", "message": f"Symbol {normalized_symbol} added to watchlist."}
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal service error"}
 
     def bulk_add_to_watchlist(self, symbols: List[str], exchange: str = "NSE") -> Dict[str, Any]:
         """Add multiple symbols to local DuckDB watchlist."""
@@ -441,7 +456,7 @@ class HistorifyService:
             hdb.remove_from_watchlist(symbol, exchange)
             return {"status": "success", "message": f"Symbol {symbol} removed from watchlist."}
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal service error"}
 
     def bulk_remove_from_watchlist(self, symbols: List[str], exchange: str = None) -> Dict[str, Any]:
         """Remove multiple symbols from local DuckDB watchlist."""
@@ -468,9 +483,9 @@ class HistorifyService:
             normalized_interval = self._normalize_interval(interval)
             hdb.delete_catalog_entry(symbol, exchange, normalized_interval)
             return {"status": "success", "message": f"Historical data for {symbol} ({interval}) deleted."}
-        except Exception as e:
-            logger.error(f"Failed to delete catalog entry: {e}")
-            return {"status": "error", "message": str(e)}
+        except Exception:
+            logger.error("Failed to delete catalog entry", exc_info=True)
+            return {"status": "error", "message": "Internal service error"}
 
     def seed_and_ingest(self, intervals: List[str] = ["5m", "D"]) -> Dict[str, Any]:
         """Seeds the watchlist and triggers an immediate ingestion for seeded symbols."""
@@ -507,9 +522,9 @@ class HistorifyService:
                 "message": f"Seeding complete. {len(intervals)} ingestion jobs triggered for {len(symbols)} symbols.",
                 "jobs": [r.get("job_id") for r in results]
             }
-        except Exception as e:
-            logger.error(f"Historify: Seed and ingest failed: {e}")
-            return {"status": "error", "message": str(e)}
+        except Exception:
+            logger.error("Historify: Seed and ingest failed", exc_info=True)
+            return {"status": "error", "message": "Internal service error"}
 
     def get_stats(self) -> Dict[str, Any]:
         """Fetch database statistics with enhanced service metadata."""
@@ -527,7 +542,7 @@ class HistorifyService:
             hdb.enforce_retention_policy(max_days=days)
             return {"status": "success", "message": f"Data older than {days} days purged."}
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": "Internal service error"}
 
     def get_records(
         self,
@@ -591,7 +606,7 @@ class HistorifyService:
             logger.info("Historify: No symbols provided or found in watchlist. Skipping scheduled ingestion.")
             return
 
-        logger.info(f"Historify: Starting scheduled ingestion for {len(watchlist)} symbols across {intervals} intervals.")
+        logger.info("Historify: Starting scheduled ingestion for %s symbols across %s intervals.", len(watchlist), intervals)
 
         for item in watchlist:
             symbol = item.get("symbol")
@@ -620,8 +635,8 @@ class HistorifyService:
                         from_date=from_date,
                         to_date=to_date
                     )
-                except Exception as e:
-                    logger.error(f"Historify: Failed to schedule ingestion for {symbol} ({interval}): {e}")
+                except Exception:
+                    logger.error("Historify: Failed to schedule ingestion for %s (%s)", symbol, interval, exc_info=True)
 
 
 # Singleton

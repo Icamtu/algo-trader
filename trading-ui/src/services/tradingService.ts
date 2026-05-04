@@ -1,108 +1,123 @@
-import { openAlgoAdapter } from '@/integrations/openalgo/adapter';
+import { aetherAdapter } from '@/integrations/aetherdesk/adapter';
 
 export const tradingService = {
   // Methods to be used by the UI components
-  getOrders: (apiKey: string) => openAlgoAdapter.getOrderBook(apiKey),
-  getTrades: (apiKey: string) => openAlgoAdapter.getTradeBook(apiKey),
-  getPositions: (apiKey: string) => openAlgoAdapter.getPositionBook(apiKey),
-  getHoldings: (apiKey: string) => openAlgoAdapter.getHoldings(apiKey),
-  getSystemLogs: (page: number = 1, searchQuery: string = "") => openAlgoAdapter.getSystemLogs(page, searchQuery),
+  getOrders: (apiKey: string) => aetherAdapter.getOrderBook(apiKey),
+  getTrades: (apiKey: string) => aetherAdapter.getTradeBook(apiKey),
+  getPositions: (apiKey: string) => aetherAdapter.getPositionBook(apiKey),
+  getHoldings: (apiKey: string) => aetherAdapter.getHoldings(apiKey),
+  getSystemLogs: (page: number = 1, searchQuery: string = "") => aetherAdapter.getSystemLogs(page, searchQuery),
 
   // Configuration
-  getApiKey: () => openAlgoAdapter.getApiKey(),
-  regenerateApiKey: () => openAlgoAdapter.regenerateApiKey(),
-  setOrderMode: (mode: 'auto' | 'semi_auto') => openAlgoAdapter.setOrderMode(mode),
-  getBrokerConfig: () => openAlgoAdapter.getBrokerConfig(),
+  getApiKey: () => aetherAdapter.getApiKey(),
+  regenerateApiKey: () => aetherAdapter.regenerateApiKey(),
+  setOrderMode: (mode: 'auto' | 'semi_auto') => aetherAdapter.setOrderMode(mode),
+  getBrokerConfig: () => aetherAdapter.getBrokerConfig(),
+  getWebSocketApiKey: () => aetherAdapter.getWebSocketApiKey(),
 
   // Master Contract
-  getMasterContractStatus: () => openAlgoAdapter.getMasterContractStatus(),
-  downloadMasterContract: (force?: boolean) => openAlgoAdapter.downloadMasterContract(force),
-  getCacheHealth: () => openAlgoAdapter.getCacheHealth(),
-  reloadCache: () => openAlgoAdapter.reloadCache(),
+  getMasterContractStatus: () => aetherAdapter.getMasterContractStatus(),
+  downloadMasterContract: (force?: boolean) => aetherAdapter.downloadMasterContract(force),
+  getCacheHealth: () => aetherAdapter.getCacheHealth(),
+  reloadCache: () => aetherAdapter.reloadCache(),
 
   // Sandbox
-  getSandboxConfigs: () => openAlgoAdapter.getSandboxConfigs(),
-  updateSandboxConfig: (key: string, value: any) => openAlgoAdapter.updateSandboxConfig(key, value),
-  resetSandbox: () => openAlgoAdapter.resetSandbox(),
-  getSandboxPnLData: () => openAlgoAdapter.getSandboxPnLData(),
+  getSandboxConfigs: () => aetherAdapter.getSandboxConfigs(),
+  updateSandboxConfig: (key: string, value: any) => aetherAdapter.updateSandboxConfig(key, value),
+  resetSandbox: () => aetherAdapter.resetSandbox(),
+  getSandboxPnLData: () => aetherAdapter.getSandboxPnLData(),
 
   // Analyzer
-  getAnalyzerData: (start?: string, end?: string) => openAlgoAdapter.getAnalyzerData(start, end),
+  getAnalyzerData: (start?: string, end?: string) => aetherAdapter.getAnalyzerData(start, end),
 
   // Action Center
-  getActionCenterData: (status?: string) => openAlgoAdapter.getActionCenterData(status),
-  approveActionCenterOrder: (id: number) => openAlgoAdapter.approveActionCenterOrder(id),
-  rejectActionCenterOrder: (id: number, reason?: string) => openAlgoAdapter.rejectActionCenterOrder(id, reason),
-  deleteActionCenterOrder: (id: number) => openAlgoAdapter.deleteActionCenterOrder(id),
-  retryActionCenterOrder: (id: number) => openAlgoAdapter.retryActionCenterOrder(id),
-  approveAllActionCenterOrders: () => openAlgoAdapter.approveAllActionCenterOrders(),
-  approveSelectedActionCenterOrders: (ids: number[]) => openAlgoAdapter.approveSelectedActionCenterOrders(ids),
-  rejectSelectedActionCenterOrders: (ids: number[], reason?: string) => openAlgoAdapter.rejectSelectedActionCenterOrders(ids, reason),
+  getActionCenterData: (status?: string) => aetherAdapter.getActionCenterData(status),
+  approveActionCenterOrder: (id: string | number) => aetherAdapter.approveActionCenterOrder(id),
+  rejectActionCenterOrder: (id: string | number, reason?: string) => aetherAdapter.rejectActionCenterOrder(id, reason),
+  deleteActionCenterOrder: (id: string | number) => aetherAdapter.deleteActionCenterOrder(id),
+  retryActionCenterOrder: (id: string | number) => aetherAdapter.retryActionCenterOrder(id),
+  approveAllActionCenterOrders: () => aetherAdapter.approveAllActionCenterOrders(),
+  approveSelectedActionCenterOrders: (ids: (string | number)[]) => aetherAdapter.approveSelectedActionCenterOrders(ids),
+  rejectSelectedActionCenterOrders: (ids: (string | number)[], reason?: string) => aetherAdapter.rejectSelectedActionCenterOrders(ids, reason),
+  cancelAllActionOrders: () => aetherAdapter.cancelAllActionOrders(),
+  getActionCenterOrders: (pendingOnly: boolean = true) => aetherAdapter.getActionCenterData(pendingOnly ? 'pending' : 'all'),
+
+  // Strategy Management
+  getAllStrategiesStatus: () => aetherAdapter.getAllStrategiesStatus(),
+  haltStrategy: (strategy: string) => aetherAdapter.haltStrategy(strategy),
+  unhaltStrategy: (strategy: string) => aetherAdapter.unhaltStrategy(strategy),
+  initializeStrategy: (strategy: string) => aetherAdapter.initializeStrategy(strategy),
+  liquidateStrategy: (strategy: string) => aetherAdapter.liquidateStrategy(strategy),
+  getStrategySafeguards: (strategy_id: string) => aetherAdapter.getStrategySafeguards(strategy_id),
+  updateStrategySafeguards: (strategy_id: string, safeguards: any) => aetherAdapter.updateStrategySafeguards(strategy_id, safeguards),
 
   // OI Profile & Search
-  getOIProfileData: (params: any) => openAlgoAdapter.getOIProfileData(params),
-  getOIIntervals: () => openAlgoAdapter.getOIIntervals(),
-  getUnderlyings: (exchange: string) => openAlgoAdapter.getUnderlyings(exchange),
-  getExpiries: (exchange: string, underlying: string) => openAlgoAdapter.getExpiries(exchange, underlying),
+  getOIProfileData: (params: any) => aetherAdapter.getOIProfileData(params),
+  getOIIntervals: () => aetherAdapter.getOIIntervals(),
+  getUnderlyings: (exchange: string) => aetherAdapter.getUnderlyings(exchange),
+  getExpiries: (exchange: string, underlying: string) => aetherAdapter.getExpiries(exchange, underlying),
 
   // GEX
-  getGEXData: (params: any) => openAlgoAdapter.getGEXData(params),
+  getGEXData: (params: any) => aetherAdapter.getGEXData(params),
 
   // Health
-  getCurrentHealthMetrics: () => openAlgoAdapter.getCurrentHealthMetrics(),
-  getHealthMetricsHistory: (hours?: number) => openAlgoAdapter.getHealthMetricsHistory(hours),
-  getHealthStats: (hours?: number) => openAlgoAdapter.getHealthStats(hours),
-  getHealthAlerts: () => openAlgoAdapter.getHealthAlerts(),
-  acknowledgeHealthAlert: (alertId: number) => openAlgoAdapter.acknowledgeHealthAlert(alertId),
+  getCurrentHealthMetrics: () => aetherAdapter.getCurrentHealthMetrics(),
+  getHealthMetricsHistory: (hours?: number) => aetherAdapter.getHealthMetricsHistory(hours),
+  getHealthStats: (hours?: number) => aetherAdapter.getHealthStats(hours),
+  getHealthAlerts: () => aetherAdapter.getHealthAlerts(),
+  acknowledgeHealthAlert: (alertId: number) => aetherAdapter.acknowledgeHealthAlert(alertId),
 
   // Playground
-  getPlaygroundEndpoints: () => openAlgoAdapter.getPlaygroundEndpoints(),
-  getPlaygroundApiKey: () => openAlgoAdapter.getPlaygroundApiKey(),
+  getPlaygroundEndpoints: () => aetherAdapter.getPlaygroundEndpoints(),
+  getPlaygroundApiKey: () => aetherAdapter.getPlaygroundApiKey(),
 
-  placeOrder: (payload: any) => openAlgoAdapter.placeOrder(payload),
-  cancelOrder: (orderId: string) => openAlgoAdapter.cancelOrder(orderId),
+  placeOrder: (payload: any) => aetherAdapter.placeOrder(payload),
+  cancelOrder: (orderId: string) => aetherAdapter.cancelOrder(orderId),
   closePosition: (symbol: string, exchange: string, product: string) =>
-    openAlgoAdapter.closePosition(symbol, exchange, product),
+    aetherAdapter.closePosition(symbol, exchange, product),
 
   getMarketQuotes: (apiKey: string, symbol: string, exchange: string) =>
-    openAlgoAdapter.getQuotes(apiKey, symbol, exchange),
+    aetherAdapter.getQuotes(apiKey, symbol, exchange),
 
   getMultiQuotes: (apiKey: string, symbols: Array<{ symbol: string; exchange: string }>) =>
-    openAlgoAdapter.getMultiQuotes(apiKey, symbols),
+    aetherAdapter.getMultiQuotes(apiKey, symbols),
 
   // OI Tracker
-  getOIData: (params: any) => openAlgoAdapter.getOIData(params),
+  getOIData: (params: any) => aetherAdapter.getOIData(params),
 
   // Volatility
-  getVolSurfaceData: (params: any) => openAlgoAdapter.getVolSurfaceData(params),
-  getIVSmileData: (params: any) => openAlgoAdapter.getIVSmileData(params),
-  getIVChartData: (params: any) => openAlgoAdapter.getIVChartData(params),
+  getVolSurfaceData: (params: any) => aetherAdapter.getVolSurfaceData(params),
+  getIVSmileData: (params: any) => aetherAdapter.getIVSmileData(params),
+  getIVChartData: (params: any) => aetherAdapter.getIVChartData(params),
 
   // Historify
-  getHistorifyWatchlist: () => openAlgoAdapter.getHistorifyWatchlist(),
-  getHistorifyCatalog: (interval?: string) => openAlgoAdapter.getHistorifyCatalog(interval),
+  getHistorifyWatchlist: () => aetherAdapter.getHistorifyWatchlist(),
+  getHistorifyCatalog: (interval?: string) => aetherAdapter.getHistorifyCatalog(interval),
   deleteCatalogEntry: (symbol: string, exchange?: string, interval?: string) =>
-    openAlgoAdapter.deleteCatalogEntry(symbol, exchange, interval),
-  getHistorifyJobs: (limit?: number) => openAlgoAdapter.getHistorifyJobs(limit),
-  getHistorifySchedules: () => openAlgoAdapter.getHistorifySchedules(),
+    aetherAdapter.deleteCatalogEntry(symbol, exchange, interval),
+  getHistorifyJobs: (limit?: number) => aetherAdapter.getHistorifyJobs(limit),
+  getHistorifySchedules: () => aetherAdapter.getHistorifySchedules(),
   updateHistorifyWatchlist: (action: 'add' | 'remove', exchange: string, symbol?: string, symbols?: string[]) =>
-    openAlgoAdapter.updateHistorifyWatchlist(action, exchange, symbol, symbols),
+    aetherAdapter.updateHistorifyWatchlist(action, exchange, symbol, symbols),
   getHistorifyRecords: (symbol: string, exchange?: string, interval?: string, limit?: number) =>
-    openAlgoAdapter.getHistorifyRecords(symbol, exchange, interval, limit),
+    aetherAdapter.getHistorifyRecords(symbol, exchange, interval, limit),
   getHistorifyBreadth: (interval?: string) =>
-    openAlgoAdapter.getHistorifyBreadth(interval),
+    aetherAdapter.getHistorifyBreadth(interval),
   runHistorify: (payload: { symbol?: string; symbols?: string[]; exchange: string; from_date: string; to_date: string; interval: string; is_incremental?: boolean; operator?: string }) =>
-    openAlgoAdapter.runHistorify(payload),
+    aetherAdapter.runHistorify(payload),
   cancelHistorifyJob: (jobId: string) =>
-    openAlgoAdapter.cancelHistorifyJob(jobId),
+    aetherAdapter.cancelHistorifyJob(jobId),
   exportHistorifyData: (symbol: string, exchange?: string, interval?: string, limit?: number) =>
-    openAlgoAdapter.exportHistorifyData(symbol, exchange, interval, limit),
-  seedHistorify: () => openAlgoAdapter.seedHistorify(),
-  getHistorifyStats: () => openAlgoAdapter.getHistorifyStats(),
-  compactHistorify: () => openAlgoAdapter.compactHistorify(),
-  purgeHistorify: (days?: number) => openAlgoAdapter.purgeHistorify(days),
+    aetherAdapter.exportHistorifyData(symbol, exchange, interval, limit),
+  seedHistorify: () => aetherAdapter.seedHistorify(),
+  getHistorifyStats: () => aetherAdapter.getHistorifyStats(),
+  compactHistorify: () => aetherAdapter.compactHistorify(),
+  purgeHistorify: (days?: number) => aetherAdapter.purgeHistorify(days),
 
   // Strategy Labs
-  getMaxPainData: (params: any) => openAlgoAdapter.getMaxPainData(params),
-  getStraddleChartData: (params: any) => openAlgoAdapter.getStraddleChartData(params),
+  getMaxPainData: (params: any) => aetherAdapter.getMaxPainData(params),
+  getStraddleChartData: (params: any) => aetherAdapter.getStraddleChartData(params),
+  getTelemetry: () => aetherAdapter.getTelemetry(),
+  getTelemetryPnL: () => aetherAdapter.getTelemetryPnL(),
+  getTelemetryPerformance: () => aetherAdapter.getTelemetryPerformance(),
 };

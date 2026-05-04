@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { CONFIG } from "@/lib/config";
+import { algoApi } from '@/features/aetherdesk/api/client';
 import { useAppModeStore } from '@/stores/appModeStore';
 
 interface TelemetryData {
@@ -44,13 +44,7 @@ export const RiskShieldAudit = () => {
 
   const fetchTelemetry = async () => {
     try {
-      const response = await fetch(`${CONFIG.API_BASE_URL}/api/v1/telemetry`, {
-        headers: {
-          'Authorization': `Bearer ${CONFIG.API_KEY}`,
-          'apikey': CONFIG.API_KEY
-        }
-      });
-      const data = await response.json();
+      const data = await algoApi.getTelemetry();
       setTelemetry(data);
     } catch (error) {
       console.error("Failed to fetch telemetry", error);
@@ -69,22 +63,12 @@ export const RiskShieldAudit = () => {
     setProcessing(true);
     try {
       const newState = !telemetry?.audit.auto_execute;
-      const response = await fetch(`${CONFIG.API_BASE_URL}/api/v1/action/audit/auto`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${CONFIG.API_KEY}`,
-          'apikey': CONFIG.API_KEY
-        },
-        body: JSON.stringify({ enabled: newState })
-      });
+      await algoApi.toggleAutoExecute(newState);
 
-      if (response.ok) {
-        toast.success(newState ? "AUTOPILOT ARMED" : "MANUAL OVERSIGHT ENGAGED", {
-          description: newState ? "Strategies will execute without manual confirmation." : "Manual approval required for all signals."
-        });
-        fetchTelemetry();
-      }
+      toast.success(newState ? "AUTOPILOT ARMED" : "MANUAL OVERSIGHT ENGAGED", {
+        description: newState ? "Strategies will execute without manual confirmation." : "Manual approval required for all signals."
+      });
+      fetchTelemetry();
     } catch (error) {
       toast.error("COMMUNICATION ERROR", { description: "Failed to update audit state." });
     } finally {
@@ -96,22 +80,12 @@ export const RiskShieldAudit = () => {
     setProcessing(true);
     try {
       const newState = !telemetry?.audit.risk_lock;
-      const response = await fetch(`${CONFIG.API_BASE_URL}/api/v1/action/audit/lock`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${CONFIG.API_KEY}`,
-          'apikey': CONFIG.API_KEY
-        },
-        body: JSON.stringify({ locked: newState })
-      });
+      await algoApi.toggleRiskLock(newState);
 
-      if (response.ok) {
-        toast.warning(newState ? "CORE RISK LOCK ENGAGED" : "CORE RISK LOCK RELEASED", {
-          description: newState ? "All execution suspended immediately." : "Execution privileges restored."
-        });
-        fetchTelemetry();
-      }
+      toast.warning(newState ? "CORE RISK LOCK ENGAGED" : "CORE RISK LOCK RELEASED", {
+        description: newState ? "All execution suspended immediately." : "Execution privileges restored."
+      });
+      fetchTelemetry();
     } catch (error) {
       toast.error("LOCKDOWN ERROR", { description: "Failed to toggle risk lock." });
     } finally {

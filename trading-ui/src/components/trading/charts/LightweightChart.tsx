@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { createChart, ColorType, ISeriesApi, SeriesType, Time } from 'lightweight-charts';
+import { createChart, ColorType, ISeriesApi, Time, CandlestickSeries, IChartApi } from 'lightweight-charts';
 
 interface CandleData {
   date: string;
@@ -32,14 +32,19 @@ export const LightweightChart: React.FC<LightweightChartProps> = ({
   } = {},
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<any>(null);
+  const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
     const handleResize = () => {
-      chartRef.current.applyOptions({ width: chartContainerRef.current?.clientWidth });
+      if (chartRef.current && chartContainerRef.current) {
+        chartRef.current.applyOptions({
+          width: chartContainerRef.current.clientWidth,
+          height: chartContainerRef.current.clientHeight || 400,
+        });
+      }
     };
 
     const chart = createChart(chartContainerRef.current, {
@@ -64,7 +69,8 @@ export const LightweightChart: React.FC<LightweightChartProps> = ({
       },
     });
 
-    const series = (chart as any).addCandlestickSeries({
+    // Use modern addSeries API (lightweight-charts v5)
+    const series = chart.addSeries(CandlestickSeries, {
       upColor: '#26a69a',
       downColor: '#ef5350',
       borderVisible: false,
@@ -73,11 +79,15 @@ export const LightweightChart: React.FC<LightweightChartProps> = ({
     });
 
     chartRef.current = chart;
-    seriesRef.current = series;
+    seriesRef.current = series as any;
 
+    // Use ResizeObserver for flex layout support
+    const resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(chartContainerRef.current);
     window.addEventListener('resize', handleResize);
 
     return () => {
+      resizeObserver.disconnect();
       window.removeEventListener('resize', handleResize);
       chart.remove();
     };
@@ -85,19 +95,39 @@ export const LightweightChart: React.FC<LightweightChartProps> = ({
 
   useEffect(() => {
     if (seriesRef.current && data.length > 0) {
-      // Format data for lightweight charts
-      const formattedData = data.map(item => ({
-        time: (new Date(item.date).getTime() / 1000) as Time,
-        open: item.open,
-        high: item.high,
-        low: item.low,
-        close: item.close,
-      })).sort((a, b) => (a.time as number) - (b.time as number));
-      
-      seriesRef.current.setData(formattedData);
+      // Format data for lightweight charts — handle multiple timestamp formats
+      const formattedData = data
+        .map(item => {
+          const close = Number(item.close) || 0;
+          if (close === 0) return null;
+          const open = Number(item.open) || close;
+          const high = Number(item.high) || Math.max(open, close);
+          const low = Number(item.low) || Math.min(open, close);
+
+          return {
+            time: (new Date(item.date).getTime() / 1000) as Time,
+            open,
+            high,
+            low,
+            close,
+          };
+        })
+        .filter((d): d is NonNullable<typeof d> => d !== null)
+        .sort((a, b) => (a.time as number) - (b.time as number));
+
+      // Deduplicate by time
+      const seen = new Set<number>();
+      const unique = formattedData.filter(d => {
+        const t = d.time as number;
+        if (seen.has(t)) return false;
+        seen.add(t);
+        return true;
+      });
+
+      seriesRef.current.setData(unique);
       chartRef.current?.timeScale().fitContent();
     }
   }, [data]);
 
-  return <div ref={chartContainerRef} className="w-full h-full" />;
+  return <div ref={chartContainerRef} className="w-full h-full" style={{ minHeight: '300px' }} />;
 };

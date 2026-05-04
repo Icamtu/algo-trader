@@ -1,4 +1,5 @@
 import sqlite3
+import hashlib
 import numpy as np
 import logging
 from datetime import datetime
@@ -41,23 +42,101 @@ class Trade:
     mode: str = "sandbox"
     ai_reasoning: Optional[str] = None
     conviction: Optional[float] = None
+    requested_price: Optional[float] = 0.0
     created_at: Optional[str] = None
+    prev_hash: Optional[str] = None
+    entry_hash: Optional[str] = None
 
     def to_dict(self):
         return asdict(self)
 
 
+class _PooledConnection:
+    """Wrapper to return connections to the pool instead of closing them."""
+    def __init__(self, conn: sqlite3.Connection, pool: asyncio.Queue):
+        self._conn = conn
+        self._pool = pool
+
+    def cursor(self):
+        return self._conn.cursor()
+
+    def commit(self):
+        self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
+
+    def close(self):
+        # Return to the pool
+        try:
+            self._pool.put_nowait(self._conn)
+        except asyncio.QueueFull:
+            self._conn.close()
+
+    def execute(self, *args, **kwargs):
+        return self._conn.execute(*args, **kwargs)
+
+    def __enter__(self):
+        return self._conn.__enter__()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        return self._conn.__exit__(exc_type, exc_val, exc_tb)
+
 class TradeLogger:
     """Manages trade logging and retrieval from SQLite."""
 
-    def __init__(self, db_file: str = DB_FILE):
+    def __init__(self, db_file: str = DB_FILE, pool_size=15):
         self.db_file = db_file
+        # Queue doesn't support async/sync mix natively for blocking gets in sync threads.
+        # We will use queue.Queue since trade_logger often uses run_in_executor
+        import queue
+        self._pool = queue.Queue(maxsize=pool_size)
+        for _ in range(pool_size):
+            conn = sqlite3.connect(self.db_file, check_same_thread=False, timeout=15.0)
+            conn.execute("PRAGMA journal_mode=WAL;")
+            self._pool.put(conn)
         self.init_db()
+
+    def _get_connection(self):
+        # We pop a connection, and wrap it so .close() puts it back
+        import queue
+        try:
+            conn = self._pool.get(timeout=10.0)
+
+            # Simple wrapper since we are in sync threads mostly
+            class SyncPooledConnection:
+                def __init__(self, c, p):
+                    self.c = c
+                    self.p = p
+                def cursor(self): return self.c.cursor()
+                def commit(self): self.c.commit()
+                def rollback(self): self.c.rollback()
+                def execute(self, *a, **k): return self.c.execute(*a, **k)
+
+                @property
+                def row_factory(self):
+                    return self.c.row_factory
+
+                @row_factory.setter
+                def row_factory(self, value):
+                    self.c.row_factory = value
+
+                def close(self):
+                    try:
+                        self.c.row_factory = None # Reset row factory before returning to pool
+                        self.p.put_nowait(self.c)
+                    except queue.Full:
+                        self.c.close()
+            return SyncPooledConnection(conn, self._pool)
+
+        except queue.Empty:
+            logger.warning("SQLite connection pool exhausted, creating ad-hoc connection")
+            return sqlite3.connect(self.db_file, check_same_thread=False, timeout=15.0)
 
     def init_db(self):
         """Initialize database schema."""
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
 
             # Enable WAL mode for high-concurrency support
@@ -79,6 +158,7 @@ class TradeLogger:
                 mode TEXT DEFAULT 'sandbox',
                 ai_reasoning TEXT,
                 conviction REAL,
+                requested_price REAL DEFAULT 0.0,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
             """)
@@ -109,6 +189,8 @@ class TradeLogger:
                 cursor.execute("ALTER TABLE trades ADD COLUMN ai_reasoning TEXT")
             if 'conviction' not in columns:
                 cursor.execute("ALTER TABLE trades ADD COLUMN conviction REAL")
+            if 'requested_price' not in columns:
+                cursor.execute("ALTER TABLE trades ADD COLUMN requested_price REAL DEFAULT 0.0")
 
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_symbol_timestamp ON trades(symbol, timestamp DESC)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_strategy ON trades(strategy, timestamp DESC)")
@@ -220,24 +302,60 @@ class TradeLogger:
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
             """)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS autoresearch_tasks (
+                task_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'processing',
+                result_json TEXT,
+                error TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """)
+
+            # Append-only audit chain columns (idempotent — silently skip if already present)
+            for col_sql in [
+                "ALTER TABLE trades ADD COLUMN prev_hash TEXT",
+                "ALTER TABLE trades ADD COLUMN entry_hash TEXT",
+            ]:
+                try:
+                    cursor.execute(col_sql)
+                except sqlite3.OperationalError:
+                    pass
 
             conn.commit()
             conn.close()
             logger.info(f"Trade database initialized at {self.db_file}")
-        except Exception as e:
-            logger.error(f"Error initializing trade database: {e}", exc_info=True)
+        except Exception:
+            logger.error("Error initializing trade database", exc_info=True)
 
-    async def log_trade(self, strategy, symbol, side, quantity, price, status="filled", order_id=None, pnl=None, charges=0.0, mode="sandbox", ai_reasoning=None, conviction=None):
+    @staticmethod
+    def _compute_trade_hash(prev_hash: str, timestamp: str, strategy: str, symbol: str,
+                             side: str, quantity: int, price: float, status: str) -> str:
+        payload = f"{prev_hash}|{timestamp}|{strategy}|{symbol}|{side}|{quantity}|{price}|{status}"
+        return hashlib.sha256(payload.encode()).hexdigest()
+
+    async def log_trade(self, strategy, symbol, side, quantity, price, status="filled", order_id=None, pnl=None, charges=0.0, mode="sandbox", ai_reasoning=None, conviction=None, requested_price=0.0):
         try:
             timestamp = datetime.utcnow().isoformat()
 
             def _sqlite_log():
-                conn = sqlite3.connect(self.db_file)
+                conn = self._get_connection()
                 cursor = conn.cursor()
+
+                # Fetch last entry_hash to build the chain
+                row = cursor.execute(
+                    "SELECT entry_hash FROM trades ORDER BY id DESC LIMIT 1"
+                ).fetchone()
+                prev_hash = (row[0] or "") if row else ""
+                entry_hash = TradeLogger._compute_trade_hash(
+                    prev_hash, timestamp, strategy, symbol, side.upper(), quantity, price, status
+                )
+
                 cursor.execute("""
-                INSERT INTO trades (timestamp, strategy, symbol, side, quantity, price, status, order_id, pnl, charges, mode, ai_reasoning, conviction)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (timestamp, strategy, symbol, side.upper(), quantity, price, status, order_id, pnl, charges, mode, ai_reasoning, conviction))
+                INSERT INTO trades (timestamp, strategy, symbol, side, quantity, price, status, order_id, pnl, charges, mode, ai_reasoning, conviction, requested_price, prev_hash, entry_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (timestamp, strategy, symbol, side.upper(), quantity, price, status, order_id, pnl, charges, mode, ai_reasoning, conviction, requested_price, prev_hash, entry_hash))
                 conn.commit()
                 tid = cursor.lastrowid
                 conn.close()
@@ -261,12 +379,12 @@ class TradeLogger:
                     pnl=pnl or 0.0,
                     mode=mode
                 )
-            except Exception as ts_err:
-                logger.warning(f"Failed to sync trade to TimescaleDB: {ts_err}")
+            except Exception:
+                logger.warning("Failed to sync trade to TimescaleDB", exc_info=True)
 
             return trade_id
-        except Exception as e:
-            logger.error(f"Error logging trade: {e}")
+        except Exception:
+            logger.error("Error logging trade", exc_info=True)
             return None
 
     async def log_drift_event(self, symbol: str, local_qty: int, broker_qty: int, drift_type: str, action: str, snapshot: Dict[str, Any]):
@@ -275,7 +393,7 @@ class TradeLogger:
             timestamp = datetime.utcnow().isoformat()
 
             def _sqlite_log():
-                conn = sqlite3.connect(self.db_file)
+                conn = self._get_connection()
                 cursor = conn.cursor()
                 cursor.execute("""
                     INSERT INTO drift_events (timestamp, symbol, local_qty, broker_qty, drift_type, action_taken, snapshot_json)
@@ -286,13 +404,13 @@ class TradeLogger:
 
             await asyncio.to_thread(_sqlite_log)
             logger.warning(f"DRIFT_AUDIT: {symbol} | Local: {local_qty} | Broker: {broker_qty} | Action: {action}")
-        except Exception as e:
-            logger.error(f"Failed to log drift event: {e}")
+        except Exception:
+            logger.error("Failed to log drift event", exc_info=True)
 
     def rotate_logs(self, max_days: int = 30):
         """SQLite trade log rotation: keeps only the last N days of api_logs and trades to prevent bloat."""
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
 
             # Rotate api_logs
@@ -321,8 +439,8 @@ class TradeLogger:
             conn.close()
 
             logger.info(f"Log Rotation Complete: Removed {api_logs_deleted} old api_logs, {queue_deleted} old queue entries.")
-        except Exception as e:
-            logger.error(f"Error during SQLite log rotation: {e}")
+        except Exception:
+            logger.error("Error during SQLite log rotation", exc_info=True)
 
     async def log_signal(self, strategy_id: str, symbol: str, signal_type: str, price: float, indicators: Dict[str, Any] = {}, ai_reasoning: str = "", conviction: float = 0.0):
         """Audit strategy decision signals in TimescaleDB."""
@@ -337,26 +455,48 @@ class TradeLogger:
                 ai_reasoning=ai_reasoning or "",
                 conviction=conviction
             )
-        except Exception as e:
-            logger.warning(f"Failed to log signal to TimescaleDB: {e}")
+        except Exception:
+            logger.warning("Failed to log signal to TimescaleDB", exc_info=True)
 
     def get_all_trades(self, limit=100):
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM trades ORDER BY timestamp DESC LIMIT ?", (limit,))
             rows = cursor.fetchall()
             conn.close()
             return [Trade(**dict(row)) for row in rows]
-        except: return []
+        except Exception:
+            logger.error("Error fetching all trades", exc_info=True)
+            return []
 
     async def get_all_trades_async(self, limit=100):
         return await asyncio.to_thread(self.get_all_trades, limit)
 
+    def get_trades_by_mode(self, mode: str = "sandbox", limit: int = 100):
+        """Get trades filtered by mode (sandbox or live)."""
+        try:
+            conn = self._get_connection()
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM trades WHERE mode = ? ORDER BY timestamp DESC LIMIT ?",
+                (mode.lower(), limit)
+            )
+            rows = cursor.fetchall()
+            conn.close()
+            return [Trade(**dict(row)) for row in rows]
+        except Exception:
+            logger.error("Error fetching trades by mode", exc_info=True)
+            return []
+
+    async def get_trades_by_mode_async(self, mode: str = "sandbox", limit: int = 100):
+        return await asyncio.to_thread(self.get_trades_by_mode, mode, limit)
+
     def get_strategy_metrics(self, strategy: str) -> Dict[str, Any]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT pnl, charges FROM trades WHERE strategy = ? AND status = 'filled' AND pnl IS NOT NULL ORDER BY timestamp ASC", (strategy,))
@@ -377,25 +517,28 @@ class TradeLogger:
                 "total_charges": round(float(np.sum(charges)), 2),
                 "net_pnl": round(float(np.sum(net_pnls)), 2)
             }
-        except Exception as e: return {"error": str(e)}
+        except Exception:
+            return {"error": "Internal metrics error"}
 
     async def get_strategy_metrics_async(self, strategy: str) -> Dict[str, Any]:
         return await asyncio.to_thread(self.get_strategy_metrics, strategy)
 
     def get_system_settings(self) -> Dict[str, str]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute("SELECT key, value FROM system_settings")
             rows = cursor.fetchall()
             conn.close()
             return {row[0]: row[1] for row in rows}
-        except: return {}
+        except Exception:
+            logger.error("Error fetching system settings", exc_info=True)
+            return {}
 
     def update_system_setting(self, key: str, value: str) -> bool:
         """Persist a system-level setting (key/value) into system_settings table."""
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
             now = datetime.utcnow().isoformat()
             cursor.execute("""
@@ -406,27 +549,64 @@ class TradeLogger:
             conn.commit()
             conn.close()
             return True
-        except Exception as e:
-            logger.error(f"Error updating system setting {key}: {e}")
+        except Exception:
+            logger.error(f"Error updating system setting {key}", exc_info=True)
+            return False
+
+    def get_broker_config(self) -> Dict[str, Any]:
+        """
+        Retrieves broker configuration from system_settings.
+        """
+        try:
+            settings = self.get_system_settings()
+            broker_config = {}
+            for k, v in settings.items():
+                if k.startswith("broker_"):
+                    # broker_zerodha_api_key -> zerodha: { api_key: v }
+                    parts = k.split("_")
+                    if len(parts) >= 3:
+                        broker_name = parts[1]
+                        config_key = "_".join(parts[2:])
+                        if broker_name not in broker_config:
+                            broker_config[broker_name] = {}
+                        broker_config[broker_name][config_key] = v
+            return broker_config
+        except Exception:
+            logger.error("Error fetching broker config", exc_info=True)
+            return {}
+
+    def update_broker_config(self, broker_name: str, config: Dict[str, Any]) -> bool:
+        """
+        Updates configuration for a specific broker.
+        """
+        try:
+            success = True
+            for k, v in config.items():
+                setting_key = f"broker_{broker_name}_{k}"
+                if not self.update_system_setting(setting_key, str(v)):
+                    success = False
+            return success
+        except Exception:
+            logger.error(f"Error updating broker config for {broker_name}", exc_info=True)
             return False
 
     def get_risk_settings(self) -> Dict[str, Any]:
         """Fetch all risk limits from the database."""
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute("SELECT key, value FROM risk_settings")
             rows = cursor.fetchall()
             conn.close()
             return {row[0]: row[1] for row in rows}
-        except Exception as e:
-            logger.error(f"Error fetching risk settings: {e}")
+        except Exception:
+            logger.error("Error fetching risk settings", exc_info=True)
             return {}
 
     def update_risk_setting(self, key: str, value: Any):
         """Persist a specific risk limit to the database."""
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
             now = datetime.utcnow().isoformat()
             cursor.execute("""
@@ -435,23 +615,25 @@ class TradeLogger:
             """, (key, float(value), now))
             conn.commit()
             conn.close()
-        except Exception as e:
-            logger.error(f"Error updating risk setting {key}: {e}")
+        except Exception:
+            logger.error(f"Error updating risk setting {key}", exc_info=True)
 
     def get_trades_by_symbol(self, symbol: str, limit: int = 50) -> List[Trade]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM trades WHERE symbol = ? ORDER BY timestamp DESC LIMIT ?", (symbol, limit))
             rows = cursor.fetchall()
             conn.close()
             return [Trade(**dict(row)) for row in rows]
-        except: return []
+        except Exception:
+            logger.error(f"Error fetching trades by symbol {symbol}", exc_info=True)
+            return []
 
     def get_trades_by_strategy(self, strategy: str, limit: int = 100) -> List[Trade]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             query = "SELECT * FROM trades"
@@ -465,35 +647,39 @@ class TradeLogger:
             rows = cursor.fetchall()
             conn.close()
             return [Trade(**dict(row)) for row in rows]
-        except: return []
+        except Exception:
+            logger.error("Error fetching trades by strategy %s", strategy, exc_info=True)
+            return []
 
     def get_daily_charges(self) -> float:
         """Sum charges for all trades executed today."""
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
             today = datetime.utcnow().strftime('%Y-%m-%d')
             cursor.execute("SELECT SUM(charges) FROM trades WHERE timestamp LIKE ? AND status = 'filled'", (f"{today}%",))
             res = cursor.fetchone()
             conn.close()
             return round(float(res[0] or 0.0), 2)
-        except Exception as e:
-            logger.error(f"Error getting daily charges: {e}")
+        except Exception:
+            logger.error("Error getting daily charges", exc_info=True)
             return 0.0
 
     def get_symbol_pnl(self, symbol: str) -> Dict[str, float]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute("SELECT SUM(pnl) FROM trades WHERE symbol = ? AND pnl IS NOT NULL", (symbol,))
             pnl = cursor.fetchone()[0] or 0.0
             conn.close()
             return {"symbol": symbol, "pnl": round(float(pnl), 2)}
-        except: return {"symbol": symbol, "pnl": 0.0}
+        except Exception:
+            logger.error("Error fetching symbol PnL for %s", symbol, exc_info=True)
+            return {"symbol": symbol, "pnl": 0.0}
 
     def get_strategy_pnl(self, strategy: str) -> Dict[str, Any]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
             query = "SELECT SUM(pnl), COUNT(*) FROM trades WHERE pnl IS NOT NULL"
             params = []
@@ -506,11 +692,13 @@ class TradeLogger:
             count = row[1] or 0
             conn.close()
             return {"strategy": strategy, "pnl": round(float(pnl), 2), "trade_count": count}
-        except: return {"strategy": strategy, "pnl": 0.0, "trade_count": 0}
+        except Exception:
+            logger.error("Error fetching strategy PnL for %s", strategy, exc_info=True)
+            return {"strategy": strategy, "pnl": 0.0, "trade_count": 0}
 
     def get_open_positions(self) -> Dict[str, int]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
             # Group by symbol and sum quantity (Buy+, Sell-)
             cursor.execute("""
@@ -523,7 +711,9 @@ class TradeLogger:
             rows = cursor.fetchall()
             conn.close()
             return {row[0]: row[1] for row in rows}
-        except: return {}
+        except Exception:
+            logger.error("Error fetching open positions", exc_info=True)
+            return {}
 
     def reconcile_positions(self, symbol: str, target_qty: int, strategy: str = "System"):
         """Aligns local engine state with broker target_qty by injecting a correction trade."""
@@ -537,7 +727,7 @@ class TradeLogger:
             side = "BUY" if diff > 0 else "SELL"
             abs_qty = abs(diff)
 
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
             timestamp = datetime.utcnow().isoformat()
             cursor.execute("""
@@ -549,8 +739,8 @@ class TradeLogger:
             conn.close()
             logger.info(f"Reconciled {symbol}: current={current_qty}, target={target_qty}, injected_{side}={abs_qty} (ID: {tid})")
             return True
-        except Exception as e:
-            logger.error(f"Error reconciling positions for {symbol}: {e}")
+        except Exception:
+            logger.error("Error reconciling positions for %s", symbol, exc_info=True)
             return False
 
     def reset_positions(self, symbol: str = None):
@@ -574,7 +764,7 @@ class TradeLogger:
     # Cognitive Memory System (L4/L5)
     def get_strategy_personality(self, strategy_id: str) -> Dict[str, Any]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM strategy_personality WHERE strategy_id = ?", (strategy_id,))
@@ -582,11 +772,13 @@ class TradeLogger:
             conn.close()
             if row: return dict(row)
             return {"strategy_id": strategy_id, "confidence_score": 0.5, "regime_preference": "UNKNOWN"}
-        except: return {}
+        except Exception:
+            logger.error("Error fetching strategy personality for %s", strategy_id, exc_info=True)
+            return {}
 
     def update_strategy_personality(self, strategy_id: str, updates: Dict[str, Any]):
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
             now = datetime.utcnow().isoformat()
             # Strict whitelist of allowabled columns for dynamic query construction
@@ -617,11 +809,12 @@ class TradeLogger:
                 cursor.execute(f"INSERT INTO strategy_personality ({', '.join(keys)}) VALUES ({placeholders})", vals) # nosec
             conn.commit()
             conn.close()
-        except Exception as e: logger.error(f"Error updating personality: {e}")
+        except Exception:
+            logger.error("Error updating personality", exc_info=True)
 
     def record_decision_episode(self, trade_id: int, episode_data: Dict[str, Any]):
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO decision_episodes (trade_id, market_regime, conviction_at_entry, expected_pnl, actual_pnl_normalized, semantic_lessons)
@@ -629,11 +822,12 @@ class TradeLogger:
             """, (trade_id, episode_data.get('market_regime'), episode_data.get('conviction_at_entry'), episode_data.get('expected_pnl'), episode_data.get('actual_pnl_normalized'), episode_data.get('semantic_lessons')))
             conn.commit()
             conn.close()
-        except Exception as e: logger.error(f"Error recording episode: {e}")
+        except Exception:
+            logger.error("Error recording episode", exc_info=True)
 
     def get_recent_episodes(self, strategy_id: Optional[str] = None, limit: int = 20) -> List[Dict[str, Any]]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             query = "SELECT e.*, t.strategy, t.symbol, t.side, t.price FROM decision_episodes e JOIN trades t ON e.trade_id = t.id"
@@ -647,13 +841,15 @@ class TradeLogger:
             rows = cursor.fetchall()
             conn.close()
             return [dict(row) for row in rows]
-        except: return []
+        except Exception:
+            logger.error("Error fetching recent episodes", exc_info=True)
+            return []
 
     # --- Strategy Safeguard & Personality Management ---
 
     def get_strategy_safeguards(self, strategy_id: str) -> Dict[str, Any]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM strategy_safeguards WHERE strategy_id = ?", (strategy_id,))
@@ -666,22 +862,26 @@ class TradeLogger:
                 "max_loss_inr": 0.0,
                 "is_armed": 1
             }
-        except: return {}
+        except Exception:
+            logger.error("Error fetching safeguards for %s", strategy_id, exc_info=True)
+            return {}
 
     def get_all_strategy_safeguards(self) -> List[Dict[str, Any]]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM strategy_safeguards")
             rows = cursor.fetchall()
             conn.close()
             return [dict(row) for row in rows]
-        except: return []
+        except Exception:
+            logger.error("Error fetching all safeguards", exc_info=True)
+            return []
 
     def update_strategy_safeguard(self, strategy_id: str, updates: Dict[str, Any]):
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
             now = datetime.utcnow().isoformat()
 
@@ -703,23 +903,25 @@ class TradeLogger:
 
             conn.commit()
             conn.close()
-        except Exception as e:
-            logger.error(f"Error updating safeguard: {e}")
+        except Exception:
+            logger.error("Error updating safeguard", exc_info=True)
 
     def get_all_strategy_personalities(self) -> List[Dict[str, Any]]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM strategy_personality")
             rows = cursor.fetchall()
             conn.close()
             return [dict(row) for row in rows]
-        except: return []
+        except Exception:
+            logger.error("Error fetching all personalities", exc_info=True)
+            return []
 
     def log_api_call(self, api_type, request_data, response_data, strategy="System"):
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute("INSERT INTO api_logs (api_type, request_data, response_data, strategy) VALUES (?, ?, ?, ?)",
                            (api_type, json.dumps(request_data), json.dumps(response_data), strategy))
@@ -730,7 +932,7 @@ class TradeLogger:
 
     def get_api_logs(self, limit=50, search=""):
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             query = "SELECT * FROM api_logs"
@@ -745,28 +947,34 @@ class TradeLogger:
             rows = cursor.fetchall()
             conn.close()
             return [ {**dict(r), "request_data": json.loads(r["request_data"]), "response_data": json.loads(r["response_data"])} for r in rows ]
-        except Exception as e:
-            logger.error(f"Error fetching API logs: {e}")
+        except Exception:
+            logger.error("Error fetching API logs", exc_info=True)
             return []
 
-    async def get_pnl_summary(self, unrealized_pnl: float = 0.0) -> Dict[str, Any]:
+    async def get_pnl_summary(self, unrealized_pnl: float = 0.0, mode: str = None) -> Dict[str, Any]:
         """Calculates institutional-grade PnL summaries across timeframes."""
-        return await asyncio.to_thread(self._get_pnl_summary_sync, unrealized_pnl)
+        return await asyncio.to_thread(self._get_pnl_summary_sync, unrealized_pnl, mode)
 
-    def _get_pnl_summary_sync(self, unrealized_pnl: float = 0.0) -> Dict[str, Any]:
+    def _get_pnl_summary_sync(self, unrealized_pnl: float = 0.0, mode: str = None) -> Dict[str, Any]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
 
             # Helper for time-based PnL
             def _get_period_pnl(days: int):
                 # ISO8601 comparison
-                cursor.execute("""
+                query = """
                     SELECT SUM(pnl), SUM(charges)
                     FROM trades
                     WHERE status = 'filled' AND pnl IS NOT NULL
                     AND timestamp >= datetime('now', ?)
-                """, (f'-{days} days',))
+                """
+                params = [f'-{days} days']
+                if mode:
+                    query += " AND mode = ?"
+                    params.append(mode)
+
+                cursor.execute(query, params)
                 row = cursor.fetchone()
                 return round(float(row[0] or 0.0), 2), round(float(row[1] or 0.0), 2)
 
@@ -776,12 +984,19 @@ class TradeLogger:
             daily_pnl, daily_charges = _get_period_pnl(1)
 
             # Cumulative PnL curve for charts
-            cursor.execute("""
+            curve_query = """
                 SELECT timestamp, SUM(pnl - COALESCE(charges, 0)) OVER (ORDER BY timestamp) as cumulative_pnl
                 FROM trades
                 WHERE status = 'filled' AND pnl IS NOT NULL
-                ORDER BY timestamp ASC
-            """)
+            """
+            curve_params = []
+            if mode:
+                curve_query += " AND mode = ?"
+                curve_params.append(mode)
+
+            curve_query += " ORDER BY timestamp ASC"
+
+            cursor.execute(curve_query, curve_params)
             curve = [{"time": r[0], "value": round(r[1], 2)} for r in cursor.fetchall()]
 
             conn.close()
@@ -797,9 +1012,9 @@ class TradeLogger:
                 "daily": {"pnl": daily_pnl, "charges": daily_charges, "net": round(daily_pnl - daily_charges + unrealized_pnl, 2)},
                 "equity_curve": curve
             }
-        except Exception as e:
-            logger.error(f"Error generating PnL summary: {e}")
-            return {"error": str(e)}
+        except Exception:
+            logger.error("Error generating PnL summary", exc_info=True)
+            return {"error": "Internal PnL error"}
 
     async def get_performance_metrics(self) -> Dict[str, Any]:
         """Calculates risk ratios (Sharpe, Sortino, Drawdown)."""
@@ -807,7 +1022,7 @@ class TradeLogger:
 
     def _get_performance_metrics_sync(self) -> Dict[str, Any]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT pnl - COALESCE(charges, 0)
@@ -853,15 +1068,15 @@ class TradeLogger:
                 "profit_factor": round(float(profit_factor), 2),
                 "total_trades": len(returns)
             }
-        except Exception as e:
-            logger.error(f"Error generating performance metrics: {e}")
-            return {"error": str(e)}
+        except Exception:
+            logger.error("Error generating performance metrics", exc_info=True)
+            return {"error": "Internal performance error"}
 
     # --- HITL Action Center Methods ---
 
     def queue_order_for_approval(self, order_data: dict) -> Optional[int]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
 
             strategy = order_data.get("strategy") or order_data.get("strategy_id") or \
@@ -889,13 +1104,13 @@ class TradeLogger:
             order_id = cursor.lastrowid
             conn.close()
             return order_id
-        except Exception as e:
-            logger.error(f"Error queuing order for approval: {e}")
+        except Exception:
+            logger.error("Error queuing order for approval", exc_info=True)
             return None
 
     def get_action_queue(self, status: str = 'pending', limit: int = 100) -> List[dict]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("""
@@ -917,13 +1132,13 @@ class TradeLogger:
                         pass
                 result.append(r)
             return result
-        except Exception as e:
-            logger.error(f"Error fetching action queue: {e}")
+        except Exception:
+            logger.error("Error fetching action queue", exc_info=True)
             return []
 
     def get_action_order(self, order_id: int) -> Optional[dict]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM action_queue WHERE id = ?", (order_id,))
@@ -940,13 +1155,13 @@ class TradeLogger:
                 except json.JSONDecodeError:
                     pass
             return r
-        except Exception as e:
-            logger.error(f"Error fetching action order {order_id}: {e}")
+        except Exception:
+            logger.error("Error fetching action order %s", order_id, exc_info=True)
             return None
 
     def update_action_order_status(self, order_id: int, status: str, reason: Optional[str] = None) -> bool:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute("""
                 UPDATE action_queue
@@ -957,24 +1172,26 @@ class TradeLogger:
             success = cursor.rowcount > 0
             conn.close()
             return success
-        except Exception as e:
-            logger.error(f"Error updating action order status: {e}")
+        except Exception:
+            logger.error("Error updating action order status", exc_info=True)
             return False
 
     def delete_action_order(self, order_id: int) -> bool:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute("DELETE FROM action_queue WHERE id = ?", (order_id,))
             conn.commit()
             success = cursor.rowcount > 0
             conn.close()
             return success
-        except: return False
+        except Exception:
+            logger.error("Error deleting action order %s", order_id, exc_info=True)
+            return False
 
     def get_action_center_stats(self) -> dict:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT
@@ -993,29 +1210,44 @@ class TradeLogger:
                 "persistence": "SQLite/WAL",
                 "db_path": os.path.basename(self.db_file)
             }
-        except Exception as e:
-            logger.error(f"Error fetching action center stats: {e}")
+        except Exception:
+            logger.error("Error fetching action center stats", exc_info=True)
             return {"pending": 0, "approved": 0, "rejected": 0, "health": "error", "persistence": "Disconnected"}
+
+
+    def cancel_all_pending_signals(self) -> int:
+        """Sets all pending signals in the action_queue to cancelled."""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE action_queue SET status = 'cancelled', rejection_reason = 'Global Cancel All' WHERE status = 'pending'")
+            count = cursor.rowcount
+            conn.commit()
+            conn.close()
+            return count
+        except Exception:
+            logger.error("Error cancelling all pending signals", exc_info=True)
+            return 0
 
 
     # --- Alert Management Methods ---
 
     def get_alerts(self, limit: int = 100) -> List[Dict[str, Any]]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM alerts ORDER BY created_at DESC LIMIT ?", (limit,))
             rows = cursor.fetchall()
             conn.close()
             return [dict(row) for row in rows]
-        except Exception as e:
-            logger.error(f"Error fetching alerts: {e}")
+        except Exception:
+            logger.error("Error fetching alerts", exc_info=True)
             return []
 
     def create_alert(self, alert_type: str, symbol: str, condition: str, value: float, channel: str = "telegram", message: str = "") -> Optional[int]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO alerts (type, symbol, condition, value, channel, message)
@@ -1025,28 +1257,91 @@ class TradeLogger:
             alert_id = cursor.lastrowid
             conn.close()
             return alert_id
-        except Exception as e:
-            logger.error(f"Error creating alert: {e}")
+        except Exception:
+            logger.error("Error creating alert", exc_info=True)
             return None
 
     def delete_alert(self, alert_id: int) -> bool:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute("DELETE FROM alerts WHERE id = ?", (alert_id,))
             conn.commit()
             success = cursor.rowcount > 0
             conn.close()
             return success
-        except Exception as e:
-            logger.error(f"Error deleting alert: {e}")
+        except Exception:
+            logger.error("Error deleting alert", exc_info=True)
             return False
+
+    def acknowledge_alert(self, alert_id: int) -> bool:
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE alerts SET acknowledged = 1 WHERE id = ?",
+                (alert_id,)
+            )
+            conn.commit()
+            success = cursor.rowcount > 0
+            conn.close()
+            return success
+        except Exception:
+            logger.error("Error acknowledging alert %s", alert_id, exc_info=True)
+            return False
+
+    # --- AutoResearch Task Persistence ---
+
+    def create_ar_task(self, task_id: str) -> None:
+        try:
+            conn = self._get_connection()
+            conn.execute(
+                "INSERT OR REPLACE INTO autoresearch_tasks (task_id, status, created_at, updated_at) VALUES (?, 'processing', ?, ?)",
+                (task_id, datetime.utcnow().isoformat(), datetime.utcnow().isoformat())
+            )
+            conn.commit()
+            conn.close()
+        except Exception:
+            logger.warning("AR task create failed", exc_info=True)
+            return None
+
+    def update_ar_task(self, task_id: str, status: str, result: Any = None, error: str = None) -> None:
+        try:
+            result_json = json.dumps(result) if result is not None else None
+            conn = self._get_connection()
+            conn.execute(
+                "UPDATE autoresearch_tasks SET status=?, result_json=?, error=?, updated_at=? WHERE task_id=?",
+                (status, result_json, error, datetime.utcnow().isoformat(), task_id)
+            )
+            conn.commit()
+            conn.close()
+        except Exception:
+            logger.warning("AR task update failed", exc_info=True)
+
+    def get_ar_task(self, task_id: str) -> Optional[Dict[str, Any]]:
+        try:
+            conn = self._get_connection()
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT * FROM autoresearch_tasks WHERE task_id=?", (task_id,)
+            ).fetchone()
+            conn.close()
+            if not row:
+                return None
+            d = dict(row)
+            if d.get("result_json"):
+                d["result"] = json.loads(d["result_json"])
+            del d["result_json"]
+            return d
+        except Exception:
+            logger.warning("AR task get failed", exc_info=True)
+            return None
 
     # --- Backtest Results Methods ---
 
     def save_backtest_run(self, strategy_id: str, symbol: str, days: int, interval: str, metrics: dict, trades: list) -> Optional[int]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO backtest_runs (strategy_id, symbol, days, interval, metrics, trades)
@@ -1056,13 +1351,13 @@ class TradeLogger:
             run_id = cursor.lastrowid
             conn.close()
             return run_id
-        except Exception as e:
-            logger.error(f"Error saving backtest run: {e}")
+        except Exception:
+            logger.error("Error saving backtest run", exc_info=True)
             return None
 
     def get_latest_backtest_run(self, strategy_id: Optional[str] = None) -> Optional[dict]:
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             query = "SELECT * FROM backtest_runs"
@@ -1081,8 +1376,8 @@ class TradeLogger:
             r["metrics"] = json.loads(r["metrics"])
             r["trades"] = json.loads(r["trades"])
             return r
-        except Exception as e:
-            logger.error(f"Error fetching latest backtest run: {e}")
+        except Exception:
+            logger.error("Error fetching latest backtest run", exc_info=True)
             return None
 
     async def save_backtest_run_async(self, strategy_id: str, symbol: str, days: int, interval: str, metrics: dict, trades: list):
@@ -1094,15 +1389,15 @@ class TradeLogger:
     def get_drift_events(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Retrieves recent state reconciliation drift events."""
         try:
-            conn = sqlite3.connect(self.db_file)
+            conn = self._get_connection()
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM drift_events ORDER BY timestamp DESC LIMIT ?", (limit,))
             rows = cursor.fetchall()
             conn.close()
             return [ {**dict(r), "snapshot": json.loads(r["snapshot_json"]) if r["snapshot_json"] else {}} for r in rows ]
-        except Exception as e:
-            logger.error(f"Error fetching drift events: {e}")
+        except Exception:
+            logger.error("Error fetching drift events", exc_info=True)
             return []
 
     async def get_drift_events_async(self, limit: int = 50) -> List[Dict[str, Any]]:

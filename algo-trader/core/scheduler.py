@@ -103,7 +103,7 @@ class AlgoScheduler:
                     try:
                         historify_service.trigger_scheduled_ingestion(["1m", "5m"])
                     except Exception as e:
-                        logger.error(f"Failed to trigger Historify ingestion: {e}")
+                        logger.error("Failed to trigger Historify ingestion", exc_info=True)
                     last_historify = now
 
                 # 5. Risk Circuit Breaker Check

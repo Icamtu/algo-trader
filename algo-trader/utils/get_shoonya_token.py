@@ -139,9 +139,8 @@ def get_shoonya_auth_code(user_id=None, password=None, totp_secret=None, broker_
         print("  >> ERROR: Timeout capturing auth code.")
         return None
 
-    except Exception as e:
-        print(f"  >> Selenium failure: {e}")
-        return f"FAILURE: {str(e)}"
+    except Exception:
+        return "FAILURE: Browser automation failed"
     finally:
         if driver:
             driver.quit()

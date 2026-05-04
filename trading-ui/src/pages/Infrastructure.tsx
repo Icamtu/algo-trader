@@ -7,7 +7,7 @@ import {
   Network, Terminal, Loader2, Shield, Database,
   Cpu as CpuIcon, Server, HardDrive, Link, Unlock, Lock
 } from "lucide-react";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { IndustrialValue } from "@/components/trading/IndustrialValue";
 import { cn } from "@/lib/utils";
@@ -21,7 +21,7 @@ interface ServiceStatus {
 interface SystemHealth {
   algo_engine: ServiceStatus;
   broker: ServiceStatus;
-  openalgo: ServiceStatus;
+  aetherdesk: ServiceStatus;
   ollama_local: ServiceStatus;
   openclaw_agent: ServiceStatus;
   database: ServiceStatus;
@@ -46,8 +46,8 @@ export default function Infrastructure() {
     setIsLoading(true);
     try {
       const response = await algoApi.getSystemStatus();
-      // Safely unwrap data if it follows the { status, data } pattern
-      const healthData = response?.data || response;
+      // Phase 16: Extract 'checks' which contains the multi-component health data
+      const healthData = response?.checks || response?.data?.checks || response;
       setHealth(healthData);
       setLastCheck(new Date());
     } catch (error) {
@@ -132,10 +132,10 @@ export default function Infrastructure() {
                 </div>
               ) : (
                 <>
-                  <div className="grid grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <StatusNode name="Aether_Core" id="ENGINE_01" icon={CpuIcon} status={health.algo_engine} description="Trading execution & strategy runtime." />
                     <StatusNode name="Shoonya_IF" id="BROKER_01" icon={Globe} status={health.broker} description="Finvasia WebSocket & REST gateway." />
-                    <StatusNode name="Nexus_Bridge" id="PROTOCOL_01" icon={Network} status={health.openalgo} description="OpenAlgo kernel interface layer." />
+                    <StatusNode name="Nexus_Bridge" id="PROTOCOL_01" icon={Network} status={health.aetherdesk} description="AetherDesk kernel interface layer." />
                     <StatusNode name="Historify_DB" id="DUCKDB_01" icon={Database} status={health.database} description="Local analytical data storage engine." />
                     <StatusNode name="Neural_Alpha" id="OLLAMA_01" icon={Activity} status={health.ollama_local} description="Cognitive core for strategy optimization." />
                     <StatusNode name="Analytics_CX" id="OPENCLAW" icon={Shield} status={health.openclaw_agent} description="Reporting and auditing security layer." />

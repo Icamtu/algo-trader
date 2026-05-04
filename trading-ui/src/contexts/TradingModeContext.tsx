@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { useTradingMode } from "@/features/openalgo/hooks/useTrading";
+import { useTradingMode } from "@/features/aetherdesk/hooks/useTrading";
 
 interface TradingModeContextValue {
   mode: "sandbox" | "live" | undefined;

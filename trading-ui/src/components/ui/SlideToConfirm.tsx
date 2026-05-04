@@ -13,10 +13,10 @@ export function SlideToConfirm({ onConfirm, label, className }: SlideToConfirmPr
   const controls = useAnimation();
   const x = useMotionValue(0);
   const containerRef = useRef<HTMLDivElement>(null);
-  
+
   // Calculate the drag limit based on container width
   const dragLimit = 220; // Default limit
-  
+
   const opacity = useTransform(x, [0, dragLimit], [1, 0.2]);
   const color = useTransform(x, [0, dragLimit], ["rgba(239, 68, 68, 1)", "rgba(34, 197, 94, 1)"]);
   const backgroundColor = useTransform(x, [0, dragLimit], ["rgba(239, 68, 68, 0.1)", "rgba(34, 197, 94, 0.2)"]);
@@ -32,17 +32,17 @@ export function SlideToConfirm({ onConfirm, label, className }: SlideToConfirmPr
   };
 
   return (
-    <div 
+    <div
       ref={containerRef}
       className={`relative h-14 bg-muted/30 border border-border/50 rounded-2xl overflow-hidden group select-none ${className}`}
     >
-      <motion.div 
+      <motion.div
         style={{ backgroundColor, width: "100%", height: "100%" }}
-        className="absolute inset-0" 
+        className="absolute inset-0"
       />
-      
+
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <motion.span 
+        <motion.span
           style={{ opacity }}
           className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60"
         >
@@ -65,9 +65,9 @@ export function SlideToConfirm({ onConfirm, label, className }: SlideToConfirmPr
             <ArrowRight className="w-3.5 h-3.5 text-white/50 group-hover:translate-x-1 transition-transform" />
         </div>
       </motion.div>
-      
+
       {isConfirmed && (
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           className="absolute inset-0 bg-neon-green flex items-center justify-center z-20"

@@ -41,7 +41,7 @@ export const AetherPanel = React.forwardRef<HTMLDivElement, AetherPanelProps>(
           </>
         )}
 
-        <div className="relative z-10 h-full">
+        <div className="relative z-10 h-full flex flex-col">
           {children}
         </div>
       </motion.div>

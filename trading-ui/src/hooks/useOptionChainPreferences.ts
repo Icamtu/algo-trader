@@ -1,9 +1,9 @@
 import { useState, useCallback, useEffect } from 'react'
-import { 
-  type OptionChainPreferences, 
-  DEFAULT_PREFERENCES, 
-  LOCALSTORAGE_KEY 
-} from '@/integrations/openalgo/types/option-chain'
+import {
+  type OptionChainPreferences,
+  DEFAULT_PREFERENCES,
+  LOCALSTORAGE_KEY
+} from '@/integrations/aetherdesk/types/option-chain'
 
 export function useOptionChainPreferences() {
   const [preferences, setPreferences] = useState<OptionChainPreferences>(() => {

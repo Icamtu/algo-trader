@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "./AuthContext";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 
 // Helper to avoid repetitive JSON.stringify
 function json_stringify(obj: any) {
@@ -14,6 +14,13 @@ interface Tick {
   chg_pct?: string;
 }
 
+interface EngineLog {
+  time: string;
+  level: string;
+  module: string;
+  msg: string;
+}
+
 interface AetherContextType {
   selectedSymbol: string;
   setSelectedSymbol: (symbol: string) => void;
@@ -25,6 +32,7 @@ interface AetherContextType {
     risk_mult: number;
     active_trades_count: number;
     last_update: number;
+    equity?: number;
   };
   latency: number;
   connectionStatus: "connected" | "disconnected" | "connecting" | "error";
@@ -32,6 +40,7 @@ interface AetherContextType {
   tickerSymbols: string[];
   riskStatus: any;
   strategyMatrix: any[];
+  logs: EngineLog[];
 }
 
 const AetherContext = createContext<AetherContextType | undefined>(undefined);
@@ -46,11 +55,13 @@ export function AetherProvider({ children }: { children: ReactNode }) {
     pos_mult: 1.0,
     risk_mult: 1.0,
     active_trades_count: 0,
-    last_update: Date.now() / 1000
+    last_update: Date.now() / 1000,
+    equity: 0
   });
   const [latency, setLatency] = useState(0);
   const [riskStatus, setRiskStatus] = useState<any>(null);
   const [strategyMatrix, setStrategyMatrix] = useState<any[]>([]);
+  const [logs, setLogs] = useState<EngineLog[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<"connected" | "disconnected" | "connecting" | "error">("disconnected");
 
   const { session } = useAuth();
@@ -80,33 +91,58 @@ export function AetherProvider({ children }: { children: ReactNode }) {
 
     socket.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
+        const rawData: string = event.data;
 
-        if (data.type === "auth_success") {
-          console.log("AetherEngine Auth Successful.");
-          setConnectionStatus("connected");
+        // Split on newline boundaries first (newline-delimited JSON from engine),
+        // then fall back to the whole frame. This handles both single and batched frames
+        // without fragile brace counting.
+        const messages: string[] = rawData
+          .split(/\n/)
+          .map((s) => s.trim())
+          .filter((s) => s.startsWith("{") && s.endsWith("}"));
 
-          // Subscription moved to a dedicated useEffect to handle dynamic config
-        } else if (data.type === "pong") {
-          const rtt = Date.now() - (data.client_ts || lastPingTS.current);
-          setLatency(rtt);
-        } else if (data.type === "regime_update") {
-          setTelemetry(prev => ({ ...prev, ...data.payload }));
-        } else if (data.type === "tick_batch") {
-          setTicks((prev) => {
-            const next = { ...prev };
-            data.payload.forEach((tick: Tick) => {
-              next[tick.symbol] = tick;
-            });
-            return next;
-          });
-        } else if (data.type === "risk_update") {
-          setRiskStatus(data.payload);
-        } else if (data.type === "matrix_update") {
-          setStrategyMatrix(data.payload.strategies);
-        }
+        if (messages.length === 0) messages.push(rawData.trim());
+
+        messages.forEach(msg => {
+          try {
+            const data = JSON.parse(msg.trim());
+            if (!data) return;
+
+            if (data.type === "auth_success") {
+              console.log("AetherEngine Auth Successful.");
+              setConnectionStatus("connected");
+            } else if (data.type === "pong") {
+              const rtt = Date.now() - (data.client_ts || lastPingTS.current);
+              setLatency(rtt);
+            } else if (data.type === "regime_update") {
+              setTelemetry(prev => ({ ...prev, ...data.payload }));
+            } else if (data.type === "tick_batch") {
+              setTicks((prev) => {
+                const next = { ...prev };
+                if (Array.isArray(data.payload)) {
+                  data.payload.forEach((tick: Tick) => {
+                    if (tick && tick.symbol) {
+                      next[tick.symbol] = tick;
+                    }
+                  });
+                }
+                return next;
+              });
+            } else if (data.type === "risk_update") {
+              setRiskStatus(data.payload);
+            } else if (data.type === "matrix_update") {
+              setStrategyMatrix(Array.isArray(data.payload?.strategies) ? data.payload.strategies : []);
+            } else if (data.type === "logs") {
+              if (Array.isArray(data.data)) {
+                setLogs(data.data);
+              }
+            }
+          } catch (e) {
+            console.warn("Fragmented JSON chunk skipped:", msg.substring(0, 50));
+          }
+        });
       } catch (err) {
-        console.error("Error parsing WS message:", err);
+        console.error("Critical WS logic failure:", err);
       }
     };
 
@@ -127,7 +163,7 @@ export function AetherProvider({ children }: { children: ReactNode }) {
     const fetchConfig = async () => {
       try {
         const config = await algoApi.getTickerConfig();
-        if (config?.ticker_symbols) {
+        if (config?.ticker_symbols && Array.isArray(config.ticker_symbols)) {
           const symbols = config.ticker_symbols.map((t: any) => t.symbol);
           setTickerSymbols(symbols);
 
@@ -205,7 +241,8 @@ export function AetherProvider({ children }: { children: ReactNode }) {
       subscribe,
       tickerSymbols,
       riskStatus,
-      strategyMatrix
+      strategyMatrix,
+      logs
     }}>
       {children}
     </AetherContext.Provider>

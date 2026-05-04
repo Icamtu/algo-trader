@@ -53,9 +53,9 @@ export default function Auth() {
     setLoading(true);
     try {
       if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({ 
-          email: values.email, 
-          password: values.password 
+        const { error } = await supabase.auth.signInWithPassword({
+          email: values.email,
+          password: values.password
         });
         if (error) throw error;
         toast.success("Welcome back to AetherDesk Prime");
@@ -100,7 +100,7 @@ export default function Auth() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center relative overflow-hidden industrial-grid">
-      
+
       {/* Structural Borders */}
       <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500/0 via-amber-500/40 to-amber-500/0" />
       <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500/0 via-amber-500/40 to-amber-500/0" />
@@ -293,7 +293,7 @@ export default function Auth() {
                 SECONDARY_AUTH_BUFFER
                 <div className="flex-1 h-px bg-white/5" />
              </div>
-             
+
              <button
               id="auth-google-signin"
               type="button"

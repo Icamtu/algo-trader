@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 
 type BrokerStatus = "connected" | "degraded" | "disconnected";
 
@@ -189,7 +189,7 @@ export function BrokerManagementPanel({ isOpen, onClose, isEmbedded = false }: {
       if (result.status === "success" || result.status === "Ok") {
         toast.success("CORE_SESSION_SYNCHRONIZED", {
           id: toastId,
-          description: "Shoonya heartbeat detected. Session injected into OpenAlgo DB.",
+          description: "Shoonya heartbeat detected. Session injected into AetherDesk DB.",
         });
       } else {
         throw new Error(result.message || "Authorization failed");

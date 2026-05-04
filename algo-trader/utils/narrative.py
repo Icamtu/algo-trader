@@ -50,8 +50,8 @@ def generate_sector_narrative(symbol: str, candles: List[Dict[str, Any]]) -> str
 
         return narrative
 
-    except Exception as e:
-        return f"Narrative generation failed for {symbol}: {str(e)}"
+    except Exception:
+        return f"Narrative generation failed for {symbol}: internal processing error"
 
 def get_macro_placeholder() -> str:
     """

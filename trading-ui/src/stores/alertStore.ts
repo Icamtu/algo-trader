@@ -27,7 +27,7 @@ interface AlertState {
   maxVisibleToasts: number
   duration: number
   categories: AlertCategories
-  
+
   setToastsEnabled: (enabled: boolean) => void
   setSoundEnabled: (enabled: boolean) => void
   setPosition: (position: ToastPosition) => void

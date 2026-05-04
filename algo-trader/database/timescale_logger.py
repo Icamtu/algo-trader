@@ -52,8 +52,8 @@ class TimeScaleLogger:
                 self._running = True
                 self._flush_task = asyncio.create_task(self._periodic_flush())
                 logger.info("[TimeScaleLogger] Connected to TimescaleDB pool.")
-        except Exception as e:
-            logger.error(f"[TimeScaleLogger] Connection error: {e}")
+        except Exception:
+            logger.error("[TimeScaleLogger] Connection error", exc_info=True)
 
     async def disconnect(self):
         """Close the connection pool."""
@@ -78,8 +78,8 @@ class TimeScaleLogger:
                 self._batch_ticks.append((datetime.utcnow(), symbol, float(price), int(quantity), side))
                 if len(self._batch_ticks) >= self._tick_batch_size:
                     asyncio.create_task(self.flush_ticks())
-        except Exception as e:
-            logger.error(f"Error buffering tick: {e}")
+        except Exception:
+            logger.error("Error buffering tick", exc_info=True)
 
     async def flush_ticks(self):
         """Flush buffered ticks using high-performance binary copy."""
@@ -97,8 +97,8 @@ class TimeScaleLogger:
                     records=ticks_to_flush,
                     columns=('timestamp', 'symbol', 'price', 'quantity', 'side')
                 )
-        except Exception as e:
-            logger.error(f"Error flushing ticks to TimescaleDB: {e}")
+        except Exception:
+            logger.error("Error flushing ticks to TimescaleDB", exc_info=True)
 
     async def log_signal(self, strategy_id: str, symbol: str, signal_type: str, price: float, indicators: Dict[str, Any] = {}, ai_reasoning: str = "", conviction: float = 0.0):
         """Log a strategy signal with non-blocking JSONB support."""
@@ -114,8 +114,8 @@ class TimeScaleLogger:
                     """,
                     datetime.utcnow(), strategy_id, symbol, signal_type, float(price), json.dumps(indicators), ai_reasoning, float(conviction)
                 )
-        except Exception as e:
-            logger.error(f"Error logging signal to TimescaleDB: {e}")
+        except Exception:
+            logger.error("Error logging signal to TimescaleDB", exc_info=True)
 
     async def log_trade(self, trade_id: int, strategy_id: str, symbol: str, side: str, quantity: int, price: float, charges: float = 0.0, pnl: float = 0.0, mode: str = "sandbox"):
         """Canonical execution log sync."""
@@ -131,8 +131,8 @@ class TimeScaleLogger:
                     """,
                     datetime.utcnow(), trade_id, strategy_id, symbol, side, int(quantity), float(price), float(charges), float(pnl), mode
                 )
-        except Exception as e:
-            logger.error(f"Error logging trade to TimescaleDB: {e}")
+        except Exception:
+            logger.error("Error logging trade to TimescaleDB", exc_info=True)
 
     # --- ANALYTIC QUERY METHODS (For UI Context) ---
 

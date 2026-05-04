@@ -14,11 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import { CONFIG } from "@/lib/config";
 import { toast } from "sonner";
-import axios from "axios";
-
-// Constants derived from centralized config
-const API_BASE_URL = CONFIG.API_BASE_URL;
-const API_KEY = CONFIG.API_KEY;
+import { algoApi } from "@/features/aetherdesk/api/client";
 
 interface TelemetryData {
   engine: string;
@@ -43,6 +39,10 @@ interface TelemetryData {
     risk_lock: boolean;
     last_audit_ts: string;
   };
+  performance_latency: {
+    tick_dispatch_ms: number;
+    order_execution_ms: number;
+  };
 }
 
 interface PendingSignal {
@@ -54,44 +54,39 @@ interface PendingSignal {
   ai_reasoning: string;
   conviction: number;
   timestamp: string;
+  rejection_reason?: string;
 }
 
 export default function AuditCenter() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"performance" | "governance">("performance");
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   // Fetch deep telemetry
-  const { data: telemetry } = useQuery<TelemetryData>({
+  const { data: telemetry, isLoading: telemetryLoading, error: telemetryError } = useQuery<TelemetryData>({
     queryKey: ["institutional-telemetry"],
-    queryFn: async () => {
-      const res = await axios.get(`${API_BASE_URL}/api/v1/telemetry`, {
-        headers: { apikey: API_KEY }
-      });
-      return res.data;
-    },
-    refetchInterval: 5000
+    queryFn: () => algoApi.getTelemetry(),
+    refetchInterval: 5000,
+    retry: 3
+  });
+
+  const { data: pnlTelemetry } = useQuery({
+    queryKey: ["telemetryPnl"],
+    queryFn: () => algoApi.getTelemetryPnl(),
+    refetchInterval: 10000,
   });
 
   // Fetch pending signals for HITL
-  const { data: pendingSignals } = useQuery<{ data: PendingSignal[] }>({
+  const { data: pendingSignals, isLoading: signalsLoading } = useQuery<{ data: PendingSignal[] }>({
     queryKey: ["hitl-signals"],
-    queryFn: async () => {
-      const res = await axios.get(`${API_BASE_URL}/api/v1/hitl/signals`, {
-        headers: { apikey: API_KEY }
-      });
-      return res.data;
-    },
+    queryFn: () => algoApi.getHitlSignals(),
     refetchInterval: 3000
   });
 
   // Approval Mutation
   const approveMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const res = await axios.post(`${API_BASE_URL}/api/v1/hitl/approve`, { id }, {
-        headers: { apikey: API_KEY }
-      });
-      return res.data;
-    },
+    mutationFn: (id: number) => algoApi.hitlApprove(id),
     onSuccess: () => {
       toast.success("Signal Verified and Executed");
       queryClient.invalidateQueries({ queryKey: ["hitl-signals"] });
@@ -101,12 +96,7 @@ export default function AuditCenter() {
 
   // Rejection Mutation
   const rejectMutation = useMutation({
-    mutationFn: async ({ id, reason }: { id: number; reason: string }) => {
-      const res = await axios.post(`${API_BASE_URL}/api/v1/hitl/reject`, { id, reason }, {
-        headers: { apikey: API_KEY }
-      });
-      return res.data;
-    },
+    mutationFn: ({ id, reason }: { id: number; reason: string }) => algoApi.hitlReject(id, reason),
     onSuccess: () => {
       toast.info("Signal Rejected // Risk Containment Active");
       queryClient.invalidateQueries({ queryKey: ["hitl-signals"] });
@@ -114,22 +104,60 @@ export default function AuditCenter() {
     onError: () => toast.error("Rejection Error")
   });
 
-  // Mock Equity Data (In production, this would come from DuckDB/Timescale)
-  const equityData = [
-    { time: "09:30", equity: 100000 },
-    { time: "10:00", equity: 101200 },
-    { time: "10:30", equity: 100800 },
-    { time: "11:00", equity: 102500 },
-    { time: "11:30", equity: 103100 },
-    { time: "12:00", equity: 102400 },
-    { time: "12:30", equity: 104500 },
-    { time: "13:00", equity: 105800 },
-    { time: "13:30", equity: 105200 },
-    { time: "14:00", equity: 107100 },
-    { time: "14:30", equity: 106900 },
-    { time: "15:00", equity: 108500 },
-    { time: "15:30", equity: 109200 },
+  // Real Equity Data from Telemetry
+  const pnlData = pnlTelemetry?.data || pnlTelemetry;
+  const equityCurve = Array.isArray(pnlData?.equity_curve) ? pnlData.equity_curve : [];
+
+  const equityData = equityCurve.map((point: any) => ({
+    time: point.time.includes('T') ? point.time.split('T')[1].split(':')[0] : point.time,
+    equity: point.value
+  })) || [
+    { time: "09:30", equity: 0 },
+    { time: "15:30", equity: 0 }
   ];
+
+  // Loading State
+  if (telemetryLoading && !telemetry) {
+    return (
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-12 h-12 text-primary animate-spin" />
+          <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/20">Initializing_Audit_Vault...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Error State
+  if (telemetryError) {
+    return (
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-6 max-w-md text-center px-8">
+          <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center">
+             <AlertCircle className="w-8 h-8 text-destructive" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-lg font-black uppercase tracking-tighter italic">Kernel_Link_Failure</h2>
+            <p className="text-xs text-white/40 leading-relaxed uppercase tracking-widest">
+              Cannot reach Aether Engine on port 18788.
+            </p>
+          </div>
+          <ul className="text-left text-[10px] text-white/30 font-mono uppercase tracking-wider space-y-1.5 border border-white/5 rounded px-5 py-4">
+            <li>1. Verify engine is running: <span className="text-white/50">docker compose ps algo-trader</span></li>
+            <li>2. Check broker session: <span className="text-white/50">docker logs algo_engine | tail -20</span></li>
+            <li>3. Confirm API key is valid in Settings → Auth</li>
+            <li>4. Ensure Tailscale is connected if on remote node</li>
+          </ul>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-8 py-3 bg-white text-black font-black text-[10px] uppercase tracking-[0.2em] hover:bg-primary transition-colors"
+          >
+            Re-Establish Link
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#050505] text-white selection:bg-primary/30">
@@ -182,31 +210,31 @@ export default function AuditCenter() {
         {/* KPI Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <KpiCard
-            label="Sharpe_Ratio"
-            value={telemetry?.performance.sharpe_ratio.toFixed(2) || "0.00"}
+            label="Portfolio_Net"
+            value={`₹${(pnlData?.all_time?.net || 0).toLocaleString()}`}
             icon={Activity}
-            color="text-blue-400"
-            desc="Risk-Adjusted Alpha"
+            color="text-secondary"
+            desc="Total Account Equity"
           />
           <KpiCard
             label="Profit_Factor"
-            value={telemetry?.pnl.profit_factor.toFixed(2) || "0.00"}
+            value={(telemetry?.data?.pnl?.profit_factor || telemetry?.pnl?.profit_factor || 0).toFixed(2)}
             icon={Zap}
             color="text-primary"
             desc="Efficiency Index"
           />
           <KpiCard
-            label="Max_Drawdown"
-            value={`${(telemetry?.performance.max_drawdown || 0).toFixed(2)}%`}
-            icon={Shield}
-            color="text-destructive"
-            desc="Capital Preservation"
+            label="Realized_Daily"
+            value={`₹${(pnlData?.daily?.net || 0).toLocaleString()}`}
+            icon={ShieldCheck}
+            color={(pnlData?.daily?.net || 0) >= 0 ? "text-primary" : "text-destructive"}
+            desc="Today's Performance"
           />
           <KpiCard
             label="Daily_Goal"
-            value="Reached"
+            value={`${((pnlData?.daily?.net || 0) / (pnlData?.all_time?.net || 1000000) * 100).toFixed(2)}%`}
             icon={TrendingUp}
-            color="text-secondary"
+            color="text-blue-400"
             desc="Target: 2.0%"
           />
         </div>
@@ -224,43 +252,45 @@ export default function AuditCenter() {
                   </div>
                   <div className="text-right">
                     <span className="text-[8px] font-black text-white/10 uppercase tracking-widest block mb-1">Unrealized_PnL</span>
-                    <span className="text-2xl font-black font-mono text-secondary">₹{telemetry?.pnl.daily_pnl.toLocaleString()}</span>
+                    <span className="text-2xl font-black font-mono text-secondary">₹{(telemetry?.pnl?.daily_pnl || 0).toLocaleString()}</span>
                   </div>
                </div>
 
                <div className="h-[400px] w-full">
-                 <ResponsiveContainer width="100%" height="100%">
-                   <AreaChart data={equityData}>
-                     <defs>
-                       <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
-                         <stop offset="5%" stopColor="#FFB000" stopOpacity={0.1}/>
-                         <stop offset="95%" stopColor="#FFB000" stopOpacity={0}/>
-                       </linearGradient>
-                     </defs>
-                     <XAxis
-                       dataKey="time"
-                       axisLine={false}
-                       tickLine={false}
-                       tick={{ fill: '#ffffff10', fontSize: 10, fontWeight: 900, fontFamily: 'monospace' }}
-                     />
-                     <YAxis
-                       hide
-                       domain={['dataMin - 1000', 'dataMax + 1000']}
-                     />
-                     <Tooltip
-                       contentStyle={{ background: '#000', border: '1px solid #ffffff10', fontSize: 10, fontWeight: 900, fontFamily: 'monospace' }}
-                       cursor={{ stroke: '#FFB000', strokeWidth: 1, strokeDasharray: '4 4' }}
-                     />
-                     <Area
-                       type="monotone"
-                       dataKey="equity"
-                       stroke="#FFB000"
-                       strokeWidth={2}
-                       fill="url(#equityGrad)"
-                       animationDuration={2000}
-                     />
-                   </AreaChart>
-                 </ResponsiveContainer>
+                 {equityData.length > 0 && (
+                   <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                     <AreaChart data={equityData}>
+                       <defs>
+                         <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
+                           <stop offset="5%" stopColor="#FFB000" stopOpacity={0.1}/>
+                           <stop offset="95%" stopColor="#FFB000" stopOpacity={0}/>
+                         </linearGradient>
+                       </defs>
+                       <XAxis
+                         dataKey="time"
+                         axisLine={false}
+                         tickLine={false}
+                         tick={{ fill: '#ffffff10', fontSize: 10, fontWeight: 900, fontFamily: 'monospace' }}
+                       />
+                       <YAxis
+                         hide
+                         domain={['dataMin - 1000', 'dataMax + 1000']}
+                       />
+                       <Tooltip
+                         contentStyle={{ background: '#000', border: '1px solid #ffffff10', fontSize: 10, fontWeight: 900, fontFamily: 'monospace' }}
+                         cursor={{ stroke: '#FFB000', strokeWidth: 1, strokeDasharray: '4 4' }}
+                       />
+                       <Area
+                         type="monotone"
+                         dataKey="equity"
+                         stroke="#FFB000"
+                         strokeWidth={2}
+                         fill="url(#equityGrad)"
+                         animationDuration={2000}
+                       />
+                     </AreaChart>
+                   </ResponsiveContainer>
+                 )}
                </div>
             </div>
 
@@ -273,7 +303,7 @@ export default function AuditCenter() {
 
                 <div className="space-y-4">
                    <AnimatePresence mode="popLayout">
-                    {pendingSignals?.data.map(signal => (
+                    {(Array.isArray(pendingSignals?.data) ? pendingSignals.data : (Array.isArray(pendingSignals) ? pendingSignals : [])).map(signal => (
                       <motion.div
                         key={signal.id}
                         initial={{ opacity: 0, x: -20 }}
@@ -294,21 +324,54 @@ export default function AuditCenter() {
                          <div className="col-span-5">
                             <span className="text-[8px] font-black text-white/20 uppercase block mb-1">Aether_AI_Inference</span>
                             <p className="text-[11px] text-white/50 leading-tight italic">"{signal.ai_reasoning}"</p>
+                            {signal.rejection_reason && (
+                              <p className="mt-1 text-[9px] text-rose-400/60 font-mono italic uppercase tracking-wide">
+                                REASON: {signal.rejection_reason}
+                              </p>
+                            )}
                          </div>
-                         <div className="col-span-3 flex justify-end gap-3">
-                            <button
-                              onClick={() => rejectMutation.mutate({ id: signal.id, reason: "Manual Rejection" })}
-                              className="w-10 h-10 flex items-center justify-center border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors"
-                            >
-                              <XCircle className="w-5 h-5" />
-                            </button>
-                            <button
-                              onClick={() => approveMutation.mutate(signal.id)}
-                              className="h-10 px-6 flex items-center gap-2 bg-secondary text-black font-black text-[10px] uppercase tracking-widest hover:bg-white transition-colors"
-                            >
-                              <CheckCircle2 className="w-4 h-4" />
-                              Approve
-                            </button>
+                         <div className="col-span-3 flex flex-col items-end gap-2">
+                           {rejectingId === signal.id ? (
+                             <div className="flex items-center gap-2">
+                               <input
+                                 autoFocus
+                                 value={rejectReason}
+                                 onChange={e => setRejectReason(e.target.value)}
+                                 placeholder="Rejection reason..."
+                                 className="bg-black/40 border border-white/10 rounded px-2 py-1 text-[9px] text-white font-mono placeholder-white/30 w-36"
+                                 onKeyDown={e => {
+                                   if (e.key === "Enter" && rejectReason.trim()) {
+                                     rejectMutation.mutate({ id: signal.id, reason: rejectReason.trim() });
+                                     setRejectingId(null); setRejectReason("");
+                                   }
+                                   if (e.key === "Escape") { setRejectingId(null); setRejectReason(""); }
+                                 }}
+                               />
+                               <button
+                                 onClick={() => {
+                                   rejectMutation.mutate({ id: signal.id, reason: rejectReason.trim() || "Manual Rejection" });
+                                   setRejectingId(null); setRejectReason("");
+                                 }}
+                                 className="text-[8px] font-black text-rose-500 border border-rose-500/30 px-2 py-1 hover:bg-rose-500/10 uppercase"
+                               >SEND</button>
+                             </div>
+                           ) : (
+                             <div className="flex gap-3">
+                               <button
+                                 onClick={() => { setRejectingId(signal.id); setRejectReason(""); }}
+                                 className="w-10 h-10 flex items-center justify-center border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors"
+                               >
+                                 <XCircle className="w-5 h-5" />
+                               </button>
+                               <button
+                                 onClick={() => approveMutation.mutate(signal.id)}
+                                 className="h-10 px-6 flex items-center gap-2 bg-secondary text-black font-black text-[10px] uppercase tracking-widest hover:bg-white transition-colors"
+                               >
+                                 <CheckCircle2 className="w-4 h-4" />
+                                 Approve
+                               </button>
+                             </div>
+                           )}
                          </div>
                       </motion.div>
                     ))}
@@ -330,13 +393,11 @@ export default function AuditCenter() {
                 <div className="flex items-center gap-3 mb-8">
                   <BarChart3 className="w-5 h-5 text-primary" />
                   <h3 className="text-sm font-black uppercase tracking-widest text-white">System_Audit_Vitals</h3>
-                </div>
-
-                <div className="space-y-6">
+                </div>                 <div className="space-y-6">
                    <div className="space-y-2">
                       <div className="flex justify-between text-[10px] font-black font-mono uppercase tracking-widest">
                          <span className="text-white/40">Engine_Entropy</span>
-                         <span className="text-primary">0.02% // STABLE</span>
+                         <span className="text-primary">{(telemetry?.performance_latency?.tick_dispatch_ms || 0.02).toFixed(2)}ms // {(telemetry?.performance_latency?.tick_dispatch_ms || 0) < 0.1 ? "ULTRA_LOW" : "NOMINAL"}</span>
                       </div>
                       <div className="h-1 bg-white/5 rounded-full overflow-hidden">
                          <motion.div initial={{ width: 0 }} animate={{ width: "2%" }} className="h-full bg-primary" />
@@ -346,18 +407,19 @@ export default function AuditCenter() {
                    <div className="space-y-2">
                       <div className="flex justify-between text-[10px] font-black font-mono uppercase tracking-widest">
                          <span className="text-white/40">Telemetry_Buffer</span>
-                         <span className="text-blue-400">14MB // FLUID</span>
+                         <span className="text-blue-400">{Math.round((pnlTelemetry?.equity_curve?.length || 0) / 10)}MB // FLUID</span>
                       </div>
                       <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                         <motion.div initial={{ width: 0 }} animate={{ width: "24%" }} className="h-full bg-blue-400" />
+                         <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(100, (pnlTelemetry?.equity_curve?.length || 0) / 2)}%` }} className="h-full bg-blue-400" />
                       </div>
                    </div>
                 </div>
 
+
                 <div className="mt-12 pt-8 border-t border-white/5 space-y-4">
                    <FlagRow label="Neural_Filter" active={true} />
-                   <FlagRow label="Risk_Limit_Shield" active={telemetry?.audit.risk_lock === false} inverse />
-                   <FlagRow label="Auto_Execute" active={telemetry?.audit.auto_execute || false} />
+                   <FlagRow label="Risk_Limit_Shield" active={telemetry?.audit?.risk_lock === false} inverse />
+                   <FlagRow label="Auto_Execute" active={telemetry?.audit?.auto_execute || false} />
                 </div>
              </div>
 

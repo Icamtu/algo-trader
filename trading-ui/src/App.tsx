@@ -29,44 +29,60 @@ const Auth = lazy(() => import("./pages/Auth"));
 const BrokerRegistry = lazy(() => import("./pages/BrokerRegistry"));
 const Roles = lazy(() => import("./pages/Roles"));
 const Profile = lazy(() => import("./pages/Profile"));
-const OpenAlgoHub = lazy(() => import("./pages/OpenAlgoHub"));
+const AetherHub = lazy(() => import("./pages/AetherHub"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const NotFound = lazy(() => import("./pages/NotFound"));
-const TradingDesk = lazy(() => import("./pages/TradingDesk"));
 
-// OpenAlgo Integration Components (Lazy)
-const Orders = lazy(() => import("./integrations/openalgo/pages/OrderBookPage").then(module => ({ default: module.OrderBookPage })));
-const Trades = lazy(() => import("./integrations/openalgo/pages/TradesPage").then(module => ({ default: module.TradesPage })));
-const Positions = lazy(() => import("./integrations/openalgo/pages/PositionsPage").then(module => ({ default: module.PositionsPage })));
-const Holdings = lazy(() => import("./integrations/openalgo/pages/HoldingsPage").then(module => ({ default: module.HoldingsPage })));
-const Logs = lazy(() => import("./integrations/openalgo/pages/LogsPage").then(module => ({ default: module.LogsPage })));
-const Connectivity = lazy(() => import("./integrations/openalgo/pages/ConnectivityPage").then(module => ({ default: module.ConnectivityPage })));
-const BrokerSelect = lazy(() => import("./integrations/openalgo/pages/BrokerSelectPage").then(module => ({ default: module.BrokerSelectPage })));
-const MasterContract = lazy(() => import("./integrations/openalgo/pages/MasterContractPage").then(module => ({ default: module.MasterContractPage })));
-const SandboxConfig = lazy(() => import("./integrations/openalgo/pages/SandboxConfigPage").then(module => ({ default: module.SandboxConfigPage })));
-const SandboxPnL = lazy(() => import("./integrations/openalgo/pages/SandboxPnLPage").then(module => ({ default: module.SandboxPnLPage })));
-const Analyzer = lazy(() => import("./integrations/openalgo/pages/AnalyzerPage").then(module => ({ default: module.AnalyzerPage })));
-const ActionCenter = lazy(() => import("./integrations/openalgo/pages/ActionCenterPage").then(module => ({ default: module.ActionCenterPage })));
-const OptionChainPage = lazy(() => import("./integrations/openalgo/pages/OptionChainPage"));
-const GEXDashboardPage = lazy(() => import("./integrations/openalgo/pages/GEXDashboardPage"));
-const OIProfilePage = lazy(() => import("./integrations/openalgo/pages/OIProfilePage"));
-const HealthMonitorPage = lazy(() => import("./integrations/openalgo/pages/HealthMonitorPage"));
-const PlaygroundPage = lazy(() => import("./integrations/openalgo/pages/PlaygroundPage"));
-const OITrackerPage = lazy(() => import("./integrations/openalgo/pages/OITrackerPage"));
-const VolSurfacePage = lazy(() => import("./integrations/openalgo/pages/VolSurfacePage"));
-const IVSmilePage = lazy(() => import("./integrations/openalgo/pages/IVSmilePage"));
-const IVChartPage = lazy(() => import("./integrations/openalgo/pages/IVChartPage"));
-const HistorifyPage = lazy(() => import("./integrations/openalgo/pages/HistorifyPage"));
-const MaxPainPage = lazy(() => import("./integrations/openalgo/pages/MaxPainPage"));
-const StraddleLabPage = lazy(() => import("./integrations/openalgo/pages/StraddleLabPage"));
-const StrategyRegistry = lazy(() => import("./integrations/openalgo/pages/StrategyRegistryPage"));
+// AetherDesk Integration Components (Lazy)
+const Orders = lazy(() => import("./integrations/aetherdesk/pages/OrderBookPage").then(module => ({ default: module.OrderBookPage })));
+const Trades = lazy(() => import("./integrations/aetherdesk/pages/TradesPage").then(module => ({ default: module.TradesPage })));
+const Positions = lazy(() => import("./integrations/aetherdesk/pages/PositionsPage").then(module => ({ default: module.PositionsPage })));
+const Holdings = lazy(() => import("./integrations/aetherdesk/pages/HoldingsPage").then(module => ({ default: module.HoldingsPage })));
+const Logs = lazy(() => import("./integrations/aetherdesk/pages/LogsPage").then(module => ({ default: module.LogsPage })));
+const Connectivity = lazy(() => import("./integrations/aetherdesk/pages/ConnectivityPage").then(module => ({ default: module.ConnectivityPage })));
+const BrokerSelect = lazy(() => import("./integrations/aetherdesk/pages/BrokerSelectPage").then(module => ({ default: module.BrokerSelectPage })));
+const MasterContract = lazy(() => import("./integrations/aetherdesk/pages/MasterContractPage").then(module => ({ default: module.MasterContractPage })));
+const SandboxConfig = lazy(() => import("./integrations/aetherdesk/pages/SandboxConfigPage").then(module => ({ default: module.SandboxConfigPage })));
+const SandboxPnL = lazy(() => import("./integrations/aetherdesk/pages/SandboxPnLPage").then(module => ({ default: module.SandboxPnLPage })));
+const SandboxHub = lazy(() => import("./integrations/aetherdesk/pages/SandboxHubPage"));
+const SandboxTradebook = lazy(() => import("./integrations/aetherdesk/pages/SandboxTradebook"));
+const SandboxOrderBook = lazy(() => import("./integrations/aetherdesk/pages/SandboxOrderBook"));
+const SandboxPositions = lazy(() => import("./integrations/aetherdesk/pages/SandboxPositions"));
+const SandboxLogs = lazy(() => import("./integrations/aetherdesk/pages/SandboxLogs"));
+const SandboxSummary = lazy(() => import("./integrations/aetherdesk/pages/SandboxSummary"));
+const Analyzer = lazy(() => import("./integrations/aetherdesk/pages/AnalyzerPage").then(module => ({ default: module.AnalyzerPage })));
+const ActionCenter = lazy(() => import("./integrations/aetherdesk/pages/ActionCenterPage").then(module => ({ default: module.ActionCenterPage })));
+const OptionChainPage = lazy(() => import("./integrations/aetherdesk/pages/OptionChainPage"));
+const GEXDashboardPage = lazy(() => import("./integrations/aetherdesk/pages/GEXDashboardPage"));
+const OIProfilePage = lazy(() => import("./integrations/aetherdesk/pages/OIProfilePage"));
+const HealthMonitorPage = lazy(() => import("./integrations/aetherdesk/pages/HealthMonitorPage"));
+const PlaygroundPage = lazy(() => import("./integrations/aetherdesk/pages/PlaygroundPage"));
+const OITrackerPage = lazy(() => import("./integrations/aetherdesk/pages/OITrackerPage"));
+const VolSurfacePage = lazy(() => import("./integrations/aetherdesk/pages/VolSurfacePage"));
+const IVSmilePage = lazy(() => import("./integrations/aetherdesk/pages/IVSmilePage"));
+const IVChartPage = lazy(() => import("./integrations/aetherdesk/pages/IVChartPage"));
+const HistorifyPage = lazy(() => import("./integrations/aetherdesk/pages/HistorifyPage"));
+const MaxPainPage = lazy(() => import("./integrations/aetherdesk/pages/MaxPainPage"));
+const StraddleLabPage = lazy(() => import("./integrations/aetherdesk/pages/StraddleLabPage"));
+const StrategyRegistry = lazy(() => import("./integrations/aetherdesk/pages/StrategyRegistryPage"));
 const MarketRegime = lazy(() => import("./pages/MarketRegimePage"));
+const StrategyManagerPage = lazy(() => import("./features/strategy-manager/StrategyManagerPage"));
+const PnLTracker = lazy(() => import("./pages/PnLTracker"));
 
+const IndicatorFactory = lazy(() => import("./pages/IndicatorFactory"));
 const IntelligenceHubPage = lazy(() => import("./pages/IntelligenceHubPage"));
+const AssetVault = lazy(() => import("./pages/AssetVault"));
+
+// Settings pages
+const SettingsLayout = lazy(() => import("./pages/settings/SettingsLayout").then(module => ({ default: module.SettingsLayout })));
+const Preferences = lazy(() => import("./pages/settings/Preferences"));
+const Charts = lazy(() => import("./pages/settings/Charts"));
+const ApiKeys = lazy(() => import("./pages/settings/ApiKeys"));
+const BacktestDefaults = lazy(() => import("./pages/settings/BacktestDefaults"));
 
 // Synchronous core components
-import { OpenAlgoLayout } from "./components/trading/OpenAlgoLayout";
+import { AetherLayout } from "./components/trading/AetherLayout";
 import { AetherAppShell } from "./components/layout/AetherAppShell";
 
 const queryClient = new QueryClient();
@@ -114,7 +130,8 @@ const App = () => (
                     <Route element={<ProtectedRoute><AetherAppShell /></ProtectedRoute>}>
                       {/* Aether Integrated Core */}
                       <Route path="/" element={<LandingDashboard />} />
-                      <Route path="/audit" element={<AuditCenter />} />
+                      <Route path="/aetherdesk/audit" element={<AuditCenter />} />
+                      <Route path="/execution/command-center" element={<StrategyManagerPage />} />
                       <Route path="/execution/registry" element={<StrategyMonitoring />} />
                       <Route path="/intelligence" element={<IntelligenceHubPage />} />
                       <Route path="/intelligence/regime" element={<MarketRegime />} />
@@ -129,13 +146,14 @@ const App = () => (
                       <Route path="/intelligence/option-chain" element={<OptionChainPage />} />
                       <Route path="/intelligence/max-pain" element={<MaxPainPage />} />
                       <Route path="/intelligence/straddle-lab" element={<StraddleLabPage />} />
+                      <Route path="/intelligence/indicator-factory" element={<IndicatorFactory />} />
                       <Route path="/governance" element={<Infrastructure />} />
                       <Route path="/risk" element={<Risk />} />
+                      <Route path="/pnl-tracker" element={<PnLTracker />} />
                       <Route path="/journal" element={<TradeJournal />} />
 
-                      {/* Legacy / OpenAlgo Bridges */}
-                      <Route path="/openalgo/strategy-registry" element={<StrategyRegistry />} />
-                      <Route path="/trading-desk" element={<TradingDesk />} />
+                      {/* Legacy / AetherDesk Bridges */}
+                      <Route path="/aetherdesk/strategy-registry" element={<StrategyRegistry />} />
                       <Route path="/strategy-lab" element={<StrategyLab />} />
                       <Route path="/scanner" element={<MarketScanner />} />
                       <Route path="/portfolio" element={<Portfolio />} />
@@ -145,10 +163,16 @@ const App = () => (
                       <Route path="/alerts" element={<Alerts />} />
                       <Route path="/brokers" element={<BrokerRegistry />} />
                       <Route path="/roles" element={<Roles />} />
-                      <Route path="/profile" element={<Profile />} />
 
-                      <Route path="/openalgo" element={<OpenAlgoLayout />}>
-                        <Route index element={<OpenAlgoHub />} />
+                      {/* Settings Hub - Nested Routes */}
+                      <Route path="/profile" element={<SettingsLayout><Profile /></SettingsLayout>} />
+                      <Route path="/profile/preferences" element={<SettingsLayout><Preferences /></SettingsLayout>} />
+                      <Route path="/profile/charts" element={<SettingsLayout><Charts /></SettingsLayout>} />
+                      <Route path="/profile/api-keys" element={<SettingsLayout><ApiKeys /></SettingsLayout>} />
+                      <Route path="/profile/backtest" element={<SettingsLayout><BacktestDefaults /></SettingsLayout>} />
+
+                      <Route path="/aetherdesk" element={<AetherLayout />}>
+                        <Route index element={<AetherHub />} />
                         <Route path="orders" element={<Orders />} />
                         <Route path="trades" element={<Trades />} />
                         <Route path="positions" element={<Positions />} />
@@ -157,8 +181,14 @@ const App = () => (
                         <Route path="connectivity" element={<Connectivity />} />
                         <Route path="broker" element={<BrokerSelect />} />
                         <Route path="master-contract" element={<MasterContract />} />
-                        <Route path="sandbox" element={<SandboxConfig />} />
-                        <Route path="sandbox/pnl" element={<SandboxPnL />} />
+                        <Route path="simulation" element={<SandboxConfig />} />
+                        <Route path="simulation/pnl" element={<SandboxPnL />} />
+                        <Route path="sandbox" element={<SandboxHub />} />
+                        <Route path="sandbox/trades" element={<SandboxTradebook />} />
+                        <Route path="sandbox/orderbook" element={<SandboxOrderBook />} />
+                        <Route path="sandbox/positions" element={<SandboxPositions />} />
+                        <Route path="sandbox/logs" element={<SandboxLogs />} />
+                        <Route path="sandbox/summary" element={<SandboxSummary />} />
                         <Route path="analyzer" element={<Analyzer />} />
                         <Route path="action-center" element={<ActionCenter />} />
                         <Route path="option-chain" element={<Navigate to="/intelligence/option-chain" replace />} />
@@ -174,14 +204,17 @@ const App = () => (
                         <Route path="max-pain" element={<Navigate to="/intelligence/max-pain" replace />} />
                         <Route path="straddle-lab" element={<Navigate to="/intelligence/straddle-lab" replace />} />
                         <Route path="strategy-registry" element={<StrategyRegistry />} />
+                        <Route path="vault" element={<AssetVault />} />
                       </Route>
 
                       {/* Redirections for legacy paths */}
-                      <Route path="/orders" element={<Navigate to="/openalgo/orders" replace />} />
-                      <Route path="/trades" element={<Navigate to="/openalgo/trades" replace />} />
-                      <Route path="/positions" element={<Navigate to="/openalgo/positions" replace />} />
-                      <Route path="/holdings" element={<Navigate to="/openalgo/holdings" replace />} />
-                      <Route path="/logs" element={<Navigate to="/openalgo/logs" replace />} />
+                      <Route path="/orders" element={<Navigate to="/aetherdesk/orders" replace />} />
+                      <Route path="/trades" element={<Navigate to="/aetherdesk/trades" replace />} />
+                      <Route path="/positions" element={<Navigate to="/aetherdesk/positions" replace />} />
+                      <Route path="/holdings" element={<Navigate to="/aetherdesk/holdings" replace />} />
+                      <Route path="/logs" element={<Navigate to="/aetherdesk/logs" replace />} />
+                      <Route path="/audit" element={<Navigate to="/aetherdesk/audit" replace />} />
+                      <Route path="/analyzer" element={<Navigate to="/aetherdesk/analyzer" replace />} />
                     </Route>
 
                     <Route path="*" element={<NotFound />} />

@@ -6,7 +6,7 @@ from data.market_data import Tick
 from execution.order_manager import OrderManager
 from services.market_data_service import MarketDataService
 from services.analytics_engine import AnalyticsEngine
-from data.historify_db import get_indicator_state, get_ohlcv_data
+from data.historify_db import get_ohlcv_data
 
 
 logger = logging.getLogger(__name__)
@@ -86,8 +86,8 @@ class IntradayStrategy(BaseStrategy):
             )
             self.last_analytics_refresh = now
             logger.info(f"[{self.name}] Updated Analytics Context: {self.cached_context}")
-        except Exception as e:
-            logger.warning(f"[{self.name}] Failed to update analytical context: {e}")
+        except Exception:
+            logger.warning("[%s] Failed to update analytical context", self.name, exc_info=True)
             # Use a 60s backoff for exceptions
             self.last_analytics_refresh = now - 240
 

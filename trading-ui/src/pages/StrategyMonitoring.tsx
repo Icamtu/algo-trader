@@ -22,9 +22,20 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { CONFIG } from "@/lib/config";
+import { algoApi } from "@/features/aetherdesk/api/client";
 
 const MetricCard = ({ title, value, subtext, icon: Icon, trend }: any) => (
   <Card className="bg-slate-950/40 backdrop-blur-md border-white/5 hover:border-primary/20 transition-all group relative overflow-hidden">
@@ -69,6 +80,7 @@ const StrategyMonitoring = () => {
   const [selectedSignal, setSelectedSignal] = useState<any>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [scanResults, setScanResults] = useState<any[]>([]);
+  const [pendingApproval, setPendingApproval] = useState<any>(null);
 
   // Real-time Urgency Toast
   useEffect(() => {
@@ -81,21 +93,7 @@ const StrategyMonitoring = () => {
           description: `${newSignal.symbol} ${newSignal.action} @ ${newSignal.price} - Approval Required`,
           action: {
             label: "APPROVE",
-            onClick: () => {
-              fetch(`${CONFIG.API_BASE_URL}/api/v1/hitl/approve`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': CONFIG.API_KEY
-                },
-                body: JSON.stringify({ id: newSignal.id })
-              }).then(res => res.json())
-                .then(result => {
-                  if (result.status === 'success') {
-                    toast.success("Trade Approved from Alert");
-                  }
-                });
-            }
+            onClick: () => setPendingApproval(newSignal)
           },
           icon: <ShieldAlert className="w-4 h-4 text-red-500 animate-bounce" />,
           duration: 10000,
@@ -104,21 +102,21 @@ const StrategyMonitoring = () => {
     }
   }, [lastMessage]);
 
+  const executeApproval = (signal: any) => {
+    algoApi.hitlApprove(signal.id)
+      .then(result => {
+        if (result.status === 'success') {
+          toast.success("Trade Approved");
+        }
+      });
+  };
+
   const handleNeuralScan = async (symbols: string, timeframe: string) => {
     setIsScanning(true);
     setSelectedSignal(null); // Clear selection to show scan result
 
     try {
-      const response = await fetch(`${CONFIG.API_BASE_URL}/api/v1/aether/analyze`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': CONFIG.API_KEY
-        },
-        body: JSON.stringify({ symbols, timeframe })
-      });
-
-      const result = await response.json();
+      const result = await algoApi.aetherAnalyze(symbols, timeframe);
       if (result.status === 'success') {
         const rawData = result.data;
         const analysisArray = Array.isArray(rawData) ? rawData : [rawData];
@@ -146,7 +144,7 @@ const StrategyMonitoring = () => {
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-background relative selection:bg-primary/30">
+    <div className="min-h-full flex flex-col bg-background relative selection:bg-primary/30">
       <div className="noise-overlay" />
       <div className="scanline" />
 
@@ -261,6 +259,57 @@ const StrategyMonitoring = () => {
         </div>
       </div>
 
+
+      {/* HITL Approval Confirmation Dialog */}
+      <AlertDialog open={pendingApproval !== null} onOpenChange={(open) => { if (!open) setPendingApproval(null); }}>
+        <AlertDialogContent className="bg-slate-950 border-primary/30">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-sm font-black uppercase tracking-widest text-foreground">
+              Confirm HITL Signal Approval
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-xs font-mono text-muted-foreground">
+                {pendingApproval && (
+                  <>
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <div className="p-2 bg-white/5 border border-white/10">
+                        <div className="text-[9px] uppercase tracking-widest text-muted-foreground/50">Strategy</div>
+                        <div className="text-white/80 font-black truncate">{pendingApproval.strategy || '—'}</div>
+                      </div>
+                      <div className="p-2 bg-white/5 border border-white/10">
+                        <div className="text-[9px] uppercase tracking-widest text-muted-foreground/50">Symbol</div>
+                        <div className="text-white/80 font-black">{pendingApproval.symbol || '—'}</div>
+                      </div>
+                      <div className="p-2 bg-white/5 border border-white/10">
+                        <div className="text-[9px] uppercase tracking-widest text-muted-foreground/50">Action</div>
+                        <div className="text-primary font-black">{pendingApproval.action || '—'}</div>
+                      </div>
+                      <div className="p-2 bg-white/5 border border-white/10">
+                        <div className="text-[9px] uppercase tracking-widest text-muted-foreground/50">Conviction</div>
+                        <div className="text-white/80 font-black">{pendingApproval.conviction != null ? `${(pendingApproval.conviction * 100).toFixed(1)}%` : '—'}</div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => setPendingApproval(null)}
+              className="rounded-none font-black uppercase text-[10px] tracking-widest"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { executeApproval(pendingApproval); setPendingApproval(null); }}
+              className="rounded-none font-black uppercase text-[10px] tracking-widest bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            >
+              Approve
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Footer Status Bar */}
       <footer className="h-8 border-t border-white/5 bg-slate-950/80 backdrop-blur-md flex items-center px-4 justify-between font-mono text-[9px] uppercase tracking-[0.1em] text-muted-foreground/60 relative z-30">

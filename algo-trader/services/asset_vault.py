@@ -45,8 +45,17 @@ class AssetVault:
         Registers a new asset or a new version of an asset.
         """
         try:
-            # 1. Save file to storage
-            filename = f"{name}_{version}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            # 1. Sanitize and Validate
+            allowed_types = ["strategy", "dataset", "result", "model"]
+            if asset_type not in allowed_types:
+                raise ValueError(f"Invalid asset type. Must be one of {allowed_types}")
+
+            # Enforce strict name and version normalization to prevent path traversal
+            safe_name = os.path.basename(name).replace(" ", "_")
+            safe_version = os.path.basename(version).replace(" ", "_")
+
+            # 2. Save file to storage
+            filename = f"{safe_name}_{safe_version}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
             if asset_type == "strategy":
                 filename += ".py"
             elif asset_type == "dataset":
@@ -55,7 +64,13 @@ class AssetVault:
                 filename += ".blob"
 
             rel_path = os.path.join(asset_type, filename)
-            abs_path = os.path.join(VAULT_STORAGE_PATH, rel_path)
+            abs_path = os.path.normpath(os.path.join(VAULT_STORAGE_PATH, rel_path))
+
+            # Ensure the final path is strictly within VAULT_STORAGE_PATH
+            # Using commonpath is more robust than startswith for path validation
+            vault_base = os.path.abspath(VAULT_STORAGE_PATH)
+            if os.path.commonpath([vault_base, os.path.abspath(abs_path)]) != vault_base:
+                raise PermissionError("Access denied: Invalid path construction.")
 
             with open(abs_path, "w") as f:
                 f.write(file_content)
@@ -76,8 +91,8 @@ class AssetVault:
 
             logger.info(f"Asset '{name}' [ID: {asset_id}] registered successfully in the vault.")
             return asset_id
-        except Exception as e:
-            logger.error(f"Failed to register asset: {e}")
+        except Exception:
+            logger.error("Failed to register asset", exc_info=True)
             raise
 
     def list_assets(self, asset_type: Optional[str] = None, tags: Optional[List[str]] = None) -> List[Dict[str, Any]]:
@@ -102,8 +117,8 @@ class AssetVault:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute(query, params)
                     return cur.fetchall()
-        except Exception as e:
-            logger.error(f"Failed to list assets: {e}")
+        except Exception:
+            logger.error("Failed to list assets", exc_info=True)
             return []
 
     def get_asset_details(self, asset_id: int) -> Optional[Dict[str, Any]]:
@@ -115,8 +130,8 @@ class AssetVault:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute("SELECT * FROM assets WHERE id = %s", (asset_id,))
                     return cur.fetchone()
-        except Exception as e:
-            logger.error(f"Failed to get asset details: {e}")
+        except Exception:
+            logger.error("Failed to get asset details", exc_info=True)
             return None
 
     def search_assets(self, search_term: str) -> List[Dict[str, Any]]:
@@ -134,8 +149,8 @@ class AssetVault:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute(query, (term, term, search_term))
                     return cur.fetchall()
-        except Exception as e:
-            logger.error(f"Search failed: {e}")
+        except Exception:
+            logger.error("Search failed", exc_info=True)
             return []
 
 # Singleton instance

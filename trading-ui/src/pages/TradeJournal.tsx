@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { RightPanel } from "@/components/trading/RightPanel";
 import { NewOrderModal } from "@/components/trading/NewOrderModal";
-import { algoApi } from "@/features/openalgo/api/client";
-import { useTradingMode } from "@/features/openalgo/hooks/useTrading";
+import { algoApi } from "@/features/aetherdesk/api/client";
+import { useTradingMode } from "@/features/aetherdesk/hooks/useTrading";
 import { useAppModeStore } from "@/stores/appModeStore";
 import { useToast } from "@/hooks/use-toast";
 import type { Trade } from "@/types/api";
@@ -32,7 +32,7 @@ export default function TradeJournal() {
   const fetchTrades = async () => {
     setIsLoading(true);
     try {
-      const response = await algoApi.getOrders();
+      const response = await algoApi.getTradebook();
       setTrades(response.trades || []);
     } catch (error) {
       console.error("Failed to fetch trades", error);
@@ -56,7 +56,7 @@ export default function TradeJournal() {
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-background relative">
+    <div className="min-h-full flex flex-col bg-background relative">
       <div className="noise-overlay" />
       <div className="scanline opacity-10" />
 
@@ -104,8 +104,8 @@ export default function TradeJournal() {
         </div>
       </div>
 
-      <div className="flex-1 flex min-h-0 relative z-10">
-        <div className="flex-1 overflow-auto p-4 custom-scrollbar">
+      <div className="flex relative z-10 p-4 pb-12 gap-4">
+        <div className="flex-1">
           {activeTab === "Log" && (
             <div className="space-y-2">
               {isLoading && (
@@ -192,7 +192,7 @@ export default function TradeJournal() {
                <div className="col-span-4 border border-border/10 bg-card/5 p-4">
                  <h3 className={cn("text-[9px] font-mono font-black uppercase tracking-widest mb-4", isAD ? "text-amber-500" : "text-teal-500")}>Direction_Pulse</h3>
                  <div className="h-32">
-                   <ResponsiveContainer width="100%" height="100%">
+                   <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                     <PieChart>
                       <Pie data={[{v:stats.buys, c:isAD ? "#F59E0B" : "#14B8A6"}, {v:stats.sells, c:"#F43F5E"}]} cx="50%" cy="50%" innerRadius={30} outerRadius={45} dataKey="v" stroke="none">
                         {[{c:isAD ? "#F59E0B" : "#14B8A6"}, {c:"#F43F5E"}].map((e, i) => (<Cell key={i} fill={e.c} fillOpacity={0.4} />))}

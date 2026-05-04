@@ -1,5 +1,5 @@
 import React from "react";
-import { useTelemetryPerformance } from "@/features/openalgo/hooks/useTrading";
+import { useTelemetryPerformance } from "@/features/aetherdesk/hooks/useTrading";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";

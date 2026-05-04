@@ -6,7 +6,7 @@ export type AppMode = 'live' | 'analyzer'
 interface ThemeState {
   appMode: AppMode
   isTogglingMode: boolean
-  
+
   setAppMode: (mode: AppMode) => void
   toggleAppMode: () => Promise<{ success: boolean; message?: string }>
   syncAppMode: () => Promise<void>

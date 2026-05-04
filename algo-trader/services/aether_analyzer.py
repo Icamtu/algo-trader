@@ -4,6 +4,9 @@ import random
 from datetime import datetime
 from typing import Dict, Any, List
 
+from core.context import app_context
+from database.trade_logger import log_api_call
+
 logger = logging.getLogger(__name__)
 
 class AetherAnalyzer:
@@ -24,7 +27,7 @@ class AetherAnalyzer:
         logger.info(f"Initiating Neural Scan for {symbol} on {timeframe}")
 
         # 1. Fetch real market context via OpenAlgo
-        from execution.openalgo_client import client as oa_client
+
         import pandas as pd
         import numpy as np
 
@@ -38,16 +41,28 @@ class AetherAnalyzer:
                 symbol = symbol.replace("-NFO", "")
 
             # Fetch last 50 candles for analysis
-            history_data = await oa_client.get_history_async(symbol, exchange, interval="5")
+            om = app_context.get("order_manager")
+            if not om:
+                logger.error("OrderManager not found in context")
+                return self._generate_fallback_analysis(symbol, timeframe, 0.0)
+
+            # AetherBridge: Use native history if available, else skip
+            try:
+                history_data = await om.native_broker.get_history(symbol, exchange, interval="5")
+            except Exception:
+                logger.warning(f"History fetch failed for {symbol}", exc_info=True)
+                history_data = {"data": []}
+
             candles = history_data.get("data", [])
 
             if not candles or len(candles) < 20:
                 logger.warning(f"Insufficient history for {symbol}, falling back to minimal scan")
-                # Fallback to current quote if history fails
-                quote = oa_client.get_quote(symbol, exchange)
-                qdata = quote.get("data", quote)
-                price = float(qdata.get("lp", qdata.get("ltp", 0)))
-                return self._generate_fallback_analysis(symbol, timeframe, price)
+                # Fallback to current quote
+                quote = await om.native_broker.get_quote(symbol, exchange)
+                price = float(quote.price if hasattr(quote, 'price') else 0.0)
+                result = self._generate_fallback_analysis(symbol, timeframe, price)
+                log_api_call("NeuralScan:Fallback", {"symbol": symbol, "timeframe": timeframe}, result, strategy="AetherAnalyzer")
+                return result
 
             df = pd.DataFrame(candles)
             df['close'] = df['close'].astype(float)
@@ -88,7 +103,7 @@ class AetherAnalyzer:
                 {"label": "Volume Profile", "value": int(random.randint(45, 85))} # Volume usually available
             ]
 
-            return {
+            result = {
                 "symbol": symbol,
                 "timeframe": timeframe,
                 "regime": regime,
@@ -102,8 +117,12 @@ class AetherAnalyzer:
                 "timestamp": datetime.utcnow().isoformat()
             }
 
-        except Exception as e:
-            logger.error(f"Neural Scan Fault for {symbol}: {e}")
+            # Log the successful scan
+            log_api_call("NeuralScan", {"symbol": symbol, "timeframe": timeframe}, result, strategy="AetherAnalyzer")
+            return result
+
+        except Exception:
+            logger.error(f"Neural Scan Fault for {symbol}", exc_info=True)
             return self._generate_fallback_analysis(symbol, timeframe, 0.0)
 
     def _generate_fallback_analysis(self, symbol: str, timeframe: str, price: float) -> Dict[str, Any]:

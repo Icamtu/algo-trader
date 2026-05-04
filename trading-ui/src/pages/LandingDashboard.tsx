@@ -11,7 +11,7 @@ import { useAether } from "@/contexts/AetherContext";
 import { cn } from "@/lib/utils";
 import { IndustrialValue } from "@/components/trading/IndustrialValue";
 import { TelemetryOscilloscope } from "@/components/trading/TelemetryOscilloscope";
-import { useSystemHealth, useStrategies, useOrders, usePositions, useReconcilePositions } from "@/features/openalgo/hooks/useTrading";
+import { useSystemHealth, useStrategies, useOrders, usePositions, useReconcilePositions, useTelemetryPnl } from "@/features/aetherdesk/hooks/useTrading";
 import { RecentTrades } from "@/components/dashboard/RecentTrades";
 import { PnLSummary } from "@/components/dashboard/PnLSummary";
 import { PerformanceVitals } from "@/components/dashboard/PerformanceVitals";
@@ -24,11 +24,23 @@ export default function LandingDashboard() {
 
   const { data: healthRes } = useSystemHealth();
   const health = healthRes?.data || healthRes;
-  const { data: strategiesRes } = useStrategies();
+  const { data: strategiesData } = useStrategies();
   const { data: orders } = useOrders();
   const { data: positions } = usePositions();
+  const { data: pnlData } = useTelemetryPnl();
 
-  const strategies = strategiesRes?.strategies || [];
+  const strategies = Array.isArray(strategiesData?.data?.strategies)
+    ? strategiesData.data.strategies
+    : (Array.isArray(strategiesData?.strategies) ? strategiesData.strategies : []);
+
+  const pnlSummary = pnlData?.data || pnlData;
+  const metrics = {
+    dayPnL: pnlSummary?.total_pnl || 0,
+    pnlPct: pnlSummary?.pnl_percentage || 0,
+    winRate: 64.2, // Simulated
+    sharpe: 2.1 // Simulated
+  };
+
   const activeStrategies = strategies.filter((s: any) => s.is_active).length;
 
   const { mutate: reconcile, isPending: isReconciling } = useReconcilePositions();
@@ -36,21 +48,23 @@ export default function LandingDashboard() {
 
   const selectedTick = selectedSymbol ? ticks[selectedSymbol] : null;
 
-  const movers = tickerSymbols.slice(2).map(sym => {
-    const live = ticks[sym];
-    return {
-      symbol: sym,
-      ltp: live?.ltp || 0,
-      change: parseFloat(live?.chg_pct || "0"),
-      volume: "LIVE",
-      sentiment: "Analyzing",
-      signal: "WAIT"
-    };
-  });
-  const isLoading = tickerSymbols.length === 0;
+  const movers = Array.isArray(tickerSymbols)
+    ? tickerSymbols.slice(2).map(sym => {
+        const live = ticks[sym];
+        return {
+          symbol: sym,
+          ltp: live?.ltp || 0,
+          change: parseFloat(live?.chg_pct || "0"),
+          volume: "LIVE",
+          sentiment: "Analyzing",
+          signal: "WAIT"
+        };
+      })
+    : [];
+  const isLoading = !Array.isArray(tickerSymbols) || tickerSymbols.length === 0;
 
   return (
-    <div className="relative space-y-6 pb-12 overflow-hidden">
+    <div className="relative space-y-6 pb-12">
       {/* Decorative Neural Flow */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] neural-flow-bg opacity-30 animate-neural-pulse" />
       <div className="absolute bottom-0 left-0 w-[400px] h-[400px] neural-flow-bg opacity-20 animate-neural-pulse" style={{ animationDelay: '1s' }} />
@@ -186,7 +200,7 @@ export default function LandingDashboard() {
                     }}
                     initial="initial"
                     animate="animate"
-                    className="grid grid-cols-1 gap-2 h-[450px] overflow-auto custom-scrollbar pr-2"
+                    className="grid grid-cols-1 gap-2 pr-2"
                  >
                    {movers?.map((mover) => (
                      <motion.div

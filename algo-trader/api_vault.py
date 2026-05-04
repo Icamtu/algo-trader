@@ -4,6 +4,7 @@ import json
 import logging
 import asyncpg
 from datetime import datetime
+from typing import List, Dict, Any, Optional
 from core.config import settings
 
 vault_bp = Blueprint('vault', __name__)
@@ -62,12 +63,25 @@ async def register_asset():
     content = data.get('content', '') # Base64 or string content
     metadata = data.get('metadata', {})
 
-    # Save to storage
-    storage_dir = os.path.join(settings.get('storage_path', '/app/storage'), 'vault', asset_type)
+    # 1. Sanitize and Validate
+    allowed_types = ["strategy", "dataset", "result", "model"]
+    if asset_type not in allowed_types:
+        return jsonify({"error": f"Invalid asset type. Must be one of {allowed_types}"}), 400
+
+    safe_name = os.path.basename(name).lower().replace(' ', '_')
+    safe_version = os.path.basename(version).replace(' ', '_')
+
+    # 2. Save to storage
+    base_storage = settings.get('storage_path', '/app/storage')
+    storage_dir = os.path.join(base_storage, 'vault', asset_type)
     os.makedirs(storage_dir, exist_ok=True)
 
-    filename = f"{name.lower().replace(' ', '_')}_{version}.dat"
+    filename = f"{safe_name}_{safe_version}.dat"
     file_path = os.path.join(storage_dir, filename)
+
+    # Final validation that we haven't escaped the storage base
+    if not os.path.abspath(file_path).startswith(os.path.abspath(base_storage)):
+        return jsonify({"error": "Access denied: Invalid path construction"}), 403
 
     with open(file_path, 'w') as f:
         f.write(content)
@@ -103,10 +117,16 @@ async def get_content(asset_id):
             return jsonify({"error": "Asset not found"}), 404
 
         file_path = row['file_path']
-        if not os.path.exists(file_path):
+        base_storage = settings.get('storage_path', '/app/storage')
+        abs_path = os.path.abspath(file_path)
+
+        if not abs_path.startswith(os.path.abspath(base_storage)):
+             return jsonify({"error": "Access denied: Forbidden path"}), 403
+
+        if not os.path.exists(abs_path):
             return jsonify({"error": "File missing on storage board"}), 404
 
-        return send_file(file_path)
+        return send_file(abs_path)
     finally:
         await conn.close()
 

@@ -23,6 +23,7 @@ export const CONFIG = {
     // Use relative proxy paths for better Tailscale/Nginx compatibility
     API_BASE_URL: "/algo-api",
     WS_URL: `${wsProtocol}//${host}/algo-ws`,
-    // Security: API_KEY must be provided via .env (VITE_OPENALGO_API_KEY)
-    API_KEY: import.meta.env.VITE_OPENALGO_API_KEY || ""
+    // Security: API_KEY must be provided via .env (VITE_AETHERDESK_API_KEY)
+    API_KEY: import.meta.env.VITE_AETHERDESK_API_KEY || "",
+    DEBUG: import.meta.env.VITE_DEBUG === "true",
 };

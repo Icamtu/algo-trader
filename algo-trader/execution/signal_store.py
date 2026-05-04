@@ -40,8 +40,8 @@ class SignalStore:
             self.redis.ping()
             self.redis_active = True
             logger.info(f"Connected to Redis pool at {self.redis_host} (Max: 50)")
-        except Exception as e:
-            logger.warning(f"Failed to connect to Redis: {e}. Falling back to SQLite-only mode.")
+        except Exception:
+            logger.warning("Failed to connect to Redis. Falling back to SQLite-only mode.", exc_info=True)
             self.redis_active = False
             self.redis = None
 
@@ -53,8 +53,8 @@ class SignalStore:
             return None
         try:
             return func(*args, **kwargs)
-        except Exception as e:
-            logger.error(f"Redis Operation Failed: {e}")
+        except Exception:
+            logger.error("Redis Operation Failed", exc_info=True)
             # Do not deactivate permanently on transient errors for institutional scale
             return None
 
@@ -79,8 +79,8 @@ class SignalStore:
         # 1. Write to SQLite with retry logic
         try:
             order_id = self._sqlite_retry(self.sqlite.queue_order_for_approval, order_data)
-        except Exception as e:
-            logger.error(f"Failed to save signal to SQLite after retries: {e}")
+        except Exception:
+            logger.error("Failed to save signal to SQLite after retries", exc_info=True)
             return None
 
         if order_id:
@@ -114,8 +114,8 @@ class SignalStore:
         # 1. Update SQLite
         try:
             success = self._sqlite_retry(self.sqlite.update_action_order_status, order_id, status, reason=reason)
-        except Exception as e:
-            logger.error(f"Failed to resolve signal in SQLite: {e}")
+        except Exception:
+            logger.error("Failed to resolve signal in SQLite", exc_info=True)
             success = False
 
         # 2. Remove from Redis Pending

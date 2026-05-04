@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS broker_configs (
 ALTER TABLE broker_configs ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Users can only see their own configs
-CREATE POLICY "Users can only see their own configs" ON broker_configs 
+CREATE POLICY "Users can only see their own configs" ON broker_configs
 FOR ALL USING (auth.uid() = user_id);
 
 -- 2. Backtest Results
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS backtest_results (
 ALTER TABLE backtest_results ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Users can only see their own results
-CREATE POLICY "Users can only see their own results" ON backtest_results 
+CREATE POLICY "Users can only see their own results" ON backtest_results
 FOR ALL USING (auth.uid() = user_id);
 
 -- 3. Live Positions
@@ -110,4 +110,3 @@ ALTER TABLE trades ENABLE ROW LEVEL SECURITY;
 -- Policy: Users can only see their own trades
 CREATE POLICY "Users can only see their own trades" ON trades
 FOR ALL USING (auth.uid() = user_id);
-

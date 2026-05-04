@@ -11,7 +11,6 @@ from core.config import settings
 from core.scheduler import AlgoScheduler
 from core.strategy_runner import StrategyRunner
 from data.market_data import MarketDataStream
-from execution.openalgo_client import OpenAlgoClient
 from execution.order_manager import OrderManager
 from portfolio.portfolio_manager import PortfolioManager
 from execution.position_manager import PositionManager
@@ -49,7 +48,7 @@ async def system_health_monitor(order_manager):
             if ss_status["is_healthy"]:
                 health_update["broker"] = {"status": "HEALTHY", "details": "Active Session"}
             else:
-                health_update["broker"] = {"status": "OFFLINE", "details": ss_status["last_error"] or "Auth Required"}
+                health_update["broker"] = {"status": "OFFLINE", "details": "Authentication required"}
 
             # 2. Check APIs (Async)
             async def check_api(name, url, timeout=2.0):
@@ -61,17 +60,23 @@ async def system_health_monitor(order_manager):
                         if resp.status_code < 400:
                             return name, {"status": "HEALTHY", "latency": latency}
                         return name, {"status": "ERROR", "details": f"HTTP {resp.status_code}"}
-                except Exception as e:
-                    return name, {"status": "OFFLINE", "details": str(e)}
+                except Exception:
+                    return name, {"status": "OFFLINE", "details": "Connection error"}
 
             checks = [
-                check_api("openalgo", "http://openalgo-web:5000/"),
                 check_api("ollama_local", "http://local_ollama:11434/api/tags"),
                 check_api("openclaw_agent", "http://openclaw:18789/"),
             ]
-            results = await asyncio.gather(*checks)
-            for name, res in results:
-                health_update[name] = res
+
+            # Phase 16: Ensure health monitor stays focused on active AetherBridge infra
+            results = await asyncio.gather(*checks, return_exceptions=True)
+            for i, res in enumerate(results):
+                if isinstance(res, Exception):
+                    name = ["ollama_local", "openclaw_agent"][i]
+                    health_update[name] = {"status": "OFFLINE", "details": "Service unreachable"}
+                else:
+                    name, status_dict = res
+                    health_update[name] = status_dict
 
             # 3. Check Database (Historify_DB)
             try:
@@ -84,15 +89,31 @@ async def system_health_monitor(order_manager):
                     "integrity": db_stats.get("integrity", "STABLE"),
                     "details": f"{db_stats.get('market_records', 0)} Records | {db_stats.get('disk_usage_mb', 0)} MB"
                 }
-            except Exception as e:
+            except Exception:
                 health_update["database"] = {
                     "status": "OFFLINE",
-                    "details": str(e),
+                    "details": "Database error",
                     "integrity": "DISCONNECTED"
                 }
 
             logger.info(f"Pushing health update: {list(health_update.keys())}")
-            # Push update to API Gateway (Local REST call)
+            # Phase 16: Also store in context for FastAPI routers to access directly
+            from core.context import app_context
+            app_context["latest_health"] = health_update
+
+            # Broadcast risk status periodically for the UI (Phase 16 Sync)
+            if order_manager and order_manager.risk_manager:
+                from fastapi_app import manager as ws_manager
+                import json
+                risk_data = order_manager.risk_manager.get_status()
+                # Use a background task to avoid blocking the health monitor
+                asyncio.create_task(ws_manager.broadcast(json.dumps({
+                    "type": "risk_update",
+                    "payload": risk_data,
+                    "timestamp": time.time()
+                })))
+
+            # Push update to API Gateway (Local REST call for legacy Flask compatibility)
             async with httpx.AsyncClient() as client:
                 await client.post(
                     heartbeat_url,
@@ -100,9 +121,8 @@ async def system_health_monitor(order_manager):
                     headers={"X-Heartbeat-Token": token}
                 )
 
-        except Exception as e:
-            # Don't swarm logs if API is booting up
-            logger.debug(f"Heartbeat monitor loop suppressed error: {e}")
+        except Exception:
+            logger.error("Health Monitor heartbeat failed", exc_info=True)
 
         await asyncio.sleep(10)
 
@@ -117,10 +137,6 @@ async def async_main():
     logger.info("Algo-trader booting in %s mode (FastAPI Unified).", trading_mode.upper())
 
     # Initialize managers
-    client = OpenAlgoClient(
-        base_url=settings.get("openalgo", {}).get("base_url"),
-        api_key=settings.get("openalgo", {}).get("api_key"),
-    )
     from risk.risk_manager import RiskManager
     risk_manager = RiskManager()
     position_manager = PositionManager()
@@ -143,6 +159,7 @@ async def async_main():
 
     # Populate DuckDB watchlist for Historify with known-good cash symbols
     import data.historify_db as hdb
+    hdb.init_database()
     removed_watchlist_entries = hdb.sanitize_watchlist()
     if removed_watchlist_entries:
         logger.info("Historify: Pruned unsupported watchlist entries before startup sync.")
@@ -165,7 +182,6 @@ async def async_main():
     historify_service.trigger_scheduled_ingestion(["1m", "5m"])
 
     order_manager = OrderManager(
-        client,
         mode=trading_mode,
         risk_manager=risk_manager,
         position_manager=position_manager,
@@ -174,12 +190,29 @@ async def async_main():
     )
     action_manager.set_order_manager(order_manager)
 
+    # AetherBridge: Native Broker Lifecycle
+    if order_manager.native_broker:
+        logger.info("AetherBridge: Initiating native broker login...")
+        login_task = asyncio.create_task(order_manager.native_broker.login())
+        # We don't block startup for login, but we track it.
+        def on_login_done(t):
+            if t.result():
+                logger.info("AetherBridge: Native Broker login SUCCESS.")
+            else:
+                logger.error("AetherBridge: Native Broker login FAILED.")
+        login_task.add_done_callback(on_login_done)
+
     portfolio_manager = PortfolioManager(
         account_capital=settings.get("portfolio", {}).get("account_capital", 100000.0),
         max_capital_per_trade_pct=settings.get("portfolio", {}).get("max_capital_per_trade_pct", 10.0),
     )
 
     market_stream = MarketDataStream()
+    if trading_mode == "paper":
+        market_stream.set_native_broker(order_manager.paper_broker)
+    elif order_manager.native_broker:
+        market_stream.set_native_broker(order_manager.native_broker)
+
     strategy_runner = StrategyRunner(
         market_stream=market_stream,
         order_manager=order_manager,

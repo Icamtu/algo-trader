@@ -127,8 +127,8 @@ class DecisionAgent:
                 ai_reasoning=reasoning,
                 conviction=conviction
             )
-        except Exception as e:
-            logger.debug(f"Signal logging failed: {e}")
+        except Exception:
+            logger.error("Decision Agent Fault", exc_info=True)
 
     def _apply_profitability_check(self, pick: Dict[str, Any], conviction: float) -> float:
         """
@@ -244,8 +244,8 @@ class DecisionAgent:
                     content = data.get("message", {}).get("content", "")
                     parsed = self._extract_json(content)
                     return parsed.get("reasoning", "Analysis complete."), float(parsed.get("conviction", 0.5))
-        except Exception as e:
-            logger.warning(f"Ollama tactical scan failed: {e}")
+        except Exception:
+            logger.error("AI tactical scan failure", exc_info=True)
 
         return "Ollama Offline. Using local baseline.", 0.5
 
@@ -290,8 +290,8 @@ class DecisionAgent:
                 DecisionAgent.CONSECUTIVE_FAILURES = 0 # Reset on success
                 return processed
 
-        except Exception as e:
-            self._handle_failure(f"Regime scan failed for {symbol}: {e}")
+        except Exception:
+            self._handle_failure(f"Regime scan failed for {symbol}")
 
         return self._get_programmatic_regime(symbol, candles)
 
@@ -316,7 +316,7 @@ class DecisionAgent:
         """Manages the circuit breaker state."""
         DecisionAgent.CONSECUTIVE_FAILURES += 1
         DecisionAgent.LAST_ERROR = error_msg
-        logger.warning(f"AI Failure {DecisionAgent.CONSECUTIVE_FAILURES}/{DecisionAgent.FAILURE_THRESHOLD}: {error_msg}")
+        logger.warning("AI Failure %d/%d: %s", DecisionAgent.CONSECUTIVE_FAILURES, DecisionAgent.FAILURE_THRESHOLD, error_msg, exc_info=True)
 
         if DecisionAgent.CONSECUTIVE_FAILURES >= DecisionAgent.FAILURE_THRESHOLD:
             import time
@@ -343,8 +343,8 @@ class DecisionAgent:
                 # Filter out control characters that break json.loads
                 json_str = "".join(char for char in json_str if char.isprintable() or char in "\n\r\t")
                 return json.loads(json_str)
-        except Exception as e:
-            logger.debug(f"Level 1 JSON extraction failed: {e}. Attempting deep clean...")
+        except Exception:
+            logger.debug("Level 1 JSON extraction failed. Attempting deep clean...", exc_info=True)
 
         try:
             # Attempt 2: More aggressive cleaning for 'expected end of object' errors
@@ -372,8 +372,8 @@ class DecisionAgent:
                     if response.status_code == 200:
                         content = response.json()["message"]["content"]
                         return self._extract_json(content)
-            except Exception as e:
-                logger.warning(f"Ollama call failed: {e}")
+            except Exception:
+                logger.warning("Ollama call failed", exc_info=True)
             return {}
 
     async def _call_openclaw(self, prompt: str) -> Dict[str, Any]:
@@ -395,8 +395,8 @@ class DecisionAgent:
                         return self._extract_json(content)
                     else:
                         logger.error(f"OpenClaw non-200 response: {response.status_code}")
-            except Exception as e:
-                logger.warning(f"OpenClaw call failed: {e}")
+            except Exception:
+                logger.warning("OpenClaw call failed", exc_info=True)
             return {}
 
     async def _get_openclaw_reasoning(self, pick: Dict[str, Any]) -> tuple:
@@ -424,8 +424,8 @@ class DecisionAgent:
                     parsed = self._extract_json(content)
                     if parsed:
                         return parsed.get("reasoning", "Strategic scan complete."), float(parsed.get("conviction", 0.5))
-        except Exception as e:
-            logger.warning(f"OpenClaw scan failed: {e}")
+        except Exception:
+            logger.error("Sentiment stream analysis error", exc_info=True)
 
         # Fallback to local neural reasoning
         return await self._get_llm_reasoning(pick)

@@ -18,7 +18,6 @@ import core.logger  # noqa: F401 - initialize logging once for the app
 from core.config import settings
 from core.strategy_registry import build_strategy_snapshots
 from execution.health import check_openalgo
-from execution.openalgo_client import OpenAlgoClient
 from execution.order_manager import OrderManager
 from portfolio.portfolio_manager import PortfolioManager
 from risk.risk_manager import RiskManager

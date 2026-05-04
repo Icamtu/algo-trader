@@ -29,8 +29,10 @@ class SignalEngine:
     def __init__(self):
         self._strategies: Dict[str, SignalGenerator] = {
             "intraday": intraday_signal,
+            "scalping": intraday_signal,
             "swing": swing_signal,
             "longterm": longterm_signal,
+            "positional": longterm_signal,
         }
 
     def get_signal(self, strategy_type: str, data: Dict[str, Any]) -> StrategySignal:

@@ -2,9 +2,12 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
-  timeout: 60000,
+  timeout: 120000,
   use: {
-    baseURL: "http://localhost:8080",
+    baseURL: "http://localhost:80",
     trace: "on-first-retry",
+    connectOptions: {
+      wsEndpoint: "ws://localhost:3000",
+    },
   },
 });

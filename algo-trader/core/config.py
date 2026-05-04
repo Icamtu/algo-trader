@@ -28,6 +28,23 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "ws_url": "",
         "api_key": "",
     },
+    "aetherbridge": {
+        "enabled": os.getenv("AETHERBRIDGE_ENABLED", "false").lower() in {"1", "true", "yes", "on"},
+        "active_broker": os.getenv("AETHERBRIDGE_ACTIVE_BROKER", "paper"),
+        "shadow_mode": os.getenv("AETHERBRIDGE_SHADOW_MODE", "false").lower() in {"1", "true", "yes", "on"},
+        "brokers": {
+            "shoonya": {
+                "user_id": os.getenv("SHOONYA_USER_ID", ""),
+                "password": os.getenv("SHOONYA_PASSWORD", ""),
+                "totp_secret": os.getenv("SHOONYA_TOTP_SECRET", ""),
+                "vendor_code": os.getenv("SHOONYA_VENDOR_CODE", ""),
+                "api_key": os.getenv("SHOONYA_API_KEY", ""),
+            },
+            "paper": {
+                "initial_funds": 1000000.0
+            }
+        }
+    },
     "simulation": {
         "enabled": False,
         "tick_interval_seconds": 1.0,
@@ -84,14 +101,6 @@ def _load_env_overrides() -> Dict[str, Any]:
     """Allow basic runtime overrides from environment variables."""
     overrides: Dict[str, Any] = {}
 
-    if os.getenv("OPENALGO_BASE_URL") or os.getenv("OPENALGO_WS_URL") or os.getenv("OPENALGO_API_KEY"):
-        overrides["openalgo"] = {}
-        if os.getenv("OPENALGO_BASE_URL"):
-            overrides["openalgo"]["base_url"] = os.getenv("OPENALGO_BASE_URL")
-        if os.getenv("OPENALGO_WS_URL"):
-            overrides["openalgo"]["ws_url"] = os.getenv("OPENALGO_WS_URL")
-        if os.getenv("OPENALGO_API_KEY"):
-            overrides["openalgo"]["api_key"] = os.getenv("OPENALGO_API_KEY")
 
     if os.getenv("TRADING_MODE"):
         overrides["trading"] = {"mode": os.getenv("TRADING_MODE")}

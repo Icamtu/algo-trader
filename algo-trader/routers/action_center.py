@@ -5,10 +5,12 @@ from execution.action_manager import get_action_manager
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/actioncenter", tags=["action_center"])
+router = APIRouter(tags=["action_center"])
 action_manager = get_action_manager()
 
 @router.get("/")
+@router.get("/signals")
+@router.get("/hitl/signals")
 async def get_action_center_data(
     status: str = Query("pending"),
     limit: int = Query(100)
@@ -24,12 +26,14 @@ async def get_action_center_data(
                 "statistics": stats
             }
         }
-    except Exception as e:
-        logger.error(f"ActionCenter GET Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.error("ActionCenter GET Error", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/approve")
 @router.post("/approve/{order_id}")
+@router.post("/hitl/approve")
+@router.post("/hitl/approve/{order_id}")
 async def approve_order(
     order_id: Optional[int] = None,
     ids: Optional[List[int]] = Body(None),
@@ -52,12 +56,14 @@ async def approve_order(
                 raise HTTPException(status_code=500, detail="Kernel approval fail or route error")
 
         raise HTTPException(status_code=400, detail="Missing order ID or batch IDs")
-    except Exception as e:
-        logger.error(f"ActionCenter Approval Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.error("ActionCenter Approval Error", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/reject")
 @router.post("/reject/{order_id}")
+@router.post("/hitl/reject")
+@router.post("/hitl/reject/{order_id}")
 async def reject_order(
     order_id: Optional[int] = None,
     ids: Optional[List[int]] = Body(None),
@@ -76,8 +82,9 @@ async def reject_order(
                 raise HTTPException(status_code=500, detail="Purge operation failed")
 
         raise HTTPException(status_code=400, detail="Missing order ID or batch IDs")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.error("ActionCenter Reject Error", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/auto")
 def toggle_auto_execution(enabled: bool = Body(..., embed=True)):
@@ -85,8 +92,9 @@ def toggle_auto_execution(enabled: bool = Body(..., embed=True)):
     try:
         action_manager.set_auto_execute(enabled)
         return {"status": "success", "auto_execute": action_manager.auto_execute}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.error("ActionCenter Auto-Execution Toggle Error", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.post("/lock")
 def toggle_risk_lock(locked: bool = Body(..., embed=True)):
@@ -94,8 +102,9 @@ def toggle_risk_lock(locked: bool = Body(..., embed=True)):
     try:
         action_manager.set_risk_lock(locked)
         return {"status": "success", "risk_lock": action_manager.risk_lock}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.error("ActionCenter Risk-Lock Toggle Error", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal error")
 
 @router.get("/drift")
 async def get_drift_audit(limit: int = Query(50)):
@@ -103,6 +112,6 @@ async def get_drift_audit(limit: int = Query(50)):
     try:
         events = await action_manager.sqlite.get_drift_events_async(limit=limit)
         return {"status": "success", "data": events}
-    except Exception as e:
-        logger.error(f"ActionCenter Drift Audit Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.error("ActionCenter Drift Audit Error", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal error")

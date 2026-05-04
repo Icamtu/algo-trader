@@ -1,0 +1,10 @@
+# Ignore large data and logs
+*.db
+*.log
+*.duckdb
+node_modules/
+dist/
+mongodb_data/
+timescale_data/
+ollama_data/
+.env

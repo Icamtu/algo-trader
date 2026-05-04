@@ -8,7 +8,7 @@ export function ThemeOrchestrator() {
 
   useEffect(() => {
     const root = document.documentElement;
-    
+
     // Mode Theme
     if (mode === 'OA') {
       root.classList.add('oa-theme');
@@ -23,7 +23,7 @@ export function ThemeOrchestrator() {
     // Global CSS Variables from Settings
     root.style.setProperty('--grid-opacity', (settings.gridOpacity / 100).toString());
     root.style.setProperty('--scanline-intensity', (settings.scanlineIntensity / 100).toString());
-    
+
   }, [mode, settings.perfProfile, settings.gridOpacity, settings.scanlineIntensity]);
 
   return null; // Side-effect only

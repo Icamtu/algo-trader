@@ -23,8 +23,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { CONFIG } from "@/lib/config";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { VirtualizedDataTable, type ColumnDefinition } from '../../integrations/openalgo/components/VirtualizedDataTable';
+import { VirtualizedDataTable, type ColumnDefinition } from '../../integrations/aetherdesk/components/VirtualizedDataTable';
 import { useAppModeStore } from '@/stores/appModeStore';
 
 interface AuditEntry {
@@ -56,10 +57,7 @@ export const AuditQueuePanel = () => {
   const fetchData = async () => {
     setIsRefreshing(true);
     try {
-      const response = await fetch(`${CONFIG.API_BASE_URL}/api/v1/actioncenter?limit=200&status=all`, {
-        headers: { 'apikey': CONFIG.API_KEY }
-      });
-      const result = await response.json();
+      const result = await algoApi.getActionCenter(200, "all");
       if (result.status === 'success') {
         const orders = result.data.orders || [];
         setData(orders);
@@ -115,16 +113,10 @@ export const AuditQueuePanel = () => {
         : { ids: selectedIds, reason: `Bulk Rejection of ${selectedIds.length} items` };
 
     try {
-      const response = await fetch(`${CONFIG.API_BASE_URL}/api/v1/hitl/${endpoint}`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'apikey': CONFIG.API_KEY
-        },
-        body: JSON.stringify(body)
-      });
+      const result = action === 'approve'
+        ? await algoApi.bulkApprove(selectedIds)
+        : await algoApi.bulkReject(selectedIds, `Bulk Rejection of ${selectedIds.length} items`);
 
-      const result = await response.json();
       if (result.status === 'success') {
         toast.success(`Batch ${action === 'approve' ? 'Approval' : 'Rejection'} Complete`, {
           description: `Successfully processed ${result.data.success} of ${result.data.total} signals.`,
@@ -217,7 +209,7 @@ export const AuditQueuePanel = () => {
             />
           </div>
           <span className={cn("font-bold text-[10px]", primaryColorClass)}>
-            {(item.ai_conviction * 100).toFixed(0)}%
+            {((item.ai_conviction || 0) * 100).toFixed(0)}%
           </span>
         </div>
       ) : <span className="text-muted-foreground/30 text-[10px]">N/A</span>

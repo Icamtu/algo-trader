@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger("sync_symbols")
 
 # Database setup using environment variables from algo-trader
-DATABASE_PATH = os.getenv("OPENALGO_DB_PATH", "/app/storage/openalgo.db")
+DATABASE_PATH = os.getenv("OPENALGO_DB_PATH", "/app/storage/symbols.db")
 
 shoonya_urls = {
     "NSE": "https://api.shoonya.com/NSE_symbols.txt.zip",
@@ -34,9 +34,9 @@ def download_and_unzip(output_path):
             if response.status_code == 200:
                 z = zipfile.ZipFile(io.BytesIO(response.content))
                 z.extractall(output_path)
-                logger.info(f"Downloaded and unzipped {key}")
-        except Exception as e:
-            logger.error(f"Failed to download {key}: {e}")
+                logger.info("Downloaded and unzipped %s", key)
+        except Exception:
+            logger.error("Failed to download %s", key, exc_info=True)
 
 def get_db_connection():
     return sqlite3.connect(DATABASE_PATH)
@@ -49,8 +49,8 @@ def delete_symtoken_table():
         cursor.execute("DELETE FROM symtoken")
         conn.commit()
         conn.close()
-    except Exception as e:
-        logger.error(f"Error clearing table: {e}")
+    except Exception:
+        logger.error("Error clearing table", exc_info=True)
 
 def process_nse(output_path):
     file_path = os.path.join(output_path, "NSE_symbols.txt")
@@ -207,15 +207,15 @@ def run_sync():
                 if not df.empty:
                     df_filtered = df[cols_to_keep]
                     df_filtered.to_sql("symtoken", conn, if_exists="append", index=False)
-                    logger.info(f"Inserted {len(df_filtered)} records for an exchange.")
+                    logger.info("Inserted %d records for an exchange.", len(df_filtered))
 
             conn.commit()
             conn.close()
 
         logger.info("Sync completed successfully.")
         return True
-    except Exception as e:
-        logger.error(f"Sync failed: {e}")
+    except Exception:
+        logger.error("Sync failed", exc_info=True)
         return False
 
 if __name__ == "__main__":

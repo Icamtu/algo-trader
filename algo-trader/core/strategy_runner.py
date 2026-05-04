@@ -79,8 +79,8 @@ class StrategyRunner:
             with open(sector_path, "r") as f:
                 self.sector_config = yaml.safe_load(f)
                 logger.info("Sector Registry loaded successfully.")
-        except Exception as e:
-            logger.error(f"Failed to load sectors.yaml: {e}")
+        except Exception:
+            logger.error("Failed to load sectors.yaml", exc_info=True)
             self.sector_config = {"tiers": {}}
 
     def _discover_strategies(self):
@@ -99,6 +99,7 @@ class StrategyRunner:
             if strategy_instance is None:
                 continue
 
+            self._strategies_by_key[strategy_key] = strategy_instance
             logger.info(
                 "Instantiated strategy: %s (%s)",
                 strategy_instance.name,
@@ -190,9 +191,13 @@ class StrategyRunner:
         asyncio.create_task(self._sector_sentiment_loop())
         logger.info("Multi-Sector Sentiment Intelligence cluster started.")
 
+        # Start Trading Hours Monitor (Phase 16)
+        asyncio.create_task(self._trading_hours_monitor_loop())
+        logger.info("Institutional Trading Hours & Square-off monitor started.")
+
         await self.start_strategies(self._strategies_by_key.keys())
 
-    async def start_strategies(self, strategy_keys: Iterable[str]):
+    async def start_strategies(self, strategy_keys: Iterable[str], config: Dict[str, Any] = None):
         """Start one or more selected strategies without duplicating subscriptions."""
         startup_pairs: List[tuple[str, BaseStrategy]] = []
 
@@ -209,6 +214,21 @@ class StrategyRunner:
                 self._strategies_by_key[strategy_key] = strategy_instance
 
             strategy_instance.is_active = True
+
+            # Apply dynamic configuration from deployment form
+            if config:
+                strategy_instance.max_risk = config.get("max_risk", getattr(strategy_instance, "max_risk", 500))
+                strategy_instance.capital_multiplier = config.get("capital_multiplier", getattr(strategy_instance, "capital_multiplier", 1.0))
+                strategy_instance.target_pnl = config.get("target_pnl", getattr(strategy_instance, "target_pnl", 2500))
+                strategy_instance.strategy_type = config.get("strategy_type", "intraday")
+                strategy_instance.product_type = config.get("product_type", getattr(strategy_instance, "product_type", "MIS"))
+                strategy_instance.trading_mode = config.get("trading_mode", "both")
+                strategy_instance.trading_hours = config.get("trading_hours", {
+                    "start": "09:15",
+                    "end": "15:15",
+                    "square_off": "15:20"
+                })
+                logger.info(f"Applied deployment config to {strategy_key}: {config}")
 
             # Wrap on_tick to inject telemetry heartbeats (Phase 16: Time-gated to avoid flooding)
             strategy_instance._last_telem_ts = 0
@@ -244,7 +264,7 @@ class StrategyRunner:
         )
         for (strategy_key, strategy), result in zip(startup_pairs, results):
             if isinstance(result, Exception):
-                logger.error("Strategy '%s' failed during startup: %s", strategy.name, result, exc_info=True)
+                logger.error("Strategy '%s' failed during startup", strategy.name, exc_info=True)
                 self.market_stream.unsubscribe(strategy.symbols, strategy.on_tick)
                 self._strategies_by_key.pop(strategy_key, None)
             else:
@@ -303,6 +323,38 @@ class StrategyRunner:
                     "status": "Running" if getattr(s, "is_active", False) else "Idle"
                 })
             asyncio.create_task(self.telemetry_callback("matrix_update", {"strategies": matrix}))
+
+    async def halt_strategy(self, strategy_key: str) -> bool:
+        """Institutional Halt: Stops execution and blocks new orders via RiskManager."""
+        try:
+            # 1. Stop tick processing
+            await self.stop_strategies([strategy_key])
+
+            # 2. Halt in RiskManager (prevents any manual/stray order validation)
+            if hasattr(self.order_manager, 'risk_manager'):
+                self.order_manager.risk_manager.halt_strategy(strategy_key)
+
+            logger.warning(f"INSTITUTIONAL HALT >> {strategy_key} is now fully halted.")
+            return True
+        except Exception:
+            logger.error("Failed to halt strategy %s", strategy_key, exc_info=True)
+            return False
+
+    async def unhalt_strategy(self, strategy_key: str) -> bool:
+        """Institutional Unhalt: Resumes risk status and restarts tick processing."""
+        try:
+            # 1. Resume in RiskManager
+            if hasattr(self.order_manager, 'risk_manager'):
+                self.order_manager.risk_manager.resume_strategy(strategy_key)
+
+            # 2. Restart execution
+            await self.start_strategies([strategy_key])
+
+            logger.info(f"INSTITUTIONAL RESUME >> {strategy_key} has been unhalted.")
+            return True
+        except Exception:
+            logger.error("Failed to unhalt strategy %s", strategy_key, exc_info=True)
+            return False
 
     def get_telemetry(self) -> Dict[str, Any]:
         """Collect real-time telemetry from all active strategies."""
@@ -392,9 +444,50 @@ class StrategyRunner:
                                 "action": "HALT_AND_LIQUIDATE"
                             }))
 
-            except Exception as e:
-                logger.error(f"Safeguard Loop Error: {e}")
+            except Exception:
+                logger.error("Safeguard Loop Error", exc_info=True)
                 await asyncio.sleep(30)
+
+    async def _trading_hours_monitor_loop(self):
+        """
+        Background task to monitor strategy trading hours and trigger square-offs.
+        """
+        import pytz
+        from datetime import datetime
+        ist = pytz.timezone('Asia/Kolkata')
+
+        while True:
+            try:
+                await asyncio.sleep(60) # Check every minute
+                now = datetime.now(ist).time()
+
+                for strategy_id, strategy in list(self._strategies_by_key.items()):
+                    if not strategy.is_active or strategy.strategy_type not in ["intraday", "scalping"]:
+                        continue
+
+                    try:
+                        sq_off_t = datetime.strptime(strategy.trading_hours["square_off"], "%H:%M").time()
+                        if now >= sq_off_t:
+                            logger.warning(f"SQUARE_OFF >> {strategy_id} square-off time reached ({sq_off_t}). Liquidating and stopping...")
+
+                            # Execute liquidation and stop sequentially
+                            try:
+                                await self.order_manager.liquidate_strategy(strategy_id)
+                                await self.stop_strategies([strategy_id])
+                            except Exception:
+                                logger.error("Failed to execute auto square-off for %s", strategy_id, exc_info=True)
+
+                            if self.telemetry_callback:
+                                asyncio.create_task(self.telemetry_callback("auto_square_off", {
+                                    "strategy": strategy_id,
+                                    "time": str(sq_off_t),
+                                    "action": "LIQUIDATE_AND_STOP"
+                                }))
+                    except Exception:
+                        logger.error("Error checking square-off for %s", strategy_id, exc_info=True)
+
+            except Exception:
+                logger.error("Trading Hours Loop Error", exc_info=True)
 
     async def _market_regime_loop(self):
         """
@@ -441,15 +534,9 @@ class StrategyRunner:
                     sync_interval = f"{interval}m" if "m" not in str(interval) else interval
 
                     try:
-                        resp = self.order_manager.client.get_history(symbol, "NSE", sync_interval, start_date, end_date)
-                        if resp.get("status") == "success" and resp.get("data"):
-                            df = pd.DataFrame(resp["data"])
-                            upsert_market_data(df, symbol, "NSE", interval)
-                            candles = df.to_dict("records")
-                        else:
-                            logger.warning(f"Regime Agent: Failed to fetch history for {symbol} from OpenAlgo: {resp.get('message')}")
-                    except Exception as sync_err:
-                        logger.error(f"Regime Agent Sync Error: {sync_err}")
+                        logger.warning(f"Regime Agent: OpenAlgo decommissioned. Skipping sync for {symbol}.")
+                    except Exception:
+                        logger.error("Regime Agent Sync Error", exc_info=True)
 
                 # 3. Analyze Regime
                 if candles:
@@ -468,8 +555,8 @@ class StrategyRunner:
                     if self.telemetry_callback:
                         asyncio.create_task(self.telemetry_callback("regime_update", self.current_regime_data))
 
-            except Exception as e:
-                logger.error(f"Regime Agent Loop Error: {e}")
+            except Exception:
+                logger.error("Regime Agent Loop Error", exc_info=True)
 
             # Wait for next 15m slice (900s)
             await asyncio.sleep(900)
@@ -520,8 +607,8 @@ class StrategyRunner:
                     analysis_tasks = [analyze_and_update(s, c, tier_key) for s, c in zip(sectors, all_candles)]
                     await asyncio.gather(*analysis_tasks)
 
-            except Exception as e:
-                logger.error(f"Sector Sentiment Loop Error: {e}")
+            except Exception:
+                logger.error("Sector Sentiment Loop Error", exc_info=True)
 
             await asyncio.sleep(900) # 15m interval
 
@@ -558,16 +645,9 @@ class StrategyRunner:
             if symbol.upper() in NSE_INDEX_SYMBOLS:
                 fetch_exchange = "NSE_INDEX"
 
-            logger.info(f"Sector Sync: Fetching {symbol} ({fetch_exchange}) {sync_interval} from OpenAlgo (Async)...")
-            # Using non-blocking async history fetch
-            resp = await self.order_manager.client.get_history_async(symbol, fetch_exchange, sync_interval, start_date, end_date)
+            logger.warning(f"Sector Sync: OpenAlgo decommissioned. Skipping sync for {symbol}.")
 
-            if resp.get("status") == "success" and resp.get("data"):
-                df = pd.DataFrame(resp["data"])
-                upsert_market_data(df, symbol, fetch_exchange, interval)
-                return df.to_dict("records")
-
-        except Exception as e:
-            logger.warning(f"Failed to fetch candles for {symbol}: {e}")
+        except Exception:
+            logger.warning("Failed to fetch candles for %s", symbol, exc_info=True)
 
         return []

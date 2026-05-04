@@ -28,8 +28,12 @@ class PerformanceCalculator:
                 t_dict = t.to_dict()
 
             if t_dict:
-                # Flatten only primitive types to avoid pandas 2.2+ "Mixing dicts with non-Series" error
-                cleaned_t = {k: v for k, v in t_dict.items() if isinstance(v, (str, int, float, bool)) or v is None}
+                # Security: Explicit loop with limit to prevent exhaustion
+                cleaned_t = {}
+                for i, (k, v) in enumerate(t_dict.items()):
+                    if i >= 100: break # Hard limit on metadata keys
+                    if isinstance(v, (str, int, float, bool)) or v is None:
+                        cleaned_t[k] = v
                 cleaned_logs.append(cleaned_t)
 
         try:
@@ -37,8 +41,8 @@ class PerformanceCalculator:
                 self.df = pd.DataFrame.from_records(cleaned_logs)
             else:
                 self.df = pd.DataFrame()
-        except Exception as e:
-            logger.error(f"PerformanceCalculator DataFrame creation failed: {e}")
+        except Exception:
+            logger.error("PerformanceCalculator DataFrame creation failed", exc_info=True)
             self.df = pd.DataFrame()
 
     def calculate_metrics(self) -> Dict[str, Any]:
@@ -57,7 +61,11 @@ class PerformanceCalculator:
 
         # To calculate accurate equity curve with MTM
         equity_curve = []
+        # Security: Limit timestamps to prevent exhaustion
         timestamps = sorted(list(self.price_history.keys()))
+        if len(timestamps) > 10000:
+            logger.warning("PerformanceCalculator: Truncating timestamps to 10000")
+            timestamps = timestamps[:10000]
 
         # If no price history, we fallback to realized-only curve
         if not timestamps:
@@ -71,7 +79,10 @@ class PerformanceCalculator:
         total_charges = self.df['charges'].sum() if 'charges' in self.df.columns else 0.0
 
         # Realized P&L logic
-        for symbol in self.df['symbol'].unique():
+        # Security: Limit unique symbols to prevent exhaustion
+        unique_symbols = self.df['symbol'].unique()
+        for i, symbol in enumerate(unique_symbols):
+            if i >= 500: break # Hard limit
             sym_df = self.df[self.df['symbol'] == symbol].sort_values('time')
             pos = 0
             cost_basis = 0

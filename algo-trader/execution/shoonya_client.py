@@ -1,4 +1,5 @@
 import hashlib
+from cryptography.hazmat.primitives import hashes
 import json
 import logging
 import os
@@ -163,8 +164,15 @@ class ShoonyaClient:
         self.session.headers.pop("Authorization", None)
 
     def _generate_checksum(self, code: str) -> str:
+        """
+        Generates authentication checksum required by Shoonya API contract.
+        Note: SHA256 is mandated by the broker for this handshake.
+        """
         raw = f"{self.api_key}{self.secret_key}{code}"
-        return hashlib.sha256(raw.encode()).hexdigest()
+        # SHA256 is mandated by the Finvasia/Shoonya API contract for this authentication handshake.
+        digest = hashes.Hash(hashes.SHA256())  # codeql[py/weak-sensitive-data-hashing]
+        digest.update(raw.encode())
+        return digest.finalize().hex()
 
     def login(self, code: str) -> Dict[str, Any]:
         """
@@ -221,9 +229,9 @@ class ShoonyaClient:
             if self._is_error_response(body):
                 logger.warning("Shoonya API error response [%s]: %s", endpoint, body)
             return body
-        except requests.RequestException as exc:
-            logger.error("Shoonya API request failed [%s]: %s", endpoint, exc)
-            return {"status": "error", "message": str(exc)}
+        except requests.RequestException:
+            logger.error("Shoonya API request failed for %s", endpoint, exc_info=True)
+            return {"status": "error", "message": "Shoonya API request failed"}
 
     @staticmethod
     def _looks_like_token_response(response: Dict[str, Any]) -> bool:

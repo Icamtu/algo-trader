@@ -1,5 +1,5 @@
 -- Migration: Add AI settings to profiles
-ALTER TABLE public.profiles 
+ALTER TABLE public.profiles
 ADD COLUMN IF NOT EXISTS ai_settings JSONB DEFAULT '{}'::jsonb;
 
 -- Comment for clarity

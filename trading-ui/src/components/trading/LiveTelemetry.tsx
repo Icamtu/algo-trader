@@ -61,7 +61,7 @@ export function LiveTelemetry() {
   return (
     <div className="flex flex-col h-full bg-card/5 border border-border overflow-hidden industrial-grid relative">
       <div className="scanline opacity-10" />
-      
+
       {/* Header */}
       <div className="p-3 border-b border-border bg-card/10 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
@@ -74,7 +74,7 @@ export function LiveTelemetry() {
       </div>
 
       {/* Feed Area */}
-      <div 
+      <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2 font-mono"
       >
@@ -101,7 +101,7 @@ export function LiveTelemetry() {
                       <span className="text-[8px] font-black uppercase tracking-widest opacity-80">{event.type}</span>
                       <span className="text-[7px] opacity-30">{format(event.timestamp * 1000, "HH:mm:ss.SS")}</span>
                     </div>
-                    
+
                     {event.type === "heartbeat" && (
                       <div className="text-[9px] font-black leading-tight flex items-center gap-2">
                         <span className="text-foreground/80">{event.payload.strategy}</span>

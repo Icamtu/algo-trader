@@ -15,20 +15,20 @@ export function LatencyMonitor({ latency, isConnected, className }: LatencyMonit
   const isWarning = latency >= 100 && latency < 350;
   const isCritical = latency >= 350;
 
-  const statusColor = !isConnected 
-    ? "text-slate-500" 
-    : isHealthy 
-      ? "text-emerald-400" 
-      : isWarning 
-        ? "text-amber-400" 
+  const statusColor = !isConnected
+    ? "text-slate-500"
+    : isHealthy
+      ? "text-emerald-400"
+      : isWarning
+        ? "text-amber-400"
         : "text-rose-500";
 
-  const glowColor = !isConnected 
-    ? "bg-slate-500" 
-    : isHealthy 
-      ? "bg-emerald-500" 
-      : isWarning 
-        ? "bg-amber-500" 
+  const glowColor = !isConnected
+    ? "bg-slate-500"
+    : isHealthy
+      ? "bg-emerald-500"
+      : isWarning
+        ? "bg-amber-500"
         : "bg-rose-500";
 
   return (
@@ -60,15 +60,15 @@ export function LatencyMonitor({ latency, isConnected, className }: LatencyMonit
             </motion.div>
           )}
         </AnimatePresence>
-        
+
         {isConnected && (
-          <motion.div 
+          <motion.div
             className={cn("absolute inset-0 rounded-full blur-[4px] opacity-30", glowColor)}
-            animate={{ 
+            animate={{
               opacity: [0.2, 0.4, 0.2],
               scale: [1, 1.2, 1]
             }}
-            transition={{ 
+            transition={{
               duration: 2,
               repeat: Infinity,
               ease: "easeInOut"
@@ -91,11 +91,11 @@ export function LatencyMonitor({ latency, isConnected, className }: LatencyMonit
           {isConnected && <span className="text-[9px] text-white/30 font-medium font-mono">ms</span>}
         </div>
       </div>
-      
+
       {isConnected && (
         <div className="h-4 w-[1px] bg-white/10 mx-1" />
       )}
-      
+
       {isConnected && (
          <div className="flex items-center gap-1.5">
             <Activity size={12} className="text-white/20" />

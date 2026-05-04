@@ -16,6 +16,7 @@ class AetherSwing(BaseStrategy):
         name = "AetherSwing"
         symbols = ["NIFTYBEES", "RELIANCE"]
         super().__init__(name, symbols, order_manager, portfolio_manager)
+        self.strategy_type = "swing"
         self.active_trades: Dict[str, Dict] = {}
         self.positions: Dict[str, int] = {s: 0 for s in self.symbols}
         self.risk_per_trade = 2000  # ₹2000 risk per swing

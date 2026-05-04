@@ -27,50 +27,67 @@ class SessionService:
 
         # Configuration from environment
         self.auto_relogin = os.getenv("SHOONYA_AUTO_RELOGIN", "true").lower() == "true"
+        self.native_broker_active = os.getenv("AETHERBRIDGE_ENABLED", "false").lower() == "true"
 
-        logger.info(f"SessionService initialized (Auto-Relogin: {self.auto_relogin}).")
+        logger.info(f"SessionService initialized (Auto-Relogin: {self.auto_relogin}, Native: {self.native_broker_active}).")
 
     def set_order_manager(self, order_manager: Any):
         self.order_manager = order_manager
 
     async def check_health(self) -> bool:
         """
-        Verify if the current broker session is valid by performing a lightweight API call.
+        Verify if the current broker session is valid.
+        Checks native_broker first, then legacy client.
         """
-        if not self.order_manager or not self.order_manager.client:
+        if not self.order_manager:
             return False
 
         if self.reauth_in_progress:
             return False
 
         try:
-            # Check session health via a simple funds/margin call
-            # This follows the pattern in openalgo_client.py
-            # OpenAlgoClient methods are synchronous!
-            result = self.order_manager.client.get_funds()
+            # 1. Check Native Broker if enabled
+            if self.native_broker_active:
+                broker = self.order_manager.native_broker
+                if broker:
+                    # Zerodha/Native brokers have get_margins or similar
+                    try:
+                        margins = await broker.get_margins()
+                        if margins and margins.get("available") is not None:
+                             self.is_healthy = True
+                             self.last_check = datetime.now()
+                             self.consecutive_failures = 0
+                             return True
+                    except Exception:
+                        logger.warning("Native broker health check failed", exc_info=True)
+                        # Fall through to legacy or fail
 
-            # Shoonya/OpenAlgo success usually returns a dict with 'stat': 'Ok'
-            # If it returns an error field, 403, or 'NOT_OK', it's invalid.
-            if isinstance(result, dict):
-                msg = result.get("message", "").lower()
-                status = result.get("status", "").upper()
-                stat = result.get("stat", "").upper()
+            # 2. Check Legacy Client
+            if hasattr(self.order_manager, 'client') and self.order_manager.client:
+                result = self.order_manager.client.get_funds()
 
-                if status == "ERROR" or stat == "NOT_OK" or "invalid" in msg or "expired" in msg or "403" in msg:
-                    logger.warning(f"Broker session invalid. Status: {status}, Stat: {stat}, Msg: {msg}")
-                    self.is_healthy = False
-                    self.last_error = msg or f"Stat: {stat}"
-                    return False
+                if isinstance(result, dict):
+                    msg = result.get("message", "").lower()
+                    status = result.get("status", "").upper()
+                    stat = result.get("stat", "").upper()
 
-            self.is_healthy = True
-            self.last_check = datetime.now()
-            self.consecutive_failures = 0
-            return True
+                    if status == "ERROR" or stat == "NOT_OK" or "invalid" in msg or "expired" in msg or "403" in msg:
+                        logger.warning(f"Legacy session invalid. Status: {status}, Stat: {stat}, Msg: {msg}")
+                        self.is_healthy = False
+                        self.last_error = msg or f"Stat: {stat}"
+                        return False
 
-        except Exception as e:
-            logger.error(f"Session health check fault: {e}")
+                self.is_healthy = True
+                self.last_check = datetime.now()
+                self.consecutive_failures = 0
+                return True
+
+            return False
+
+        except Exception:
+            logger.error("Session health check fault", exc_info=True)
             self.is_healthy = False
-            self.last_error = str(e)
+            self.last_error = "Internal service error"
             return False
 
     async def run_reauth_flow(self) -> bool:
@@ -98,12 +115,12 @@ class SessionService:
             auth_code = await asyncio.to_thread(get_shoonya_auth_code)
 
             if not auth_code or "ERROR" in str(auth_code) or "FAILURE" in str(auth_code):
-                logger.error(f"Failed to capture auth code: {auth_code}")
+                logger.error("Failed to capture auth code")
                 self.consecutive_failures += 1
                 return False
 
             # 2. Finalize and Inject (Handshake + DB Update)
-            target_name = self.order_manager.client.openalgo_user_id if self.order_manager and self.order_manager.client else "kamaleswar"
+            target_name = "kamaleswar"
             result = await asyncio.to_thread(finalize_shoonya_session, auth_code, target_name=target_name)
 
             if result.get("status") == "success":
@@ -112,7 +129,7 @@ class SessionService:
                 self.consecutive_failures = 0
 
                 # 3. Refresh Client Credentials
-                if self.order_manager and self.order_manager.client:
+                if self.order_manager and hasattr(self.order_manager, 'client') and self.order_manager.client:
                     logger.info("Notifying OpenAlgoClient to reload credentials...")
                     self.order_manager.client._refresh_api_key_from_db()
 
@@ -122,12 +139,12 @@ class SessionService:
 
                 return True
             else:
-                logger.error(f"Session finalization failed: {result.get('message')}")
+                logger.error("Session finalization failed")
                 self.consecutive_failures += 1
                 return False
 
-        except Exception as e:
-            logger.error(f"Re-auth flow encountered a critical error: {e}", exc_info=True)
+        except Exception:
+            logger.error("Re-auth flow encountered a critical error", exc_info=True)
             self.consecutive_failures += 1
             return False
         finally:

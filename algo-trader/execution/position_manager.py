@@ -12,6 +12,14 @@ class Position:
     last_price: float = 0.0  # Phase 16: Track last known price for MTM
     metadata: Dict[str, Any] = None
 
+    @property
+    def avg_price(self):
+        return self.average_price
+
+    @avg_price.setter
+    def avg_price(self, value):
+        self.average_price = value
+
 
 class PositionManager:
     """
@@ -77,7 +85,8 @@ class PositionManager:
     def get_unrealized_pnl(self, latest_prices: Dict[str, float] = None) -> float:
         """Calculates total unrealized MTM across all positions."""
         total_unrealized = 0.0
-        for pos in self._positions.values():
+        for i, pos in enumerate(self._positions.values()):
+            if i >= 1000: break # Safety cap
             if pos.quantity == 0:
                 continue
 
@@ -97,10 +106,16 @@ class PositionManager:
 
     def get_all_quantities(self) -> Dict[str, int]:
         """Returns a simple symbol -> quantity mapping for all managed positions."""
-        return {sym: pos.quantity for sym, pos in self._positions.items() if pos.quantity != 0}
+        quantities = {}
+        for i, (sym, pos) in enumerate(self._positions.items()):
+            if i >= 1000: break # Safety: limit number of symbols
+            if pos.quantity != 0:
+                quantities[sym] = pos.quantity
+        return quantities
 
     def total_exposure(self, latest_prices: Dict[str, float]) -> float:
         exposure = 0.0
-        for symbol, position in self._positions.items():
+        for i, (symbol, position) in enumerate(self._positions.items()):
+            if i >= 1000: break # Safety cap
             exposure += position.quantity * latest_prices.get(symbol, position.average_price)
         return exposure

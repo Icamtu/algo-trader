@@ -1,12 +1,12 @@
 
 import React from "react";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogDescription, 
-  DialogFooter 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, ShieldCheck, Zap } from "lucide-react";
@@ -25,7 +25,7 @@ export function ModeSafetyModal({ isOpen, onClose, onConfirm, targetMode }: Mode
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[425px] glass-panel border-destructive/20 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-destructive/5 to-transparent pointer-events-none" />
-        
+
         <DialogHeader className="relative z-10">
           <div className="mx-auto w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4 border border-destructive/20 animate-pulse">
             <AlertTriangle className="w-6 h-6 text-destructive" />
@@ -53,7 +53,7 @@ export function ModeSafetyModal({ isOpen, onClose, onConfirm, targetMode }: Mode
               </p>
             </div>
           </div>
-          
+
           <p className="text-[10px] text-center text-muted-foreground italic">
             By proceeding, you acknowledge the risks of algorithmic execution.
           </p>
@@ -63,8 +63,8 @@ export function ModeSafetyModal({ isOpen, onClose, onConfirm, targetMode }: Mode
           <Button variant="ghost" onClick={onClose} className="hover:bg-white/5">
             Cancel
           </Button>
-          <Button 
-            variant="destructive" 
+          <Button
+            variant="destructive"
             onClick={() => {
               onConfirm();
               onClose();

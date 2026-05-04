@@ -8,10 +8,13 @@ import {
   AlertCircle,
   Activity,
   Bug,
-  LayoutGrid
+  LayoutGrid,
+  ListChecks
 } from 'lucide-react';
 import { useTerminalStore, LogLevel } from '@/features/explorer/stores/terminalStore';
 import { cn } from '@/lib/utils';
+import { OrderBookBento } from '@/components/trading/OrderBookBento';
+import { tradingService } from '@/services/tradingService';
 
 const getLevelColor = (level: LogLevel) => {
   switch (level) {
@@ -26,19 +29,43 @@ const getLevelColor = (level: LogLevel) => {
 export const AetherTerminal: React.FC = () => {
   const { logs, activeTab, setActiveTab, clearLogs } = useTerminalStore();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [orders, setOrders] = React.useState<any[]>([]);
 
   const tabs = [
     { name: 'Terminal', icon: TerminalIcon },
+    { name: 'Orders', icon: ListChecks },
     { name: 'Problems', icon: AlertCircle },
     { name: 'Output', icon: Activity },
     { name: 'Debug Console', icon: Bug }
   ];
 
+  const fetchOrders = async () => {
+    try {
+      const apiKey = await tradingService.getApiKey();
+      if (apiKey) {
+        const res = await tradingService.getOrders(apiKey);
+        const data = res?.data || res;
+        const ordersList = Array.isArray(data?.orders) ? data.orders : (Array.isArray(data) ? data : []);
+        setOrders(ordersList);
+      }
+    } catch (err) {
+      console.error("[AetherTerminal] Fetch error:", err);
+    }
+  };
+
   useEffect(() => {
-    if (scrollRef.current) {
+    if (activeTab === 'Orders') {
+      fetchOrders();
+      const interval = setInterval(fetchOrders, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (scrollRef.current && activeTab !== 'Orders') {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [logs]);
+  }, [logs, activeTab]);
 
     const [inputValue, setInputValue] = React.useState('');
     const { executeCommand } = useTerminalStore();
@@ -89,44 +116,60 @@ export const AetherTerminal: React.FC = () => {
                 </div>
             </div>
 
-            {/* Log Content */}
+            {/* Log Content / Orders View */}
             <div
                 ref={scrollRef}
-                className="flex-1 p-4 font-mono text-[11px] overflow-y-auto space-y-1.5 custom-scrollbar bg-black/20"
+                className="flex-1 font-mono text-[11px] overflow-hidden custom-scrollbar bg-black/20"
             >
-                <AnimatePresence initial={false}>
-                    {logs.map((log) => (
-                        <motion.div
-                            key={log.id}
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className="flex gap-4 group/log py-0.5"
-                        >
-                            <span className={cn("shrink-0 font-bold tracking-wider w-16", getLevelColor(log.level))}>
-                                [{log.level}]
-                            </span>
-                            <span className="text-slate-300 leading-relaxed group-hover:text-white transition-colors">
-                                {log.message}
-                            </span>
-                            <span className="ml-auto opacity-0 group-hover:opacity-100 text-[9px] text-muted-foreground/20 transition-opacity">
-                                {new Date(log.timestamp).toLocaleTimeString()}
-                            </span>
-                        </motion.div>
-                    ))}
-                </AnimatePresence>
+                {activeTab === 'Orders' ? (
+                  <OrderBookBento
+                    orders={orders}
+                    className="h-full border-none shadow-none bg-transparent rounded-none"
+                    onAbort={(id) => tradingService.cancelOrder(id).then(() => fetchOrders())}
+                    onAbortAll={() => {
+                        const pending = orders.filter(o => !['complete', 'cancelled', 'rejected'].includes(o.order_status?.toLowerCase()));
+                        Promise.all(pending.map(o => tradingService.cancelOrder(o.orderid))).then(() => fetchOrders());
+                    }}
+                  />
+                ) : (
+                  <div className="p-4 space-y-1.5 h-full overflow-y-auto">
+                    <AnimatePresence initial={false}>
+                        {logs.map((log) => (
+                            <motion.div
+                                key={log.id}
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                className="flex gap-4 group/log py-0.5"
+                            >
+                                <span className={cn("shrink-0 font-bold tracking-wider w-16", getLevelColor(log.level))}>
+                                    [{log.level}]
+                                </span>
+                                <span className="text-slate-300 leading-relaxed group-hover:text-white transition-colors">
+                                    {log.message}
+                                </span>
+                                <span className="ml-auto opacity-0 group-hover:opacity-100 text-[9px] text-muted-foreground/20 transition-opacity">
+                                    {new Date(log.timestamp).toLocaleTimeString()}
+                                </span>
+                            </motion.div>
+                        ))}
+                    </AnimatePresence>
+                  </div>
+                )}
             </div>
 
             {/* Input Line */}
-            <div className="h-8 border-t border-white/[0.02] bg-black/40 px-4 flex items-center gap-2">
-                <ChevronRight className="w-3 h-3 text-primary animate-pulse" />
-                <input
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="EXECUTE_KERNEL_COMMAND..."
-                    className="bg-transparent border-none outline-none text-[10px] font-mono text-primary placeholder:text-muted-foreground/10 w-full focus:ring-0"
-                />
-            </div>
+            {activeTab !== 'Orders' && (
+              <div className="h-8 border-t border-white/[0.02] bg-black/40 px-4 flex items-center gap-2 shrink-0">
+                  <ChevronRight className="w-3 h-3 text-primary animate-pulse" />
+                  <input
+                      value={inputValue}
+                      onChange={(e) => setInputValue(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder="EXECUTE_KERNEL_COMMAND..."
+                      className="bg-transparent border-none outline-none text-[10px] font-mono text-primary placeholder:text-muted-foreground/10 w-full focus:ring-0"
+                  />
+              </div>
+            )}
         </div>
     );
 };

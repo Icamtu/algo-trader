@@ -18,9 +18,9 @@ class RiskDispatcher:
                 password=redis_password,
                 decode_responses=True
             )
-            logger.info(f"RiskDispatcher: Connected to Redis at {redis_host}:{redis_port}")
-        except Exception as e:
-            logger.error(f"RiskDispatcher: Redis connection failed: {e}")
+            logger.info("RiskDispatcher: Connected to Redis at %s:%s", redis_host, redis_port)
+        except Exception:
+            logger.error("RiskDispatcher: Redis connection failed", exc_info=True)
             self.redis_client = None
 
     def broadcast_risk(self, risk_data: dict):
@@ -43,6 +43,6 @@ class RiskDispatcher:
                 "timestamp": datetime.now().isoformat()
             }
             self.redis_client.publish(topic, json.dumps(envelope))
-            logger.debug(f"Broadcasting {topic} update")
-        except Exception as e:
-            logger.error(f"RiskDispatcher: Publish failed for {topic}: {e}")
+            logger.debug("Broadcasting %s update", topic)
+        except Exception:
+            logger.error("RiskDispatcher: Publish failed for %s", topic, exc_info=True)

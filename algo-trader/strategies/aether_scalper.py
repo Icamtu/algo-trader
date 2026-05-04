@@ -16,6 +16,7 @@ class AetherScalper(BaseStrategy):
         name = "AetherScalper"
         symbols = ["RELIANCE", "NIFTY"] # Dynamically loaded symbols
         super().__init__(name, symbols, order_manager, portfolio_manager)
+        self.strategy_type = "scalping"
         self.market_anchor = "NIFTY"
         self.active_trades: Dict[str, Dict] = {}
         self.positions: Dict[str, int] = {s: 0 for s in self.symbols}

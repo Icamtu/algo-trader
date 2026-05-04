@@ -1,11 +1,11 @@
 import { ArrowUpRight, ArrowDownRight, MoreHorizontal, Loader2, Activity, XOctagon } from "lucide-react";
 import { useEffect, useState, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { usePositions } from "@/features/openalgo/hooks/useTrading";
+import { usePositions } from "@/features/aetherdesk/hooks/useTrading";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import type { Position as ApiPosition } from "@/types/api";
 import { IndustrialValue } from "./IndustrialValue";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAppModeStore } from "@/stores/appModeStore";
@@ -79,7 +79,7 @@ function BlotterRow({
         </span>
       </td>
       <td className="px-4 py-1.5 text-[10px] font-mono font-black text-foreground/70 tabular-nums border-r border-border/5">{Math.abs(p.qty)}</td>
-      <td className="px-4 py-1.5 text-[9px] font-mono font-black text-muted-foreground/30 tabular-nums border-r border-border/5">{p.entry_price.toFixed(2)}</td>
+      <td className="px-4 py-1.5 text-[9px] font-mono font-black text-muted-foreground/30 tabular-nums border-r border-border/5">{(p.entry_price || 0).toFixed(2)}</td>
       <td className="px-4 py-1.5 border-r border-border/5">
         <IndustrialValue value={p.ltp} className="text-[10px] font-black text-foreground tabular-nums" />
       </td>
@@ -91,7 +91,7 @@ function BlotterRow({
         />
       </td>
       <td className={`px-4 py-1.5 text-[9px] font-mono font-black tabular-nums border-r border-border/5 ${isPositive ? "text-secondary" : "text-destructive"}`}>
-        {isPositive ? "+" : ""}{pnlPct.toFixed(2)}%
+        {isPositive ? "+" : ""}{(pnlPct || 0).toFixed(2)}%
       </td>
       <td className="px-4 py-1.5 text-[9px] font-mono font-black text-muted-foreground/40 tabular-nums border-r border-border/5 tracking-tighter">
         ₹{p.est_charges?.toFixed(2) || "0.00"}

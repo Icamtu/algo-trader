@@ -4,7 +4,7 @@ import { RightPanel } from "@/components/trading/RightPanel";
 import { NewOrderModal } from "@/components/trading/NewOrderModal";
 import { Plus, Trash2, BellRing, Mail, MessageSquare, Smartphone, Loader2, Radio } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { algoApi } from "@/features/openalgo/api/client";
+import { algoApi } from "@/features/aetherdesk/api/client";
 import { IndustrialValue } from "@/components/trading/IndustrialValue";
 
 const pageTabs = ["Feed", "Create"] as const;

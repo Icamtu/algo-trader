@@ -17,6 +17,7 @@ class AetherVault(BaseStrategy):
         name = "AetherVault"
         symbols = ["NIFTYBEES", "RELIANCE", "HDFCBANK"]
         super().__init__(name, symbols, order_manager, portfolio_manager)
+        self.strategy_type = "positional"
         self.positions: Dict[str, int] = {s: 0 for s in self.symbols}
         self.allocation_per_symbol = 100000  # ₹1 Lakh per Vault slot
         self.interval = "1wk"
@@ -37,7 +38,7 @@ class AetherVault(BaseStrategy):
             # Exit vault position if Regime turns sustained BEARISH
             if self.regime_status == "BEARISH" and rsi > 50:
                 logger.warning(f"[{self.name}] Regime Break. Liquidating Vault position in {tick.symbol}")
-                await self.sell(tick.symbol, abs(current_position), product="CNC", ai_reasoning="Macro Regime Shift to Bearish")
+                await self.sell(tick.symbol, abs(current_position), ai_reasoning="Macro Regime Shift to Bearish")
                 self.positions[tick.symbol] = 0
                 return
 
@@ -51,7 +52,7 @@ class AetherVault(BaseStrategy):
                     qty = int(self.allocation_per_symbol / tick.price)
                     if qty > 0:
                         logger.info(f"[{self.name}] AI Confirmed Value Zone. Allocating ₹{self.allocation_per_symbol} to {tick.symbol}")
-                        await self.buy(tick.symbol, qty, product="CNC", ai_reasoning=reasoning, conviction=conviction)
+                        await self.buy(tick.symbol, qty, ai_reasoning=reasoning, conviction=conviction)
                         self.positions[tick.symbol] = qty
 
     async def on_start(self):

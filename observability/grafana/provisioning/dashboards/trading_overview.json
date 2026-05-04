@@ -1,0 +1,146 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Order Execution Rate",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(algo_orders_total[5m])",
+          "legendFormat": "Orders/s"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "p99 Execution Latency",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, rate(algo_latency_seconds_bucket[5m]))",
+          "legendFormat": "p99 latency"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "CPU Usage",
+      "type": "gauge",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "algo_cpu_usage_percent",
+          "legendFormat": "CPU %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Memory Usage (RSS)",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        {
+          "expr": "algo_memory_rss_bytes",
+          "legendFormat": "RSS"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Active Threads & FDs",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        {
+          "expr": "algo_thread_count",
+          "legendFormat": "Threads"
+        },
+        {
+          "expr": "algo_fd_count",
+          "legendFormat": "FDs"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Orders by Strategy",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "targets": [
+        {
+          "expr": "sum by (strategy) (rate(algo_orders_total[5m]))",
+          "legendFormat": "{{strategy}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Engine Logs (Loki)",
+      "type": "logs",
+      "datasource": "Loki",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 14 },
+      "targets": [
+        {
+          "expr": "{container=\"algo_engine\"}",
+          "legendFormat": ""
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "sortOrder": "Descending"
+      }
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "tags": [
+    "trading",
+    "aetherdesk",
+    "institutional"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "title": "AetherDesk Trading Overview",
+  "uid": "aetherdesk-trading",
+  "version": 2,
+  "timezone": "browser"
+}

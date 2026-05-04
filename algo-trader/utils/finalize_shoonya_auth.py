@@ -59,7 +59,10 @@ def finalize_shoonya_session(auth_code, user_id=None, api_secret=None, broker_ap
     print(f"Performing handshake with code {auth_code[:5]}...")
     url = "https://api.shoonya.com/NorenWClientAPI/GenAcsTok"
     checksum_input = f"{client_id}{secret}{auth_code}"
-    checksum = hashlib.sha256(checksum_input.encode()).hexdigest()
+    # SHA256 is mandated by the Finvasia/Shoonya API contract for this authentication handshake.
+    digest = hashes.Hash(hashes.SHA256())  # codeql[py/weak-sensitive-data-hashing]
+    digest.update(checksum_input.encode())
+    checksum = digest.finalize().hex()
 
     payload = {"code": auth_code, "checksum": checksum}
     payload_str = "jData=" + json.dumps(payload)
@@ -67,12 +70,13 @@ def finalize_shoonya_session(auth_code, user_id=None, api_secret=None, broker_ap
 
     try:
         resp = requests.post(url, data=payload_str, headers=headers, timeout=10)
+        resp.raise_for_status()
         data = resp.json()
-    except Exception as e:
-        return {"status": "error", "message": f"Handshake request failed: {str(e)}"}
+    except Exception:
+        return {"status": "error", "message": "Handshake request failed"}
 
     if data.get("stat") != "Ok" or "access_token" not in data:
-        return {"status": "error", "message": f"Handshake failed: {data.get('emsg', 'Unknown error')}"}
+        return {"status": "error", "message": "Handshake failed: Invalid response from broker"}
 
     access_token = data["access_token"]
     print("Success: Access token received.")
@@ -83,7 +87,7 @@ def finalize_shoonya_session(auth_code, user_id=None, api_secret=None, broker_ap
         encrypted_token = get_encrypted_token(access_token)
 
         if not os.path.exists(db_path):
-             return {"status": "error", "message": f"Database not found at {db_path}"}
+             return {"status": "error", "message": "Database not found"}
 
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
@@ -105,8 +109,8 @@ def finalize_shoonya_session(auth_code, user_id=None, api_secret=None, broker_ap
         conn.close()
         print("Database updated.")
         return {"status": "success", "message": "Auth finalized and session injected."}
-    except Exception as e:
-        return {"status": "error", "message": f"Database injection failed: {str(e)}"}
+    except Exception:
+        return {"status": "error", "message": "Database injection failed"}
 
 if __name__ == '__main__':
     import sys

@@ -34,7 +34,7 @@ export function AICopilotOrb() {
         <div className={`absolute inset-0 border-2 transition-all duration-700 ${
           isOpen ? 'border-secondary rotate-180 scale-110' : 'border-primary/40 rotate-45 group-hover:rotate-90 group-hover:scale-105'
         }`} />
-        
+
         {/* Core Pulsar */}
         <div className={`relative z-10 w-full h-full flex items-center justify-center transition-all duration-700 ${isOpen ? 'rotate-[-180deg]' : ''}`}>
            {isOpen ? (
@@ -61,7 +61,7 @@ export function AICopilotOrb() {
       {/* Terminal Interface */}
       <AnimatePresence>
         {isOpen && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.9, x: 20 }}
             animate={{ opacity: 1, scale: 1, x: 0 }}
             exit={{ opacity: 0, scale: 0.9, x: 20 }}
@@ -117,7 +117,7 @@ export function AICopilotOrb() {
                   placeholder="INPUT_INSTRUCTION..."
                   className="flex-1 bg-transparent border-none text-[11px] font-mono font-black text-foreground placeholder:text-muted-foreground/20 focus:outline-none uppercase"
                 />
-                <button 
+                <button
                   onClick={handleExecute}
                   className="flex items-center gap-2 bg-primary px-3 py-1 font-mono font-black text-[10px] text-black hover:opacity-90 active:scale-95 transition-all"
                 >
@@ -125,7 +125,7 @@ export function AICopilotOrb() {
                   <span>[EXEC]</span>
                 </button>
               </div>
-              
+
               <div className="mt-3 flex items-center justify-between px-1">
                  <div className="flex gap-2">
                     <div className="w-1.5 h-1.5 bg-primary/20" />

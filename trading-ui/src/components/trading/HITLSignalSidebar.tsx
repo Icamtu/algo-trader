@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { CONFIG } from '@/lib/config';
+import { algoApi } from '@/features/aetherdesk/api/client';
 
 interface Signal {
   id: number;
@@ -50,10 +51,7 @@ export const HITLSignalSidebar = ({ onSelectSignal, selectedSignalId }: HITLSign
 
   const fetchSignals = async () => {
     try {
-      const response = await fetch(`${CONFIG.API_BASE_URL}/api/v1/hitl/signals`, {
-        headers: { 'apikey': CONFIG.API_KEY }
-      });
-      const result = await response.json();
+      const result = await algoApi.getHitlSignals();
       if (result.status === 'success') {
         const data = result.data || [];
         setSignals(data);
@@ -116,15 +114,7 @@ export const HITLSignalSidebar = ({ onSelectSignal, selectedSignalId }: HITLSign
   const handleApprove = async (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
     try {
-      const response = await fetch(`${CONFIG.API_BASE_URL}/api/v1/hitl/approve`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'apikey': CONFIG.API_KEY
-        },
-        body: JSON.stringify({ id })
-      });
-      const result = await response.json();
+      const result = await algoApi.hitlApprove(id);
       if (result.status === 'success') {
         toast.success("Trade Approved", {
           description: "Signal promoted to live order successfully.",
@@ -139,14 +129,7 @@ export const HITLSignalSidebar = ({ onSelectSignal, selectedSignalId }: HITLSign
   const handleReject = async (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
     try {
-      await fetch(`${CONFIG.API_BASE_URL}/api/v1/hitl/reject`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'apikey': CONFIG.API_KEY
-        },
-        body: JSON.stringify({ id, reason: 'Manual Rejection' })
-      });
+      await algoApi.hitlReject(id, 'Manual Rejection');
       toast.info("Signal Rejected", { description: "Signal has been suppressed." });
     } catch (error) {
       console.error("Reject failed", error);
@@ -194,7 +177,7 @@ export const HITLSignalSidebar = ({ onSelectSignal, selectedSignalId }: HITLSign
                         "text-sm font-black tracking-tighter",
                         signal.action === 'BUY' ? "text-green-400" : "text-red-400"
                       )}>
-                        {signal.action} @ {signal.price.toFixed(1)}
+                        {signal.action} @ {(signal.price || 0).toFixed(1)}
                       </div>
                       <div className="text-[10px] font-mono text-muted-foreground">Q:{signal.quantity}</div>
                     </div>

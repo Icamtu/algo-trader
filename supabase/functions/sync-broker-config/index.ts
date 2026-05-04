@@ -14,9 +14,9 @@ export default async function (req: Request) {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
     const algoEngineUrl = Deno.env.get('ALGO_ENGINE_URL') || 'http://algo_engine:5001'
-    
+
     const supabase = createClient(supabaseUrl, supabaseKey)
-    
+
     // Parse the request body
     const { broker_id } = await req.json()
     console.log(`Syncing config for broker: ${broker_id}`)
@@ -65,10 +65,10 @@ export default async function (req: Request) {
     const result = await response.json()
     console.log('Sync successful:', result)
 
-    return new Response(JSON.stringify({ 
-      status: 'success', 
+    return new Response(JSON.stringify({
+      status: 'success',
       message: `Configuration for ${broker_id} synced to engine.`,
-      engine_response: result 
+      engine_response: result
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,

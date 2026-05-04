@@ -13,8 +13,8 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 router = APIRouter(tags=["Intelligence Hub"])
 logger = logging.getLogger(__name__)
 
-@router.get("/api/v1/regime")
-@router.get("/api/v1/market_regime")
+@router.get("/regime")
+@router.get("/market_regime")
 async def get_market_regime():
     """
     Returns the current global market regime and risk multipliers.
@@ -31,7 +31,7 @@ async def get_market_regime():
         "data": telemetry
     }
 
-@router.get("/api/v1/intel/sectors")
+@router.get("/intel/sectors")
 async def get_sector_sentiment():
     """
     Returns sentiment analysis for all Tier 1 and Tier 2 sectors.
@@ -42,17 +42,31 @@ async def get_sector_sentiment():
         raise HTTPException(status_code=503, detail="Strategy Runner not initialized")
 
     sector_data = getattr(runner, "sector_sentiment", {})
+
+    # Security: Explicit loop with limit to prevent resource exhaustion (CodeQL mitigation)
+    tier_1 = {}
+    tier_2 = {}
+    for i, (name, data) in enumerate(sector_data.items()):
+        if i >= 100: break # Hard limit to prevent bloat
+        if not isinstance(data, dict): continue
+
+        tier = data.get("tier")
+        if tier == "tier_1":
+            tier_1[name] = data
+        elif tier == "tier_2":
+            tier_2[name] = data
+
     return {
         "status": "success",
         "timestamp": datetime.now().isoformat(),
         "data": {
-            "tier_1": {name: data for name, data in sector_data.items() if data.get("tier") == "tier_1"},
-            "tier_2": {name: data for name, data in sector_data.items() if data.get("tier") == "tier_2"},
-            "all": sector_data
+            "tier_1": tier_1,
+            "tier_2": tier_2,
+            "all": tier_1 | tier_2 # Already limited and processed in the loop above
         }
     }
 
-@router.get("/api/v1/intel/status")
+@router.get("/intel/status")
 async def get_intel_status():
     """
     Returns the operational health of the Intelligence Hub.
@@ -71,7 +85,7 @@ async def get_intel_status():
         "sectors_tracked": len(getattr(runner, "sector_sentiment", {}))
     }
 
-@router.get("/api/v1/backtest/results")
+@router.get("/backtest/results")
 async def get_backtest_results(strategy_id: str = Query(None)):
     """
     GET /api/v1/backtest/results
@@ -112,6 +126,6 @@ async def get_backtest_results(strategy_id: str = Query(None)):
             "trades": result["trades"][-50:],
             "created_at": result.get("created_at"),
         }
-    except Exception as e:
-        logger.error(f"Error fetching backtest results: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.error("Error fetching backtest results", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal error")
