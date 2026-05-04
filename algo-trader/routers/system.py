@@ -233,7 +233,11 @@ async def get_alerts(limit: int = Query(50)):
         cursor.execute("SELECT * FROM alerts ORDER BY created_at DESC LIMIT ?", (limit,))
         rows = cursor.fetchall()
         conn.close()
-        return {"status": "success", "data": [dict(row) for row in rows]}
+        data = []
+        for i, row in enumerate(rows):
+            if i >= 100: break # Safety: secondary limit
+            data.append(dict(row))
+        return {"status": "success", "data": data}
     except Exception:
         logger.error("Error fetching alerts", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")
