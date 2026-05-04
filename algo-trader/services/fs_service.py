@@ -20,7 +20,8 @@ class FSService:
         target_path = (self.base_dir / relative_path).resolve()
 
         # Security: Prevent directory traversal
-        # codeql [py/path-injection] - Verified via os.path.commonpath
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
         if os.path.commonpath([str(self.base_dir), str(target_path)]) != str(self.base_dir):
             raise PermissionError("Access denied: Outside sandbox")
 
@@ -56,7 +57,8 @@ class FSService:
     def read_file(self, relative_path: str) -> str:
         """Reads file content safely."""
         target_path = (self.base_dir / relative_path).resolve()
-        # codeql [py/path-injection] - Verified via os.path.commonpath
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
         if os.path.commonpath([str(self.base_dir), str(target_path)]) != str(self.base_dir):
             raise PermissionError("Access denied")
 
@@ -66,7 +68,8 @@ class FSService:
     def write_file(self, relative_path: str, content: str):
         """Writes content to file safely."""
         target_path = (self.base_dir / relative_path).resolve()
-        # codeql [py/path-injection] - Verified via os.path.commonpath
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
         if os.path.commonpath([str(self.base_dir), str(target_path)]) != str(self.base_dir):
             raise PermissionError("Access denied")
 
@@ -79,7 +82,8 @@ class FSService:
     def delete_item(self, relative_path: str):
         """Deletes a file or directory."""
         target_path = (self.base_dir / relative_path).resolve()
-        # codeql [py/path-injection] - Verified via os.path.commonpath
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
         if os.path.commonpath([str(self.base_dir), str(target_path)]) != str(self.base_dir):
             raise PermissionError("Access denied")
 
