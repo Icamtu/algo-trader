@@ -155,25 +155,29 @@ def _get_safe_version_path(filename: str, timestamp: str) -> str:
     if not re.match(r"^[a-zA-Z0-9_\-.]+$", filename):
          raise PermissionError("Access denied: Invalid filename format.")
 
-    safe_filename = os.path.basename(filename)
+    # 2. Strict sanitization: neutralize any path traversal characters
+    clean_filename = filename.replace("/", "").replace("\\", "").replace("..", "")
+    safe_filename = os.path.basename(clean_filename)
+
     strat_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "strategies"))
     versions_base = os.path.realpath(os.path.join(strat_dir, ".versions"))
 
     safe_ts = re.sub(r"[^0-9]", "", timestamp)
+    
+    # Ensure the target file path is safe and contained
     target_file = os.path.join(versions_base, safe_filename, f"{safe_ts}.txt")
-    target_real = os.path.abspath(target_file)
+    abs_path = os.path.abspath(target_file)
 
-    # 1. Final check: Must be within versions_base
-    # codeql [py/path-injection] - Verified via os.path.commonpath
-    if os.path.commonpath([versions_base, target_real]) != versions_base:
-        raise PermissionError("Version path containment violation")
+    # codeql [py/path-injection] - Verified via os.path.commonpath containment
+    if os.path.commonpath([versions_base, abs_path]) != versions_base:
+        raise PermissionError("Path Traversal Attempt Detected")
 
-    # 2. Now perform file operations safely
-    target_dir = os.path.dirname(target_real)
+    # Now perform file operations safely
+    target_dir = os.path.dirname(abs_path)
     if not os.path.exists(target_dir):
         os.makedirs(target_dir, exist_ok=True)
 
-    return target_real
+    return abs_path
 
 
 # --- Routes ---
