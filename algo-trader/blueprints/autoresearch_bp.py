@@ -157,20 +157,21 @@ def api_autoresearch_get_iteration(id):
         json_path = os.path.join(research_dir, f"{safe_id}.json")
 
         # 3. Final containment check
-        # codeql [py/path-injection] - Verified via os.path.commonpath
-        if os.path.commonpath([research_dir, os.path.abspath(py_path)]) != research_dir or \
-           os.path.commonpath([research_dir, os.path.abspath(json_path)]) != research_dir:
-            return jsonify({"error": "Forbidden path"}), 403
+        # codeql [py/path-injection] - Verified via redundant containment check
+        abs_py = os.path.abspath(py_path)
+        if os.path.commonpath([research_dir, abs_py]) != research_dir:
+             return jsonify({"error": "Forbidden path"}), 403
 
-        if not os.path.exists(py_path):
+        if not os.path.exists(abs_py):
             return jsonify({"error": "Iteration not found"}), 404
 
-        with open(py_path, 'r') as f:
+        with open(abs_py, 'r') as f:
             code = f.read()
 
         meta = {}
-        if os.path.exists(json_path):
-            with open(json_path, 'r') as f:
+        abs_json = os.path.abspath(json_path)
+        if os.path.commonpath([research_dir, abs_json]) == research_dir and os.path.exists(abs_json):
+            with open(abs_json, 'r') as f:
                 meta = json.load(f)
 
         return jsonify({"code": code, "metrics": meta.get("metrics"), "metadata": meta}), 200
@@ -267,14 +268,16 @@ def api_autoresearch_base_code():
         file_path = os.path.join(strat_dir, f"{base_name}.py")
 
         # Security check
-        # codeql [py/path-injection] - Verified via os.path.commonpath
-        if os.path.commonpath([strat_dir, os.path.abspath(file_path)]) != strat_dir:
+        # codeql [py/path-injection] - Verified via redundant containment check
+        # codeql [py/path-injection] - Verified via redundant containment check
+        abs_path = os.path.abspath(file_path)
+        if os.path.commonpath([strat_dir, abs_path]) != strat_dir:
             return jsonify({"error": "Forbidden path"}), 403
 
-        if not os.path.exists(file_path):
+        if not os.path.exists(abs_path):
             return jsonify({"status": "not_found", "code": None, "message": f"Strategy file {base_name}.py not found"}), 200
 
-        with open(file_path, 'r') as f:
+        with open(abs_path, 'r') as f:
             code = f.read()
 
         return jsonify({"status": "success", "code": code, "name": base_name}), 200
@@ -316,8 +319,9 @@ def api_autoresearch_save_version():
         file_path = os.path.join(strat_dir, safe_filename)
 
         # Security check
-        # codeql [py/path-injection] - Verified via os.path.commonpath
-        if os.path.commonpath([strat_dir, os.path.abspath(file_path)]) != strat_dir:
+        # codeql [py/path-injection] - Verified via redundant containment check
+        abs_path = os.path.abspath(file_path)
+        if os.path.commonpath([strat_dir, abs_path]) != strat_dir:
             return jsonify({"error": "Forbidden path"}), 403
 
         # Build header
@@ -334,7 +338,7 @@ def api_autoresearch_save_version():
 
         final_code = header + code
 
-        with open(file_path, 'w') as f:
+        with open(abs_path, 'w') as f:
             f.write(final_code)
 
         return jsonify({
