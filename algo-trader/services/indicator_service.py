@@ -138,12 +138,15 @@ print(result.to_json())
         """
         file_path = self._get_safe_path(name)
 
-        # Additional point-of-use check for CodeQL
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"Indicator {name} not found")
+        # Final Point-of-Use Security Check: Ensure path containment
+        base_dir = os.path.abspath(self.indicators_dir)
+        abs_file_path = os.path.abspath(file_path)
+        if os.path.commonpath([base_dir, abs_file_path]) != base_dir:
+            logger.error("Security violation: path traversal attempt for indicator %s", name)
+            raise PermissionError("Access denied: Invalid indicator path.")
 
         # Validate imports before execution (AST-level check)
-        with open(file_path, "r") as f:
+        with open(abs_file_path, "r") as f:
             source = f.read()
         self._validate_imports(source)
 
