@@ -58,7 +58,7 @@ def _load_strategy_class(strategy_id: str) -> Optional[Type]:
         file_path = os.path.join(strat_dir, safe_filename)
 
         # 3. Final containment check
-        # codeql [py/path-injection] - Verified via redundant containment check
+        # codeql [py/path-injection]
         abs_path = os.path.abspath(file_path)
         if os.path.commonpath([strat_dir, abs_path]) != strat_dir:
             return None
@@ -142,7 +142,7 @@ def _get_safe_path(filename: str) -> str:
     abs_path = os.path.abspath(target_path)
 
     # Final check: Must be within strat_dir
-    # codeql [py/path-injection] - Verified via os.path.commonpath
+    # codeql [py/path-injection]
     if os.path.commonpath([strat_dir, abs_path]) != strat_dir:
         raise PermissionError("Path Traversal Attempt Detected")
 
@@ -163,12 +163,12 @@ def _get_safe_version_path(filename: str, timestamp: str) -> str:
     versions_base = os.path.realpath(os.path.join(strat_dir, ".versions"))
 
     safe_ts = re.sub(r"[^0-9]", "", timestamp)
-    
+
     # Ensure the target file path is safe and contained
     target_file = os.path.join(versions_base, safe_filename, f"{safe_ts}.txt")
     abs_path = os.path.abspath(target_file)
 
-    # codeql [py/path-injection] - Verified via os.path.commonpath containment
+    # codeql [py/path-injection]
     if os.path.commonpath([versions_base, abs_path]) != versions_base:
         raise PermissionError("Path Traversal Attempt Detected")
 
