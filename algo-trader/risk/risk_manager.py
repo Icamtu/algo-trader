@@ -369,7 +369,13 @@ class RiskManager:
     def _log_risk_change(self, old: Dict[str, Any], new: Dict[str, Any]):
         """Persist a risk limit change record to the audit log table."""
         try:
-            changes = {k: {"from": old.get(k), "to": v} for k, v in new.items() if str(old.get(k)) != str(v)}
+            # Security: Use explicit loop with break to prevent resource exhaustion
+            changes = {}
+            for i, (k, v) in enumerate(new.items()):
+                if i >= 100: break # Safety limit for audit logging
+                if str(old.get(k)) != str(v):
+                    changes[k] = {"from": old.get(k), "to": v}
+
             if not changes:
                 return
             self._db.execute(
