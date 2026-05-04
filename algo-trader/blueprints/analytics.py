@@ -295,7 +295,7 @@ async def get_vol_surface_data():
     payload = request.get_json(silent=True) or {}
     underlying = payload.get("underlying")
     exchange = payload.get("exchange", "NSE")
-    expiry_dates = payload.get("expiry_dates", [])
+    expiry_dates = payload.get("expiry_dates", [])[:10] # Institutional safety limit
     strike_count = int(payload.get("strike_count", 30))
     surfaces = []
     for expiry_date in expiry_dates:
