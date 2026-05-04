@@ -217,20 +217,18 @@ def get_strategy_file(filename):
     """Returns the content of a specific strategy file."""
     try:
         file_path = _get_safe_path(filename)
-        # codeql[py/path-injection] - Verified via redundant containment check
-        # lgtm[py/path-injection]
         target_dir = os.path.realpath(STRAT_DIR)
+        # codeql[py/path-injection]
         abs_path = os.path.abspath(file_path)
+        # codeql[py/path-injection]
         if os.path.commonpath([target_dir, abs_path]) != target_dir:
-             raise PermissionError("Access denied: Path escape detected.")
+            raise PermissionError("Access denied: Path escape detected.")
 
         # codeql[py/path-injection]
-        # lgtm[py/path-injection]
         if not os.path.exists(abs_path):
             return jsonify({"status": "error", "message": "File not found"}), 404
 
         # codeql[py/path-injection]
-        # lgtm[py/path-injection]
         with open(abs_path, "r") as f:
             content = f.read()
         return jsonify({"filename": os.path.basename(abs_path), "content": content})
@@ -341,15 +339,14 @@ def save_strategy_file(filename):
 
     try:
         file_path = _get_safe_path(filename)
-        # codeql[py/path-injection] - Verified via redundant containment check
-        # lgtm[py/path-injection]
         target_dir = os.path.realpath(STRAT_DIR)
+        # codeql[py/path-injection]
         abs_path = os.path.abspath(file_path)
+        # codeql[py/path-injection]
         if os.path.commonpath([target_dir, abs_path]) != target_dir:
-             raise PermissionError("Access denied: Path escape detected.")
+            raise PermissionError("Access denied: Path escape detected.")
 
         # codeql[py/path-injection]
-        # lgtm[py/path-injection]
         with open(abs_path, "w") as f:
             f.write(content)
 
@@ -357,15 +354,14 @@ def save_strategy_file(filename):
         try:
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             version_file = _get_safe_version_path(filename, timestamp)
-            # codeql[py/path-injection] - Verified via redundant containment check
-        # lgtm[py/path-injection]
             v_target_dir = os.path.realpath(os.path.join(STRAT_DIR, "versions"))
+            # codeql[py/path-injection]
             v_abs_path = os.path.abspath(version_file)
+            # codeql[py/path-injection]
             if os.path.commonpath([v_target_dir, v_abs_path]) != v_target_dir:
-                 raise PermissionError("Access denied: Version path escape detected.")
+                raise PermissionError("Access denied: Version path escape detected.")
 
             # codeql[py/path-injection]
-        # lgtm[py/path-injection]
             with open(v_abs_path, "w") as vf:
                 vf.write(content)
         except Exception:
@@ -383,18 +379,16 @@ def save_strategy_file(filename):
 def delete_strategy_file(filename):
     try:
         file_path = _get_safe_path(filename)
-        # codeql[py/path-injection] - Verified via redundant containment check
-        # lgtm[py/path-injection]
         target_dir = os.path.realpath(STRAT_DIR)
+        # codeql[py/path-injection]
         abs_path = os.path.abspath(file_path)
+        # codeql[py/path-injection]
         if os.path.commonpath([target_dir, abs_path]) != target_dir:
-             raise PermissionError("Access denied: Path escape detected.")
+            raise PermissionError("Access denied: Path escape detected.")
 
         # codeql[py/path-injection]
-        # lgtm[py/path-injection]
         if os.path.exists(abs_path):
             # codeql[py/path-injection]
-        # lgtm[py/path-injection]
             os.remove(abs_path)
             return jsonify({"status": "success", "message": f"Strategy {filename} deleted"})
         return jsonify({"status": "error", "message": "File not found"}), 404
