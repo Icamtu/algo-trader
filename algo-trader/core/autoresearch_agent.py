@@ -258,7 +258,8 @@ async def run_iteration_api(code: str = None, strategy_name: str = None, symbol:
         if task_callback:
             task_callback({"iteration": i, "status": "synthesizing", "message": f"Synthesizing improvements for iteration {i}..."})
 
-        target_list = "\n".join([f"- target {k}: {v}" for k, v in (targets or {}).items()]) if targets else "Improve the strategy"
+        target_items = list((targets or {}).items())[:10]
+        target_list = "\n".join([f"- target {k}: {v}" for k, v in target_items]) if targets else "Improve the strategy"
         directive = f"Achieve the following target metrics mathematically:\n{target_list}"
 
         prompt = f"""
@@ -313,7 +314,12 @@ Based on the metrics and the directive, output an IMPROVED version of the above 
         json_path = os.path.join(research_dir, f"{base_name}_autoresearch_{timestamp}.json")
         with open(json_path, 'w') as f:
             # Strip heavy curves which contain NaNs that break browser JSON.parse()
-            clean_metrics = {k: v for k, v in perf.items() if k not in ('equity_curve', 'benchmark_curve', 'returns')}
+            # Security: Explicit loop with limit to prevent exhaustion
+            clean_metrics = {}
+            for i, (k, v) in enumerate(perf.items()):
+                if i >= 100: break # Hard limit on keys
+                if k not in ('equity_curve', 'benchmark_curve', 'returns'):
+                    clean_metrics[k] = v
             json.dump({"metrics": clean_metrics, "symbol": symbol, "timeframe": timeframe, "targets": targets}, f)
             f.flush()
             os.fsync(f.fileno())
