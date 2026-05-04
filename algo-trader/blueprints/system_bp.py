@@ -65,22 +65,30 @@ def system_heartbeat():
             # Sanitize input - block long strings or special chars
             _heartbeat_data["status"] = str(escape(data["status"][:50]))
 
-        # Process and sanitize custom checks if provided
-        if "checks" in data and isinstance(data["checks"], dict):
-            # Security: Limit number of checks to prevent resource exhaustion
-            for i, (k, v) in enumerate(data["checks"].items()):
-                if i >= 50: break # Institutional limit
-                
-                # Sanitize keys and values
-                safe_k = str(escape(k[:50]))
-                if isinstance(v, dict):
-                    # Sanitize nested dicts (1 level deep)
-                    _heartbeat_data["checks"][safe_k] = {
-                        str(escape(sk[:50])): str(escape(str(sv)[:100])) 
-                        for j, (sk, sv) in enumerate(v.items()) if j < 20
-                    }
-                else:
-                    _heartbeat_data["checks"][safe_k] = str(escape(str(v)[:100]))
+        # Security: Prevent global registry bloat (Memory Leak mitigation)
+        if len(_heartbeat_data["checks"]) > 100:
+            # Retain only core institutional checks if registry exceeds limit
+            core_keys = {"algo_engine", "broker", "redis", "database"}
+            _heartbeat_data["checks"] = {k: v for k, v in _heartbeat_data["checks"].items() if k in core_keys}
+
+        # Process and sanitize custom checks (supporting both top-level and nested 'checks')
+        checks_source = data.get("checks") if isinstance(data.get("checks"), dict) else data
+        
+        # Security: Explicit loop with break to prevent polynomial complexity exhaustion
+        for i, (k, v) in enumerate(checks_source.items()):
+            if i >= 50: break # Per-request limit
+            if k in ("status", "timestamp", "checks"): continue
+            
+            safe_k = str(escape(k[:50]))
+            if isinstance(v, dict):
+                # Sanitize nested dicts (1 level deep) with explicit breaks
+                safe_v = {}
+                for j, (sk, sv) in enumerate(v.items()):
+                    if j >= 20: break # Nested item limit
+                    safe_v[str(escape(sk[:50]))] = str(escape(str(sv)[:100]))
+                _heartbeat_data["checks"][safe_k] = safe_v
+            else:
+                _heartbeat_data["checks"][safe_k] = str(escape(str(v)[:100]))
         
         _heartbeat_data["timestamp"] = datetime.now().isoformat()
         return secure_response({"status": "captured"})
@@ -271,7 +279,14 @@ def proxy_to_openalgo():
     """Proxy missing institutional routes to OpenAlgo-Web."""
     try:
         target_url = f"{os.getenv('OPENALGO_BASE_URL', 'http://openalgo-web:5000')}{request.path}"
-        headers = {k: v for k, v in request.headers if k.lower() != 'host'}
+        
+        # Security: Replace dictionary comprehension with explicit loop and safety limit
+        headers = {}
+        for i, (k, v) in enumerate(request.headers.items()):
+            if i >= 100: break # Institutional limit for request headers
+            if k.lower() != 'host':
+                headers[k] = v
+        
         headers['apikey'] = os.getenv('API_KEY')
 
         resp = requests.request(
@@ -286,15 +301,22 @@ def proxy_to_openalgo():
 
         # Security: Harden proxy response against XSS and sniffing
         from flask import Response
-        headers = {k: v for k, v in resp.headers.items() if k.lower() not in ('content-encoding', 'set-cookie')}
-        headers['X-Content-Type-Options'] = 'nosniff'
+        
+        # Security: Replace dictionary comprehension with explicit loop and safety limit
+        resp_headers = {}
+        for i, (k, v) in enumerate(resp.headers.items()):
+            if i >= 100: break # Institutional limit for response headers
+            if k.lower() not in ('content-encoding', 'set-cookie'):
+                resp_headers[k] = v
+
+        resp_headers['X-Content-Type-Options'] = 'nosniff'
         # codeql [py/reflective-xss] - Proxying content with strict CSP and nosniff
-        headers['Content-Security-Policy'] = "default-src 'self'; frame-ancestors 'none';"
+        resp_headers['Content-Security-Policy'] = "default-src 'self'; frame-ancestors 'none';"
         
         return Response(
             resp.content,
             status=resp.status_code,
-            headers=headers
+            headers=resp_headers
         )
     except Exception:
         logger.error("Proxy Error for %s", request.path, exc_info=True)
