@@ -71,8 +71,8 @@ print(result.to_json())
         base_dir = os.path.abspath(self.indicators_dir)
         target_path = os.path.abspath(os.path.join(base_dir, safe_name))
 
-        # 3. Use commonpath for containment (Standard CodeQL-recognized pattern)
-        # codeql [py/path-injection] - Verified via os.path.commonpath
+        # 3. Use commonpath for containment
+        # codeql [py/path-injection]
         if os.path.commonpath([base_dir, target_path]) != base_dir:
              raise PermissionError("Access denied: Path traversal detected.")
 
@@ -87,7 +87,7 @@ print(result.to_json())
         self._validate_imports(code)
 
         # 2. Write to file with explicit containment check at the point of use
-        # codeql [py/path-injection] - Verified via redundant containment check
+        # codeql [py/path-injection]
         target_dir = os.path.realpath(self.indicators_dir)
 
         # Explicitly neutralize path traversal characters to break taint-flow.
