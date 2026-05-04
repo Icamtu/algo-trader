@@ -52,8 +52,8 @@ def _load_strategy_class(strategy_id: str) -> Optional[Type]:
         file_path = os.path.join(strat_dir, safe_filename)
         
         # 3. Final containment check
-        # codeql [py/path-injection] - Containment is verified via abspath and startswith
-        if not os.path.abspath(file_path).startswith(strat_dir):
+        # codeql [py/path-injection] - Containment is verified via abspath and commonpath
+        if os.path.commonpath([strat_dir, os.path.abspath(file_path)]) != strat_dir:
             return None
 
         if not os.path.exists(file_path):
@@ -125,8 +125,8 @@ def _get_safe_path(filename: str) -> str:
              
     target_path = os.path.abspath(os.path.join(STRAT_DIR, safe_filename))
     
-    # Final check: Must start with STRAT_DIR
-    if not target_path.startswith(STRAT_DIR):
+    # Final check: Must be within STRAT_DIR
+    if os.path.commonpath([STRAT_DIR, target_path]) != STRAT_DIR:
         raise PermissionError("Path Traversal Attempt Detected")
         
     return target_path
