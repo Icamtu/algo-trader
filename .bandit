@@ -1,23 +1,17 @@
-# Bandit Security Configuration
-# Suppresses known mitigated issues with documented rationale
+# Bandit Configuration File
+# https://bandit.readthedocs.io/en/latest/configuration.html
 
-assert_used: false
+# Exclude these directories from scanning
+exclude_dirs:
+  - /scratch
+  - /.agents
+  - /.agents_backup
+  - /openalgo-upstream
+  - /host_venv
+  - /node_modules
+  - /venv
 
-# Skipped test IDs and their rationale
+# Define skips for mitigated security issues
 skips:
-  # B104: hardcoded_bind_all_interfaces
-  # Rationale: Docker container network isolation + RBAC JWT authentication
-  # All services run on internal trading_net, not exposed to internet
-  # Instances: algo-trader/main.py, algo-trader/api.py
-  - B104
-
-  # B608: hardcoded_sql_expressions
-  # Rationale: Parameterized queries using DuckDB '?' placeholders
-  # No string interpolation; safe from SQL injection
-  # Instance: algo-trader/services/instrument_service.py:98
-  - B608
-
-# Test configurations
-tests:
-  - B104
-  - B608
+  - B104  # hardcoded_bind_all_interfaces: Mitigated by Docker isolation + RBAC JWT auth
+  - B608  # hardcoded_sql_expressions: Safe parameterized DuckDB queries
