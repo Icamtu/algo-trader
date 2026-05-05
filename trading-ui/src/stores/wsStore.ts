@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { supabase } from '@/integrations/supabase/client'
 
+import { audioService } from '@/services/audioService'
+
 interface WsState {
   // Connection Status
   eventsConnected: boolean
@@ -78,6 +80,28 @@ export const useWsStore = create<WsState>((set, get) => ({
         token: session?.access_token || ""
       }))
       set({ eventsConnected: true })
+    }
+
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        const type = data.type
+        const payload = data.payload
+
+        if (type === 'trade_filled') {
+          if (payload.action === 'BUY') {
+            audioService.playConfirm()
+          } else if (payload.action === 'SELL') {
+            audioService.playExecute()
+          }
+        } else if (type === 'order_rejected') {
+          audioService.playWarning()
+        } else if (type === 'order_cancelled') {
+          audioService.playSnap()
+        }
+      } catch (e) {
+        console.error("[WS] Failed to parse event message:", e)
+      }
     }
 
     socket.onclose = () => {

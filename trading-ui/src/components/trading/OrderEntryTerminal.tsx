@@ -15,6 +15,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { algoApi } from "@/features/aetherdesk/api/client";
 import { cn } from "@/lib/utils";
+import { useAudioNotifications } from "@/hooks/useAudioNotifications";
 
 const orderTypes = ["MARKET", "LIMIT", "SL", "SL-M"] as const;
 const strategies = ["Momentum Alpha", "Mean Reversion", "Stat Arb", "Pairs Trading", "Manual"];
@@ -26,6 +27,7 @@ interface OrderEntryTerminalProps {
 
 export function OrderEntryTerminal({ selectedSymbol = "", onClose }: OrderEntryTerminalProps) {
   const { toast } = useToast();
+  const { playConfirm, playExecute, playWarning } = useAudioNotifications();
   const [loading, setLoading] = useState(false);
 
   const [form, setForm] = useState({
@@ -84,6 +86,7 @@ export function OrderEntryTerminal({ selectedSymbol = "", onClose }: OrderEntryT
       try {
         await algoApi.getMargins(orderPayload);
       } catch (marginError: any) {
+        playWarning();
         toast({
           variant: "destructive",
           title: "MARGIN_REJECTED",
@@ -95,12 +98,19 @@ export function OrderEntryTerminal({ selectedSymbol = "", onClose }: OrderEntryT
 
       await algoApi.placeOrder(orderPayload);
 
+      if (form.side === 'BUY') {
+        playConfirm();
+      } else {
+        playExecute();
+      }
+
       toast({
         title: "ORDER_EXECUTED",
         description: `SIGNAL_SENT::${form.side}_${form.qty}_${form.symbol}`,
       });
 
     } catch (error: any) {
+       playWarning();
        toast({
          variant: "destructive",
          title: "WRITE_FAULT",

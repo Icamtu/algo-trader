@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Any, Dict, List
 
 from core.strategy import BaseStrategy
@@ -53,6 +54,13 @@ class IntradayStrategy(BaseStrategy):
         self.cached_context = "Market Structure: Standard positioning."
         self.active_trades: Dict[str, Dict] = {}
         self.symbol_stats: Dict[str, Dict] = {symbol: {"reentries": 0, "last_stop_out": 0} for symbol in self.symbols}
+        # Live default: 0.70. Paper/sandbox lowers to 0.45 so neutral signals
+        # (conviction=0.5) can still execute when Ollama is offline.
+        from core.config import settings as _s
+        _default_thresh = "0.45" if _s.get("trading", {}).get("mode", "paper") != "live" else "0.70"
+        _default_reentry = "0.65" if _s.get("trading", {}).get("mode", "paper") != "live" else "0.85"
+        self.conviction_threshold = float(os.getenv("INTRADAY_CONVICTION_THRESHOLD", _default_thresh))
+        self.reentry_conviction_threshold = float(os.getenv("INTRADAY_REENTRY_CONVICTION_THRESHOLD", _default_reentry))
 
     async def _update_market_context(self, symbol: str):
         """Fetch GEX and Max Pain to provide context to the AI."""
@@ -250,8 +258,8 @@ class IntradayStrategy(BaseStrategy):
                 market_context=f"{self.cached_context} | Market Regime: {self.regime_status}"
             )
 
-            if conviction < 0.70:
-                logger.warning(f"[{self.name}] Trade BLOCKED - Conviction {conviction:.2f} below threshold (0.70)")
+            if conviction < self.conviction_threshold:
+                logger.warning(f"[{self.name}] Trade BLOCKED - Conviction {conviction:.2f} below threshold ({self.conviction_threshold})")
                 # Phase 15.3: Institutional Signal Audit
                 await self.log_signal(
                     symbol=tick.symbol,
@@ -265,8 +273,8 @@ class IntradayStrategy(BaseStrategy):
 
             if signal == "BUY" and current_position == 0:
                 # Re-Entry Condition
-                if is_reentry and conviction < 0.85:
-                    logger.warning(f"[{self.name}] Re-Entry REJECTED - Need 0.85+ conviction for second attempt.")
+                if is_reentry and conviction < self.reentry_conviction_threshold:
+                    logger.warning(f"[{self.name}] Re-Entry REJECTED - Need {self.reentry_conviction_threshold}+ conviction for second attempt.")
                     await self.log_signal(
                         symbol=tick.symbol,
                         signal_type="REENTRY_REJECTED",

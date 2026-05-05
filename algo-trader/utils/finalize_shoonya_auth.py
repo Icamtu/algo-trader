@@ -60,7 +60,9 @@ def finalize_shoonya_session(auth_code, user_id=None, api_secret=None, broker_ap
     url = "https://api.shoonya.com/NorenWClientAPI/GenAcsTok"
     checksum_input = f"{client_id}{secret}{auth_code}"
     # SHA256 is mandated by the Finvasia/Shoonya API contract for this authentication handshake.
-    digest = hashes.Hash(hashes.SHA256())  # codeql[py/weak-sensitive-data-hashing]
+    # codeql[py/weak-sensitive-data-hashing]
+    # lgtm[py/weak-sensitive-data-hashing]
+    digest = hashes.Hash(hashes.SHA256())
     digest.update(checksum_input.encode())
     checksum = digest.finalize().hex()
 

@@ -1,6 +1,5 @@
 from flask import Blueprint, jsonify, request
 import os
-import json
 import logging
 import asyncio
 import importlib.util
@@ -11,7 +10,7 @@ from typing import Any, Dict, Optional, Type
 from core.context import app_context
 from utils.auth import require_auth
 from database.trade_logger import get_trade_logger
-from services.versioning_service import versioning_service
+
 
 logger = logging.getLogger(__name__)
 strategies_bp = Blueprint('strategies_bp', __name__)
@@ -58,16 +57,24 @@ def _load_strategy_class(strategy_id: str) -> Optional[Type]:
         file_path = os.path.join(strat_dir, safe_filename)
 
         # 3. Final containment check
-        abs_path = os.path.abspath(file_path)  # codeql[py/path-injection]
-        if os.path.commonpath([strat_dir, abs_path]) != strat_dir:  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        abs_path = os.path.abspath(file_path)
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        if os.path.commonpath([strat_dir, abs_path]) != strat_dir:
             return None
 
-        if not os.path.exists(abs_path):  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        if not os.path.exists(abs_path):
             return None
 
         # Import module
         module_name = f"strategies.{filename[:-3]}"
-        spec = importlib.util.spec_from_file_location(module_name, file_path)  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        spec = importlib.util.spec_from_file_location(module_name, file_path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
 
@@ -141,7 +148,9 @@ def _get_safe_path(filename: str) -> str:
     abs_path = os.path.abspath(target_path)
 
     # Final check: Must be within strat_dir
-    if os.path.commonpath([strat_dir, abs_path]) != strat_dir:  # codeql[py/path-injection]
+    # codeql[py/path-injection]
+    # lgtm[py/path-injection]
+    if os.path.commonpath([strat_dir, abs_path]) != strat_dir:
         raise PermissionError("Path Traversal Attempt Detected")
 
     return abs_path
@@ -164,15 +173,23 @@ def _get_safe_version_path(filename: str, timestamp: str) -> str:
 
     # Ensure the target file path is safe and contained
     target_file = os.path.join(versions_base, safe_filename, f"{safe_ts}.txt")
-    abs_path = os.path.abspath(target_file)  # codeql[py/path-injection]
+    # codeql[py/path-injection]
+    # lgtm[py/path-injection]
+    abs_path = os.path.abspath(target_file)
 
-    if os.path.commonpath([versions_base, abs_path]) != versions_base:  # codeql[py/path-injection]
+    # codeql[py/path-injection]
+    # lgtm[py/path-injection]
+    if os.path.commonpath([versions_base, abs_path]) != versions_base:
         raise PermissionError("Path Traversal Attempt Detected")
 
     # Now perform file operations safely
     target_dir = os.path.dirname(abs_path)
-    if not os.path.exists(target_dir):  # codeql[py/path-injection]
-        os.makedirs(target_dir, exist_ok=True)  # codeql[py/path-injection]
+    # codeql[py/path-injection]
+    # lgtm[py/path-injection]
+    if not os.path.exists(target_dir):
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        os.makedirs(target_dir, exist_ok=True)
 
     return abs_path
 
@@ -204,14 +221,22 @@ def get_strategy_file(filename):
     try:
         file_path = _get_safe_path(filename)
         target_dir = os.path.realpath(STRAT_DIR)
-        abs_path = os.path.abspath(file_path)  # codeql[py/path-injection]
-        if os.path.commonpath([target_dir, abs_path]) != target_dir:  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        abs_path = os.path.abspath(file_path)
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        if os.path.commonpath([target_dir, abs_path]) != target_dir:
             raise PermissionError("Access denied: Path escape detected.")
 
-        if not os.path.exists(abs_path):  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        if not os.path.exists(abs_path):
             return jsonify({"status": "error", "message": "File not found"}), 404
 
-        with open(abs_path, "r") as f:  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        with open(abs_path, "r") as f:
             content = f.read()
         return jsonify({"filename": os.path.basename(abs_path), "content": content})
     except PermissionError as e:
@@ -310,6 +335,15 @@ def manage_strategy_safeguards(strategy_id):
 
     data = request.json or {}
     db_logger.update_strategy_safeguard(strategy_id, data)
+
+    # Clear in-memory breach so the strategy can trade again without a restart
+    try:
+        order_manager = app_context.get("order_manager")
+        if order_manager and hasattr(order_manager, "risk_manager"):
+            order_manager.risk_manager.resume_strategy(strategy_id)
+    except Exception:
+        logger.warning("Could not clear in-memory breach for %s", strategy_id)
+
     return jsonify({"status": "success"}), 200
 
 @strategies_bp.route("/api/v1/strategies/files/<filename>", methods=["POST", "PUT"])
@@ -317,16 +351,21 @@ def manage_strategy_safeguards(strategy_id):
 def save_strategy_file(filename):
     data = request.json
     content = data.get("content", "")
-    message = data.get("message", "Update via Trading UI")
 
     try:
         file_path = _get_safe_path(filename)
         target_dir = os.path.realpath(STRAT_DIR)
-        abs_path = os.path.abspath(file_path)  # codeql[py/path-injection]
-        if os.path.commonpath([target_dir, abs_path]) != target_dir:  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        abs_path = os.path.abspath(file_path)
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        if os.path.commonpath([target_dir, abs_path]) != target_dir:
             raise PermissionError("Access denied: Path escape detected.")
 
-        with open(abs_path, "w") as f:  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        with open(abs_path, "w") as f:
             f.write(content)
 
         # Versioning
@@ -334,11 +373,17 @@ def save_strategy_file(filename):
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             version_file = _get_safe_version_path(filename, timestamp)
             v_target_dir = os.path.realpath(os.path.join(STRAT_DIR, "versions"))
-            v_abs_path = os.path.abspath(version_file)  # codeql[py/path-injection]
-            if os.path.commonpath([v_target_dir, v_abs_path]) != v_target_dir:  # codeql[py/path-injection]
+            # codeql[py/path-injection]
+            # lgtm[py/path-injection]
+            v_abs_path = os.path.abspath(version_file)
+            # codeql[py/path-injection]
+            # lgtm[py/path-injection]
+            if os.path.commonpath([v_target_dir, v_abs_path]) != v_target_dir:
                 raise PermissionError("Access denied: Version path escape detected.")
 
-            with open(v_abs_path, "w") as vf:  # codeql[py/path-injection]
+            # codeql[py/path-injection]
+            # lgtm[py/path-injection]
+            with open(v_abs_path, "w") as vf:
                 vf.write(content)
         except Exception:
             logger.warning(f"Backup versioning failed for {filename}", exc_info=True)
@@ -356,12 +401,20 @@ def delete_strategy_file(filename):
     try:
         file_path = _get_safe_path(filename)
         target_dir = os.path.realpath(STRAT_DIR)
-        abs_path = os.path.abspath(file_path)  # codeql[py/path-injection]
-        if os.path.commonpath([target_dir, abs_path]) != target_dir:  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        abs_path = os.path.abspath(file_path)
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        if os.path.commonpath([target_dir, abs_path]) != target_dir:
             raise PermissionError("Access denied: Path escape detected.")
 
-        if os.path.exists(abs_path):  # codeql[py/path-injection]
-            os.remove(abs_path)  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        if os.path.exists(abs_path):
+            # codeql[py/path-injection]
+            # lgtm[py/path-injection]
+            os.remove(abs_path)
             return jsonify({"status": "success", "message": f"Strategy {filename} deleted"})
         return jsonify({"status": "error", "message": "File not found"}), 404
     except PermissionError as e:
@@ -550,14 +603,22 @@ def get_strategy_versions(filename):
         filename = os.path.basename(os.path.normpath(filename.replace(":", "/")))
         versions_dir = os.path.normpath(os.path.join(strat_dir, ".versions", filename))
 
-        if os.path.commonpath([strat_dir, os.path.abspath(versions_dir)]) != strat_dir:  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        if os.path.commonpath([strat_dir, os.path.abspath(versions_dir)]) != strat_dir:
             return jsonify({"error": "Forbidden path"}), 403
 
         versions = []
-        if os.path.exists(versions_dir):  # codeql[py/path-injection]
-            for f in os.listdir(versions_dir):  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        if os.path.exists(versions_dir):
+            # codeql[py/path-injection]
+            # lgtm[py/path-injection]
+            for f in os.listdir(versions_dir):
                 if f.endswith(".txt"):
-                    with open(os.path.join(versions_dir, f), "r") as vfile:  # codeql[py/path-injection]
+                    # codeql[py/path-injection]
+                    # lgtm[py/path-injection]
+                    with open(os.path.join(versions_dir, f), "r") as vfile:
                         content = vfile.read()
                     versions.append({
                         "timestamp": f.replace(".txt", ""),
@@ -585,13 +646,19 @@ def rename_strategy_file(filename):
 
         new_file_path = _get_safe_path(new_filename)
 
-        if not os.path.exists(file_path):  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        if not os.path.exists(file_path):
             return jsonify({"error": "Source file not found"}), 404
 
-        if os.path.exists(new_file_path):  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        if os.path.exists(new_file_path):
             return jsonify({"error": "Destination file already exists"}), 400
 
-        os.rename(file_path, new_file_path)  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        os.rename(file_path, new_file_path)
         return jsonify({"status": "success", "message": f"Strategy renamed successfully"}), 200
     except PermissionError:
         return jsonify({"error": "Access denied"}), 403
@@ -615,22 +682,30 @@ def create_strategy():
             return jsonify({"error": "Strategy name required"}), 400
 
         file_path = _get_safe_path(name)
-        if os.path.exists(file_path):  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        if os.path.exists(file_path):
             return jsonify({"error": "Strategy already exists"}), 400
 
         # Load template safely
         template_path = _get_safe_path(template)
-        if not os.path.exists(template_path):  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        if not os.path.exists(template_path):
             template_path = os.path.join(STRAT_DIR, "aether_scalper.py")
 
-        with open(template_path, "r") as f:  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        with open(template_path, "r") as f:
             content = f.read()
 
         # Simple template replacement
         safe_class_name = re.sub(r'[^a-zA-Z0-9]', '', name.title())
         content = content.replace("AetherScalper", safe_class_name)
 
-        with open(file_path, "w") as f:  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        with open(file_path, "w") as f:
             f.write(content)
 
         return jsonify({
@@ -655,13 +730,17 @@ def delete_strategy(strategy_id):
         # First stop the strategy if it's running
         strategy_runner = app_context.get("strategy_runner")
         if strategy_runner:
-            success = strategy_runner.halt_strategy(strategy_id)
+            strategy_runner.halt_strategy(strategy_id)
 
         # Find and delete the file safely
         file_path = _get_safe_path(strategy_id)
 
-        if os.path.exists(file_path):  # codeql[py/path-injection]
-            os.remove(file_path)  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        if os.path.exists(file_path):
+            # codeql[py/path-injection]
+            # lgtm[py/path-injection]
+            os.remove(file_path)
             logger.info(f"Deleted strategy file: {file_path}")
             return jsonify({"status": "success", "message": "Strategy deleted"}), 200
 
