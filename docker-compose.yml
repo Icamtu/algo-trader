@@ -2,7 +2,7 @@ services:
   # --- INFRASTRUCTURE ---
   redis:
     image: redis:6.2-alpine
-    container_name: openalgo_redis
+    container_name: aether_redis
     restart: always
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
@@ -19,55 +19,6 @@ services:
     mem_limit: 256MB
     security_opt:
       - no-new-privileges:true
-
-  mongodb:
-    image: mongo:6.0.8
-    container_name: mongodb
-    restart: always
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
-      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
-    ports:
-      - "127.0.0.1:${MONGO_PORT}:27017"
-    volumes:
-      - ./mongodb_data:/data/db
-    networks:
-      - trading_net
-    mem_limit: 512MB
-    security_opt:
-      - no-new-privileges:true
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  browser:
-    image: ghcr.io/browserless/chromium:latest
-    container_name: browserless
-    restart: always
-    ports:
-      - "127.0.0.1:3000:3000"
-    environment:
-      - MAX_CONCURRENT_SESSIONS=5
-      - SCREEN_WIDTH=1920
-      - SCREEN_HEIGHT=1080
-      - SCREEN_DEPTH=24
-      - ENABLE_CORS=true
-      - CONNECTION_TIMEOUT=60000
-    networks:
-      - trading_net
-    mem_limit: 2GB
-    cpu_shares: 1024
-    security_opt:
-      - no-new-privileges:true
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/metrics"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # --- TRADING PLATFORM ---
 
   # --- TRADING ENGINE ---
   algo-trader:
@@ -88,7 +39,6 @@ services:
     volumes:
       - ./algo-trader:/app
       - ./database/db:/app/storage
-      - ./openalgo-upstream:/app/openalgo-upstream:ro
     environment:
       - PORT=18788
       - TRADES_DB_PATH=/app/storage/trades.db
@@ -137,7 +87,7 @@ services:
       retries: 5
       start_period: 20s
 
-  # --- SUPABASE STACK (LOCAL) ---
+  # --- SUPABASE STACK (LOCAL AUTH) ---
   supabase-db:
     container_name: supabase-db
     image: supabase/postgres:15.1.1.78
@@ -291,7 +241,6 @@ services:
     security_opt:
       - no-new-privileges:true
 
-
   # --- INSTITUTIONAL DATA STORE ---
   timescaledb:
     image: timescale/timescaledb:2.26.3-pg15
@@ -315,7 +264,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # --- CUSTOM TRADING UI ---
+  # --- TRADING UI ---
   trading-ui:
     build:
       context: ./trading-ui
@@ -405,7 +354,7 @@ services:
       retries: 5
       start_period: 60s
 
-  # --- ANALYTICS & REPORTING ---
+  # --- AI ANALYTICS GATEWAY ---
   openclaw:
     image: ghcr.io/openclaw/openclaw:latest
     container_name: openclaw
@@ -435,8 +384,6 @@ services:
       - 1.1.1.1
     volumes:
       - ./database/db:/app/db:ro
-      - openalgo_log:/app/log:ro
-      - openalgo_strategies:/app/strategies:ro
       - ./openclaw:/home/node/.openclaw:rw
     networks:
       - trading_net
@@ -539,9 +486,6 @@ networks:
     driver: bridge
 
 volumes:
-  openalgo_log:
-  openalgo_strategies:
-  openalgo_keys:
   ollama_data:
     external: true
     name: trading-workspace_ollama_data
