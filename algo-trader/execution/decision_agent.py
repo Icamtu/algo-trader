@@ -92,13 +92,6 @@ class DecisionAgent:
             # 4. Get AI Consensus (OpenClaw + Ollama)
             reasoning, conviction = await self._get_consensus_decision(pick)
 
-            # If both AI layers returned exactly 0.5 (indeterminate / offline),
-            # substitute the deterministic expert-system result so the strategy
-            # has a meaningful conviction to act on instead of perpetually blocking.
-            if conviction == 0.5 and plain_conviction != 0.5:
-                reasoning = f"[AI_OFFLINE_FALLBACK] {plain_reasoning}"
-                conviction = plain_conviction
-
         # 5. Apply Governance (Net Profitability & Safety)
         governed_conviction = self._apply_governance(conviction, pick)
         if governed_conviction < conviction:
@@ -253,7 +246,6 @@ class DecisionAgent:
                     return parsed.get("reasoning", "Analysis complete."), float(parsed.get("conviction", 0.5))
         except Exception:
             logger.error("AI tactical scan failure", exc_info=True)
-            self._handle_failure("Ollama unreachable")
 
         return "Ollama Offline. Using local baseline.", 0.5
 

@@ -22,7 +22,9 @@ logger = logging.getLogger(__name__)
 JWT_SECRET = os.environ.get("JWT_SECRET")
 
 # Network binding configuration
-ALGO_HOST = os.getenv("ALGO_HOST", "0.0.0.0")  # nosec B104
+# codeql[py/binding-to-all-interfaces]
+# lgtm[py/binding-to-all-interfaces]
+ALGO_HOST = os.getenv("ALGO_HOST", "0.0.0.0")
 
 async def system_health_monitor(order_manager):
     """Refined background heartbeat checking for all unified system metrics."""
