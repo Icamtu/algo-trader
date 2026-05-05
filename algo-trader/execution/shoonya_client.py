@@ -170,7 +170,9 @@ class ShoonyaClient:
         """
         raw = f"{self.api_key}{self.secret_key}{code}"
         # SHA256 is mandated by the Finvasia/Shoonya API contract for this authentication handshake.
-        digest = hashes.Hash(hashes.SHA256())  # codeql[py/weak-sensitive-data-hashing]
+        # codeql[py/weak-sensitive-data-hashing]
+        # lgtm[py/weak-sensitive-data-hashing]
+        digest = hashes.Hash(hashes.SHA256())
         digest.update(raw.encode())
         return digest.finalize().hex()
 

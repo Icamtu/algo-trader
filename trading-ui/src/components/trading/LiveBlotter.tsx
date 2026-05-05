@@ -11,6 +11,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAppModeStore } from "@/stores/appModeStore";
 import { cn } from "@/lib/utils";
 
+import { useAudioNotifications } from "@/hooks/useAudioNotifications";
+
 interface Position {
   symbol: string;
   side: "LONG" | "SHORT";
@@ -125,6 +127,7 @@ export function LiveBlotter({ onTradeClick }: LiveBlotterProps) {
   const symbols = useMemo(() => positionsData?.positions?.map((p: ApiPosition) => p.symbol) || [], [positionsData]);
   const { prices } = useWebSocket(symbols);
   const { toast } = useToast();
+  const { playSnap, playWarning } = useAudioNotifications();
   const queryClient = useQueryClient();
   const [isKilling, setIsKilling] = useState<string | "ALL" | null>(null);
   const { mode } = useAppModeStore();
@@ -138,9 +141,11 @@ export function LiveBlotter({ onTradeClick }: LiveBlotterProps) {
     setIsKilling(symbol);
     try {
       await algoApi.exitPosition(symbol);
+      playSnap();
       toast({ title: "POSITION_LIQUIDATED", description: `SQUARE-OFF_SENT::${symbol}` });
       queryClient.invalidateQueries({ queryKey: ["positions"] });
     } catch (e: any) {
+      playWarning();
       toast({ variant: "destructive", title: "KILL_FAILED", description: e?.message || "KERNEL_REJECTION" });
     } finally {
       setIsKilling(null);
@@ -151,9 +156,11 @@ export function LiveBlotter({ onTradeClick }: LiveBlotterProps) {
     setIsKilling("ALL");
     try {
       await algoApi.closePosition();
+      playSnap();
       toast({ title: "ALL_POSITIONS_LIQUIDATED", description: "GLOBAL_SQUARE-OFF_INITIATED" });
       queryClient.invalidateQueries({ queryKey: ["positions"] });
     } catch (e: any) {
+      playWarning();
       toast({ variant: "destructive", title: "KILL_FAILED", description: e?.message || "KERNEL_REJECTION" });
     } finally {
       setIsKilling(null);

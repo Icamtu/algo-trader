@@ -13,7 +13,7 @@ Checks applied before every order:
 import json
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Dict, Any
 from database.trade_logger import get_trade_logger
@@ -435,6 +435,10 @@ class RiskManager:
                 logger.critical("Strategy %s BREACHED Safeguard: Net Loss (₹%s) hit the limit (₹%s)", strategy_id, f"{abs(net_pnl):,.2f}", f"{max_loss_limit:,.2f}")
                 return {"status": "breached", "reason": f"Net Loss (₹{abs(net_pnl):,.2f}) has reached/exceeded the ₹{max_loss_limit:,.2f} safeguard limit"}
 
+            # Auto-recover: if previously breached but now within limits, clear the flag
+            if strategy_id in self._breached_strategies:
+                self._breached_strategies.discard(strategy_id)
+                logger.info("Strategy %s safeguard breach auto-cleared (within limits now).", strategy_id)
             return {"status": "safe", "metrics": metrics}
         except Exception:
             logger.error("Error checking safeguards for %s", strategy_id, exc_info=True)

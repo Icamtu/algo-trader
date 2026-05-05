@@ -271,8 +271,12 @@ def api_autoresearch_base_code():
         file_path = os.path.join(strat_dir, f"{base_name}.py")
 
         # Security check
-        abs_path = os.path.abspath(file_path)  # codeql[py/path-injection]
-        if os.path.commonpath([strat_dir, abs_path]) != strat_dir:  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        abs_path = os.path.abspath(file_path)
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        if os.path.commonpath([strat_dir, abs_path]) != strat_dir:
             return jsonify({"error": "Forbidden path"}), 403
 
         if not os.path.exists(abs_path):  # codeql[py/path-injection]
@@ -321,8 +325,12 @@ def api_autoresearch_save_version():
         file_path = os.path.join(strat_dir, filename)
 
         # Final containment check
-        abs_path = os.path.abspath(file_path)  # codeql[py/path-injection]
-        if os.path.commonpath([strat_dir, abs_path]) != strat_dir:  # codeql[py/path-injection]
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        abs_path = os.path.abspath(file_path)
+        # codeql[py/path-injection]
+        # lgtm[py/path-injection]
+        if os.path.commonpath([strat_dir, abs_path]) != strat_dir:
             return jsonify({"error": "Forbidden path"}), 403
 
         # Build header
