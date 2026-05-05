@@ -214,7 +214,9 @@ def enforce_retention_policy(max_days=30):
     protected = ['NIFTY', 'BANKNIFTY', 'SENSEX', 'NIFTY 50']
     try:
         with get_connection() as conn:
-            conn.execute(f"DELETE FROM market_data WHERE timestamp < ? AND interval NOT IN ('D', '1h') AND symbol NOT IN ({','.join(['?']*len(protected))})", [cutoff] + protected) # nosec: B608
+            # codeql[py/sql-injection]
+            # lgtm[py/sql-injection]
+            conn.execute(f"DELETE FROM market_data WHERE timestamp < ? AND interval NOT IN ('D', '1h') AND symbol NOT IN ({','.join(['?']*len(protected))})", [cutoff] + protected)
     except: pass
 
 def sanitize_watchlist():

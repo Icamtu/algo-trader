@@ -9,7 +9,6 @@ paths-ignore:
   - '**/openalgo-upstream/**'
   - '**/logs/**'
   - '**/storage/**'
-  - '**/database/**'
   - '**/magic.mgc'
   - '**/.agents/**'
   - '**/.agents_backup/**'

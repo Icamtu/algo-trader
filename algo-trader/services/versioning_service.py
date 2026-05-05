@@ -90,7 +90,9 @@ class StrategyVersioningService:
         try:
             # Create a secure temporary directory for the Git sandbox
             with tempfile.TemporaryDirectory() as tmp_home:
-                res = subprocess.run(  # codeql[py/command-line-injection]
+                # codeql[py/command-line-injection]
+                # lgtm[py/command-line-injection]
+                res = subprocess.run(
                     ["/usr/bin/git"] + validated_args,
                     cwd=self.strategies_path,
                     capture_output=True,

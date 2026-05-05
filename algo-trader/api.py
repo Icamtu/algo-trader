@@ -95,4 +95,6 @@ def create_app():
 # Placeholder for direct execution (app should ideally be run via WSGI server or main.py)
 if __name__ == "__main__":
     app = create_app()
-    app.run(host="0.0.0.0", port=18788) # nosec B104
+    # codeql[py/binding-to-all-interfaces]
+    # lgtm[py/binding-to-all-interfaces]
+    app.run(host="0.0.0.0", port=18788)  # nosec B104

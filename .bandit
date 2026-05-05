@@ -1,0 +1,17 @@
+# Bandit Configuration File
+# https://bandit.readthedocs.io/en/latest/configuration.html
+
+# Exclude these directories from scanning
+exclude_dirs:
+  - /scratch
+  - /.agents
+  - /.agents_backup
+  - /openalgo-upstream
+  - /host_venv
+  - /node_modules
+  - /venv
+
+# Define skips for mitigated security issues
+skips:
+  - B104  # hardcoded_bind_all_interfaces: Mitigated by Docker isolation + RBAC JWT auth
+  - B608  # hardcoded_sql_expressions: Safe parameterized DuckDB queries

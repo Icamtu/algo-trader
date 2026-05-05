@@ -93,6 +93,8 @@ class InstrumentService:
             with duckdb.connect(self.db_path) as conn:
                 placeholder = ",".join(["?"] * len(tokens))
                 res = conn.execute(
+                    # codeql[py/sql-injection]
+                    # lgtm[py/sql-injection]
                     f"SELECT instrument_token, tradingsymbol FROM instrument_master WHERE instrument_token IN ({placeholder})",  # nosec B608
                     tokens
                 ).fetchall()
