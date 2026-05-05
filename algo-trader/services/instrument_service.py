@@ -95,7 +95,7 @@ class InstrumentService:
                 res = conn.execute(
                     # codeql[py/sql-injection]
                     # lgtm[py/sql-injection]
-                    f"SELECT instrument_token, tradingsymbol FROM instrument_master WHERE instrument_token IN ({placeholder})",
+                    f"SELECT instrument_token, tradingsymbol FROM instrument_master WHERE instrument_token IN ({placeholder})",  # nosec: B608 - Parameterized query
                     tokens
                 ).fetchall()
                 return {r[0]: r[1] for r in res}
