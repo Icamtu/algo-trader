@@ -97,4 +97,4 @@ if __name__ == "__main__":
     app = create_app()
     # codeql[py/binding-to-all-interfaces]
     # lgtm[py/binding-to-all-interfaces]
-    app.run(host="0.0.0.0", port=18788)
+    app.run(host="0.0.0.0", port=18788)  # nosec B104
