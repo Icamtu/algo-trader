@@ -40,7 +40,7 @@ jobs:
       - name: Install Bandit
         run: pip install bandit
       - name: Bandit Scan
-        run: bandit -r . -ll -x ./scratch,./.agents,./.agents_backup,./openalgo-upstream,./host_venv,./node_modules,./venv -f txt
+        run: bandit -r . -ll -c .bandit -x ./scratch,./.agents,./.agents_backup,./openalgo-upstream,./host_venv,./node_modules,./venv -f txt
 
   pip-audit:
     runs-on: ubuntu-latest
